@@ -1,0 +1,191 @@
+name: ml4t-live
+version: "1.0.0"
+description: Live trading platform with zero-code migration from backtesting
+
+core_concept: |
+  Enable users to copy-paste their Strategy class from ml4t-backtest
+  to live trading with no code changes. ThreadSafeBrokerWrapper bridges
+  sync Strategy to async broker infrastructure.
+
+engine:
+  class: LiveEngine
+  import: ml4t.live.engine
+  methods:
+    - connect() -> None
+    - run() -> None
+    - shutdown() -> None
+  purpose: Async orchestration of strategy, broker, and data feed
+
+brokers:
+  - name: IBBroker
+    import: ml4t.live.brokers.ib
+    requires: ib_async, TWS or IB Gateway
+    methods:
+      - connect(host, port, client_id)
+      - submit_order(symbol, quantity, order_type, limit_price)
+      - cancel_order(order_id)
+      - get_positions()
+      - get_account_value()
+
+  - name: AlpacaBroker
+    import: ml4t.live.brokers.alpaca
+    requires: alpaca-trade-api
+    methods:
+      - Same as IBBroker
+
+feeds:
+  - name: IBDataFeed
+    import: ml4t.live.feeds.ib_feed
+    purpose: Real-time IB market data
+
+  - name: DatabentoFeed
+    import: ml4t.live.feeds.databento_feed
+    purpose: Institutional-grade streaming data
+
+  - name: CryptoFeed
+    import: ml4t.live.feeds.crypto_feed
+    purpose: Crypto exchange WebSocket feeds
+
+  - name: AlpacaFeed
+    import: ml4t.live.feeds.alpaca_feed
+    purpose: Alpaca market data
+
+  - name: OKXFeed
+    import: ml4t.live.feeds.okx_feed
+    purpose: OKX exchange data
+
+safety:
+  class: SafeBroker
+  import: ml4t.live.safety
+  wraps: Any broker with risk controls
+
+  config:
+    class: LiveRiskConfig
+    parameters:
+      shadow_mode:
+        type: bool
+        default: true
+        description: Log but don't execute orders
+
+      max_position_value:
+        type: float
+        default: 25000
+        description: Maximum value per position
+
+      max_shares:
+        type: int
+        default: 1000
+        description: Maximum shares per position
+
+      max_positions:
+        type: int
+        default: 10
+        description: Maximum concurrent positions
+
+      max_order_value:
+        type: float
+        default: 10000
+        description: Maximum single order value
+
+      max_daily_loss:
+        type: float
+        default: 2000
+        description: Daily loss limit
+
+      max_drawdown_pct:
+        type: float
+        default: 0.10
+        description: Maximum drawdown percentage
+
+      max_price_deviation_pct:
+        type: float
+        default: 0.05
+        description: Fat finger protection (5%)
+
+      max_data_staleness_seconds:
+        type: int
+        default: 60
+        description: Reject data older than this
+
+      dedup_window_seconds:
+        type: int
+        default: 5
+        description: Prevent duplicate orders
+
+      kill_switch_enabled:
+        type: bool
+        default: false
+        description: Emergency halt all trading
+
+wrappers:
+  - name: ThreadSafeBrokerWrapper
+    import: ml4t.live.wrappers
+    purpose: Bridge sync Strategy.on_data() to async broker
+    implementation: Uses run_coroutine_threadsafe()
+
+  - name: VirtualPortfolio
+    import: ml4t.live.safety
+    purpose: Track shadow positions when shadow_mode=True
+
+aggregation:
+  - name: BarAggregator
+    import: ml4t.live.feeds.aggregator
+    purpose: Convert ticks to OHLCV bars with timeout flush
+
+  - name: BarBuffer
+    import: ml4t.live.feeds.aggregator
+    purpose: Multi-asset bar synchronization
+
+protocols:
+  - name: BrokerProtocol
+    purpose: Sync broker interface (for Strategy)
+
+  - name: AsyncBrokerProtocol
+    purpose: Async broker interface (for implementations)
+
+  - name: DataFeedProtocol
+    purpose: Market data stream interface
+
+examples:
+  shadow_mode: |
+    from ml4t.live import LiveEngine, IBBroker, IBDataFeed, SafeBroker, LiveRiskConfig
+
+    config = LiveRiskConfig(shadow_mode=True)  # No real orders!
+    broker = SafeBroker(IBBroker(), config)
+    feed = IBDataFeed(symbols=["AAPL"])
+
+    engine = LiveEngine(my_strategy, broker, feed)
+    await engine.connect()
+    await engine.run()
+
+  paper_trading: |
+    config = LiveRiskConfig(
+        shadow_mode=False,
+        max_position_value=25_000,
+        max_daily_loss=2_000,
+    )
+
+  live_trading: |
+    config = LiveRiskConfig(
+        shadow_mode=False,
+        max_position_value=10_000,
+        max_order_value=5_000,
+        max_daily_loss=1_000,
+    )
+
+safety_guidelines:
+  - Always start with shadow_mode=True
+  - Graduate to paper trading before live
+  - Use conservative risk limits
+  - Set max_daily_loss to limit damage
+  - Test signal handling (Ctrl+C)
+  - This is NOT a substitute for professional trading systems
+
+dependencies:
+  required:
+    - ml4t-backtest (Strategy, Order, Position)
+    - ib-async (IB integration)
+
+  optional:
+    - alpaca-trade-api (Alpaca broker)
+    - databento (Databento feed)

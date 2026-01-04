@@ -3,7 +3,10 @@
 Enable copy-paste Strategy class from backtesting to live trading with zero code changes.
 """
 
-__version__ = "0.1.0"
+try:
+    from ml4t.live._version import __version__
+except ImportError:
+    __version__ = "0.0.0.dev0"
 
 from .brokers.alpaca import AlpacaBroker
 from .brokers.ib import IBBroker

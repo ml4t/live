@@ -1,6 +1,6 @@
 [project]
 name = "ml4t-live"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Live trading platform for ML4T strategies"
 requires-python = ">=3.11"
 dependencies = [
@@ -32,8 +32,14 @@ dev = [
 ]
 
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
+
+[tool.hatch.version]
+source = "vcs"
+
+[tool.hatch.build.hooks.vcs]
+version-file = "src/ml4t/live/_version.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/ml4t"]
