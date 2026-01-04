@@ -70,8 +70,12 @@ asyncio.run(main())
 ### Installation
 
 ```bash
-# Clone and navigate to the project
-cd /home/stefan/ml4t/software/live
+# Clone and install
+pip install ml4t-live
+
+# Or install from source
+git clone https://github.com/ml4t/live.git
+cd live
 
 # Install dependencies with uv (creates .venv automatically)
 uv sync --dev
