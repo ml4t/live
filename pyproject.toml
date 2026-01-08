@@ -19,7 +19,7 @@ dev-dependencies = [
 ]
 
 [tool.uv.sources]
-ml4t-backtest = { path = "../backtest", editable = true }
+ml4t-backtest = { path = "../ml4t-backtest", editable = true }
 
 [project.optional-dependencies]
 dev = [
