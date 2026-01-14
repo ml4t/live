@@ -34,3 +34,7 @@ htmlcov/
 logs/
 site/
 src/ml4t/live/_version.py
+
+# Claude Code (local development only)
+CLAUDE.md
+.claude/
