@@ -551,7 +551,7 @@ class SafeBroker:
         """Check if broker is connected."""
         # Simplified check - actual implementation might need async
         try:
-            return self._broker._connected if hasattr(self._broker, "_connected") else True
+            return bool(self._broker._connected) if hasattr(self._broker, "_connected") else True
         except Exception:
             return True
 

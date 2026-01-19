@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 
 # DataBento is optional dependency
 try:
-    import databento as db
+    import databento as db  # type: ignore[import-unresolved]
     DATABENTO_AVAILABLE = True
 except ImportError:
     DATABENTO_AVAILABLE = False

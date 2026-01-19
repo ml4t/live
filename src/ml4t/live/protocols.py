@@ -94,7 +94,7 @@ class BrokerProtocol(Protocol):
     def submit_order(
         self,
         asset: str,
-        quantity: int,
+        quantity: float,
         side: OrderSide | None = None,
         order_type: OrderType = OrderType.MARKET,
         limit_price: float | None = None,
@@ -213,7 +213,7 @@ class AsyncBrokerProtocol(Protocol):
     async def submit_order_async(
         self,
         asset: str,
-        quantity: int,
+        quantity: float,
         side: OrderSide | None = None,
         order_type: OrderType = OrderType.MARKET,
         limit_price: float | None = None,

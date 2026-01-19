@@ -108,7 +108,7 @@ class IBBroker(AsyncBrokerProtocol):
                     host=self._host,
                     port=self._port,
                     clientId=self._client_id,
-                    account=self._account,  # Pass account like production
+                    account=self._account or "",  # Pass account like production
                     timeout=15,
                 ),
                 timeout=20,  # Outer timeout wrapper
@@ -235,6 +235,7 @@ class IBBroker(AsyncBrokerProtocol):
         order_type: OrderType = OrderType.MARKET,
         limit_price: float | None = None,
         stop_price: float | None = None,
+        **kwargs: Any,
     ) -> Order:
         """Submit order to IB.
 
@@ -406,10 +407,16 @@ class IBBroker(AsyncBrokerProtocol):
         if order_type == OrderType.MARKET:
             return MarketOrder(action, quantity)
         elif order_type == OrderType.LIMIT:
+            if limit_price is None:
+                raise ValueError("limit_price required for LIMIT orders")
             return LimitOrder(action, quantity, limit_price)
         elif order_type == OrderType.STOP:
+            if stop_price is None:
+                raise ValueError("stop_price required for STOP orders")
             return StopOrder(action, quantity, stop_price)
         elif order_type == OrderType.STOP_LIMIT:
+            if limit_price is None or stop_price is None:
+                raise ValueError("limit_price and stop_price required for STOP_LIMIT orders")
             return StopLimitOrder(action, quantity, limit_price, stop_price)
         raise ValueError(f"Unsupported order type: {order_type}")
 

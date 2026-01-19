@@ -126,10 +126,12 @@ class AlpacaBroker(AsyncBrokerProtocol):
 
             # Verify connection by fetching account
             account = self._trading_client.get_account()
+            equity = float(account.equity) if account.equity else 0.0
+            cash = float(account.cash) if account.cash else 0.0
             logger.info(
                 f"AlpacaBroker: Account verified - "
-                f"equity=${float(account.equity):,.2f}, "
-                f"cash=${float(account.cash):,.2f}"
+                f"equity=${equity:,.2f}, "
+                f"cash=${cash:,.2f}"
             )
 
             # Create WebSocket stream for order updates
@@ -241,7 +243,7 @@ class AlpacaBroker(AsyncBrokerProtocol):
             return 0.0
 
         account = self._trading_client.get_account()
-        return float(account.equity)
+        return float(account.equity) if account.equity else 0.0
 
     async def get_cash_async(self) -> float:
         """Get available cash.
@@ -253,7 +255,7 @@ class AlpacaBroker(AsyncBrokerProtocol):
             return 0.0
 
         account = self._trading_client.get_account()
-        return float(account.cash)
+        return float(account.cash) if account.cash else 0.0
 
     async def submit_order_async(
         self,
