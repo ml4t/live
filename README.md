@@ -222,6 +222,11 @@ State and audit files use mode `0600`, reject unsafe ownership or symlinks, and 
 `SafeBroker` also writes a hash-chained JSONL execution journal with reconciliation, order,
 kill-switch, and runtime health events. Audit failure blocks broker calls by default.
 
+`LiveEngine` acquires the broker and feed transactionally. Startup failure, strategy failure,
+cancellation, and normal completion release acquired resources in reverse order. Bounded recovery
+does not repeat strategy startup callbacks; exhausted recovery and incomplete cleanup have distinct
+public exceptions and a `failed` runtime state.
+
 ## Operator CLI
 
 Use the CLI as a thin operator surface around the Python API:

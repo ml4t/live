@@ -95,16 +95,22 @@ class LiveLifecycleDispatcher:
         )
         return result
 
-    def validate_completed_run(self, market_event_count: int) -> None:
+    def validate_completed_run(
+        self,
+        market_event_count: int,
+        *,
+        baseline: dict[LifecyclePhase, int] | None = None,
+    ) -> None:
         """Validate exactly-once boundaries and ordinary market-event counts."""
+        baseline = baseline or dict.fromkeys(LifecyclePhase, 0)
         for phase in (
             LifecyclePhase.RUN_START,
             LifecyclePhase.CAUSAL_INITIALIZATION,
             LifecyclePhase.RUN_END,
         ):
-            self.contract.phase_spec(phase).validate_count(self._counts[phase])
+            self.contract.phase_spec(phase).validate_count(self._counts[phase] - baseline[phase])
         self.contract.phase_spec(LifecyclePhase.MARKET_EVENT).validate_count(
-            self._counts[LifecyclePhase.MARKET_EVENT],
+            self._counts[LifecyclePhase.MARKET_EVENT] - baseline[LifecyclePhase.MARKET_EVENT],
             event_count=market_event_count,
         )
 

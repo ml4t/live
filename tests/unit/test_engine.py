@@ -671,6 +671,9 @@ async def test_external_cancellation_runs_cleanup_once_and_propagates() -> None:
     assert strategy.on_end_called is True
     assert engine.lifecycle_dispatcher.callback_counts[LifecyclePhase.RUN_END] == 1
     assert engine._watchdog_task is None
+    assert broker.is_connected is False
+    assert feed.stop_count == 1
+    assert engine.runtime_state.value == "stopped"
     assert [event for event, _ in broker.runtime_events[-2:]] == [
         "strategy_callback_started",
         "strategy_callback_succeeded",
@@ -782,6 +785,24 @@ async def test_watchdog_auto_recovers_after_feed_silence():
     assert len(strategy.on_data_calls) >= 2
     assert feed.start_count >= 2
     assert engine.stats["recovery_attempts"] == 1
+    assert engine.runtime_state.value == "stopped"
+    assert engine.stats["callback_counts"]["run_start"] == 1
+    assert engine.stats["callback_counts"]["causal_initialization"] == 1
+    assert engine.stats["callback_counts"]["run_end"] == 1
+    recovery_events = [
+        event
+        for event in engine.operational_events
+        if event["event"] == "engine_recovery_succeeded"
+    ]
+    assert len(recovery_events) == 1
+    assert recovery_events[0]["attempt"] == 1
+    assert recovery_events[0]["duration_seconds"] >= 0
+    assert recovery_events[0]["last_known_sequence"] >= 1
+    assert recovery_events[0]["terminal_status"] == "running"
+    assert recovery_events[0]["cleanup_result"] == {
+        "feed": "not_acquired",
+        "broker": "released",
+    }
     assert "feed_silent" in health_events
 
 

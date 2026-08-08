@@ -80,7 +80,7 @@ Supported flags:
 
 During the run, the CLI prints:
 
-- `health`: `ok`, `waiting_for_data`, `feed_silent`, `idle_market_closed`, `broker_disconnected`, or `stopped`
+- `health`: `ready`, `ok`, `waiting_for_data`, `feed_silent`, `idle_market_closed`, `broker_disconnected`, `failed`, or `stopped`
 - `recovery` and `attempts`: current watchdog recovery state if the engine was configured with bounded auto-recovery
 - `session`: `continuous` for non-equity feeds, or the current equity session state for US stocks
 - `last_bar_age`: age of the last received bar in wall-clock seconds

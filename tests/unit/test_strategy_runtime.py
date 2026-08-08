@@ -231,6 +231,48 @@ class RuntimeFeed:
         return self.bars.pop(0)
 
 
+class RecoveringRuntimeFeed:
+    def __init__(
+        self,
+        batches: list[list[tuple[datetime, dict[str, dict[str, float]], dict]]],
+    ) -> None:
+        self.batches = batches
+        self.start_calls = 0
+        self.stop_calls = 0
+        self.started = False
+        self._queue: asyncio.Queue = asyncio.Queue()
+        self._producer: asyncio.Task | None = None
+
+    async def start(self) -> None:
+        self.started = True
+        self._queue = asyncio.Queue()
+        index = min(self.start_calls, len(self.batches) - 1)
+        batch = self.batches[index]
+        self.start_calls += 1
+
+        async def produce() -> None:
+            for item in batch:
+                await self._queue.put(item)
+
+        self._producer = asyncio.create_task(produce())
+
+    def stop(self) -> None:
+        self.stop_calls += 1
+        self.started = False
+        if self._producer is not None:
+            self._producer.cancel()
+        self._queue.put_nowait(None)
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        item = await self._queue.get()
+        if item is None:
+            raise StopAsyncIteration
+        return item
+
+
 def target_intent(
     *,
     intent_id: str = "initial-portfolio",
@@ -322,6 +364,62 @@ async def test_initial_target_matches_backtest_child_and_persists_lineage(tmp_pa
     persisted = safe.load_portable_strategy_state()
     assert persisted["targets"][0] == target_intent().to_dict()
     assert persisted["children"][0] == child.to_dict()
+
+
+@pytest.mark.asyncio
+async def test_recovery_preserves_target_pending_and_rule_state_without_duplicate_intent(
+    tmp_path,
+) -> None:
+    class RecoveryTargetStrategy(InitialTargetStrategy):
+        def __init__(self, intent, rules) -> None:
+            super().__init__(intent, rules)
+            self.data_calls = 0
+
+        def on_data(self, timestamp, data, context, broker) -> None:
+            self.data_calls += 1
+
+    raw = FillBroker(partial_quantity=250)
+    safe = SafeBroker(raw, risk_config(tmp_path, shadow_mode=False))
+    intent = target_intent(position_rule_policy_id="recovery-stop")
+    strategy = RecoveryTargetStrategy(intent, StopLoss(0.05))
+    feed = RecoveringRuntimeFeed([[bar(10)], [bar(10, close=101.0)]])
+    engine = LiveEngine(
+        strategy,
+        safe,
+        feed,
+        execution_policy=default_live_execution_policy(opening_auction=ExecutionBehavior.CLIENT),
+        feed_silence_seconds=0.01,
+        watchdog_poll_seconds=0.001,
+        auto_recover=True,
+        recovery_cooldown_seconds=0,
+        max_recovery_attempts=1,
+    )
+    await engine.connect()
+
+    async def stop_after_recovered_bar() -> None:
+        while strategy.data_calls < 2:
+            await asyncio.sleep(0.001)
+        await engine.stop()
+
+    await asyncio.wait_for(
+        asyncio.gather(engine.run(), stop_after_recovered_bar()),
+        timeout=1,
+    )
+
+    assert raw.connect_calls == 2
+    assert raw.submit_calls == 1
+    assert len(raw.pending_orders) == 1
+    assert len(engine.strategy_runtime.targets) == 1
+    assert len(engine.strategy_runtime.children) == 1
+    assert len(engine.strategy_runtime.position_rule_states) == 1
+    assert len(engine.strategy_runtime.reconciliations) == 1
+    assert engine.stats["callback_counts"]["run_start"] == 1
+    assert engine.stats["callback_counts"]["causal_initialization"] == 1
+    assert engine.stats["callback_counts"]["run_end"] == 1
+    persisted = safe.load_portable_strategy_state()
+    assert len(persisted["targets"]) == 1
+    assert len(persisted["children"]) == 1
+    assert len(persisted["position_rule_states"]) == 1
 
 
 @pytest.mark.asyncio

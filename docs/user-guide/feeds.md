@@ -136,7 +136,11 @@ await engine.connect()
 await engine.run()
 ```
 
-`LiveEngine.connect()` starts the feed for you, so normal engine usage does not require a manual `feed.start()` call. If you configure `auto_recover=True`, the engine watchdog can also stop and restart the broker/feed pair after `feed_silent` or `broker_disconnected` events.
+`LiveEngine.connect()` starts the feed for you, so normal engine usage does not require a manual
+`feed.start()` call. Broker connection and feed startup are one transaction: a partial failure stops
+the feed if startup was attempted and disconnects the broker. If you configure `auto_recover=True`,
+the engine watchdog can stop and restart the broker/feed pair after `feed_silent` or
+`broker_disconnected` events without repeating strategy startup callbacks.
 
 ## Choosing a Feed
 

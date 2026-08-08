@@ -26,10 +26,14 @@ Example:
 import asyncio
 import inspect
 import logging
+import math
 import signal
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from datetime import time as dt_time
+from enum import Enum
+from time import monotonic
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -56,6 +60,104 @@ US_EASTERN = ZoneInfo("America/New_York")
 US_EQUITY_OPEN = dt_time(9, 30)
 US_EQUITY_CLOSE = dt_time(16, 0)
 RECOVERABLE_HEALTH_STATES = {"feed_silent", "broker_disconnected"}
+
+
+class RuntimeState(str, Enum):
+    """One explicit phase of engine resource and strategy ownership."""
+
+    STOPPED = "stopped"
+    PREFLIGHT = "preflight"
+    CONNECTING_BROKER = "connecting_broker"
+    RECONCILING = "reconciling"
+    STARTING_FEED = "starting_feed"
+    READY = "ready"
+    STARTING_STRATEGY = "starting_strategy"
+    RUNNING = "running"
+    DEGRADED = "degraded"
+    RECOVERING = "recovering"
+    STOPPING = "stopping"
+    FAILED = "failed"
+
+
+@dataclass(frozen=True, slots=True)
+class RuntimeTransition:
+    """Structured evidence for one runtime state change."""
+
+    occurred_at: datetime
+    previous: RuntimeState
+    current: RuntimeState
+    reason: str
+    attempt: int | None
+    last_known_sequence: int
+
+
+class RuntimeCleanupError(RuntimeError):
+    """Raised when runtime finalization cannot release every acquired resource."""
+
+    def __init__(self, cleanup_result: dict[str, str]):
+        self.cleanup_result = dict(cleanup_result)
+        super().__init__(f"runtime cleanup failed: {self.cleanup_result}")
+
+
+class RuntimeFailureError(RuntimeError):
+    """Raised when an asynchronous runtime failure reaches a terminal state."""
+
+
+_ALLOWED_RUNTIME_TRANSITIONS: dict[RuntimeState, set[RuntimeState]] = {
+    RuntimeState.STOPPED: {RuntimeState.PREFLIGHT},
+    RuntimeState.PREFLIGHT: {
+        RuntimeState.CONNECTING_BROKER,
+        RuntimeState.STOPPING,
+        RuntimeState.FAILED,
+    },
+    RuntimeState.CONNECTING_BROKER: {
+        RuntimeState.RECONCILING,
+        RuntimeState.DEGRADED,
+        RuntimeState.STOPPING,
+        RuntimeState.FAILED,
+    },
+    RuntimeState.RECONCILING: {
+        RuntimeState.STARTING_FEED,
+        RuntimeState.DEGRADED,
+        RuntimeState.STOPPING,
+        RuntimeState.FAILED,
+    },
+    RuntimeState.STARTING_FEED: {
+        RuntimeState.READY,
+        RuntimeState.RUNNING,
+        RuntimeState.DEGRADED,
+        RuntimeState.STOPPING,
+        RuntimeState.FAILED,
+    },
+    RuntimeState.READY: {
+        RuntimeState.STARTING_STRATEGY,
+        RuntimeState.STOPPING,
+        RuntimeState.FAILED,
+    },
+    RuntimeState.STARTING_STRATEGY: {
+        RuntimeState.RUNNING,
+        RuntimeState.STOPPING,
+        RuntimeState.FAILED,
+    },
+    RuntimeState.RUNNING: {
+        RuntimeState.DEGRADED,
+        RuntimeState.STOPPING,
+        RuntimeState.FAILED,
+    },
+    RuntimeState.DEGRADED: {
+        RuntimeState.RECOVERING,
+        RuntimeState.STOPPING,
+        RuntimeState.FAILED,
+    },
+    RuntimeState.RECOVERING: {
+        RuntimeState.CONNECTING_BROKER,
+        RuntimeState.DEGRADED,
+        RuntimeState.STOPPING,
+        RuntimeState.FAILED,
+    },
+    RuntimeState.STOPPING: {RuntimeState.STOPPED, RuntimeState.FAILED},
+    RuntimeState.FAILED: {RuntimeState.PREFLIGHT, RuntimeState.STOPPING, RuntimeState.STOPPED},
+}
 
 
 class LiveEngine:
@@ -103,6 +205,12 @@ class LiveEngine:
         """
         negotiated_version = negotiate_lifecycle_version(lifecycle_version)
         self._validate_strategy_lifecycle(strategy)
+        self._validate_runtime_configuration(
+            feed_silence_seconds=feed_silence_seconds,
+            watchdog_poll_seconds=watchdog_poll_seconds,
+            recovery_cooldown_seconds=recovery_cooldown_seconds,
+            max_recovery_attempts=max_recovery_attempts,
+        )
         self.strategy = strategy
         self.broker = broker
         self.feed = feed
@@ -134,8 +242,21 @@ class LiveEngine:
         self._wrapped_broker: ThreadSafeBrokerWrapper | None = None
         self._watchdog_task: asyncio.Task | None = None
         self._signals_installed = False
+        self._signal_shutdown_task: asyncio.Task[None] | None = None
         self._run_in_progress = False
         self._run_done_event = asyncio.Event()
+        self._runtime_lock = asyncio.Lock()
+        self._cleanup_lock = asyncio.Lock()
+        self._runtime_state = RuntimeState.STOPPED
+        self._runtime_transitions: list[RuntimeTransition] = []
+        self._operational_events: list[dict[str, Any]] = []
+        self._broker_connect_attempted = False
+        self._feed_start_attempted = False
+        self._terminal_failure_reason: str | None = None
+        self._stop_requested_reason: str | None = None
+        self._run_bar_count = 0
+        self._last_cleanup_result: dict[str, str] | None = None
+        self._release_failures: dict[str, str] = {}
 
         self._bar_count = 0
         self._error_count = 0
@@ -146,35 +267,73 @@ class LiveEngine:
         self._recovery_attempts = 0
 
     async def connect(self) -> None:
-        """Connect to broker and data feed.
+        """Acquire the broker and feed transactionally and become ready."""
+        async with self._runtime_lock:
+            if self._runtime_state is RuntimeState.READY:
+                return
+            if self._run_in_progress or self._runtime_state not in {
+                RuntimeState.STOPPED,
+                RuntimeState.FAILED,
+            }:
+                raise RuntimeError(
+                    f"LiveEngine.connect() is invalid while {self._runtime_state.value}"
+                )
 
-        Must be called before run().
-        """
-        logger.info("LiveEngine: Connecting...")
-        await self._connect_runtime()
+            self._terminal_failure_reason = None
+            self._stop_requested_reason = None
+            self._last_cleanup_result = None
+            self._release_failures.clear()
+            logger.info("LiveEngine: Connecting...")
+            try:
+                self._transition(RuntimeState.PREFLIGHT, reason="connect_requested")
+                await self._acquire_runtime(ready_state=RuntimeState.READY)
+                self._loop = asyncio.get_running_loop()
+                self._wrapped_broker = ThreadSafeBrokerWrapper(
+                    self.broker,
+                    self._loop,
+                    self.strategy_runtime,
+                )
+                if not self._signals_installed:
+                    self._install_signal_handlers()
+                    self._signals_installed = True
+            except BaseException as error:
+                self._terminal_failure_reason = f"startup:{type(error).__name__}"
+                cleanup = await self._finalize_runtime(
+                    terminal_state=RuntimeState.FAILED,
+                    reason=self._terminal_failure_reason,
+                )
+                self._add_cleanup_note(error, cleanup)
+                raise
 
-        self._loop = asyncio.get_running_loop()
-        if self._wrapped_broker is None:
-            self._wrapped_broker = ThreadSafeBrokerWrapper(
-                self.broker,
-                self._loop,
-                self.strategy_runtime,
-            )
+            logger.info("LiveEngine: Connected and ready")
 
-        if not self._signals_installed:
-            self._install_signal_handlers()
-            self._signals_installed = True
-
-        logger.info("LiveEngine: Connected and ready")
-
-    async def _connect_runtime(self) -> None:
-        """Connect broker and start feed without rebuilding wrappers."""
+    async def _acquire_runtime(
+        self,
+        *,
+        ready_state: RuntimeState,
+        attempt: int | None = None,
+    ) -> None:
+        """Acquire broker then feed, retaining partial-acquisition ownership."""
+        self._transition(
+            RuntimeState.CONNECTING_BROKER,
+            reason="broker_connect",
+            attempt=attempt,
+        )
+        self._broker_connect_attempted = True
         await self.broker.connect()
+        self._transition(
+            RuntimeState.RECONCILING,
+            reason="broker_connected_and_reconciled",
+            attempt=attempt,
+        )
+        self._transition(RuntimeState.STARTING_FEED, reason="feed_start", attempt=attempt)
+        self._feed_start_attempted = True
         await self.feed.start()
+        self._transition(ready_state, reason="runtime_acquired", attempt=attempt)
 
     async def run(self) -> None:
         """Main async loop - receives bars and dispatches to strategy."""
-        if self._wrapped_broker is None:
+        if self._wrapped_broker is None or self._runtime_state is not RuntimeState.READY:
             raise RuntimeError("Call connect() before run()")
         if self._run_in_progress:
             raise RuntimeError("LiveEngine.run() is already active")
@@ -184,12 +343,18 @@ class LiveEngine:
         self._running = True
         self._recovery_requested_reason = None
         self._recovery_attempts = 0
+        self._terminal_failure_reason = None
+        self._stop_requested_reason = None
+        self._run_bar_count = 0
         self._shutdown_event.clear()
         logger.info("LiveEngine: Starting main loop")
 
-        lifecycle_initialized = False
+        lifecycle_started = False
+        callback_baseline = self.lifecycle_dispatcher.callback_counts
         failure: BaseException | None = None
         try:
+            self._transition(RuntimeState.STARTING_STRATEGY, reason="strategy_start")
+            lifecycle_started = True
             await self._dispatch_strategy(
                 LifecyclePhase.RUN_START,
                 self._wrapped_broker,
@@ -199,7 +364,7 @@ class LiveEngine:
                 self._wrapped_broker,
                 None,
             )
-            lifecycle_initialized = True
+            self._transition(RuntimeState.RUNNING, reason="strategy_started")
             self._watchdog_task = asyncio.create_task(
                 self._watchdog_loop(),
                 name="ml4t-live-watchdog",
@@ -211,6 +376,7 @@ class LiveEngine:
                         break
 
                     self._bar_count += 1
+                    self._run_bar_count += 1
                     self._last_bar_time = timestamp
                     self._last_bar_received_at = datetime.now(UTC)
 
@@ -235,7 +401,8 @@ class LiveEngine:
                         except BaseException as handler_error:
                             error.add_note(
                                 "on_error also failed: "
-                                f"{type(handler_error).__name__}: {handler_error}"
+                                f"{type(handler_error).__name__}: "
+                                f"{redact_sensitive(str(handler_error))}"
                             )
                         self._shutdown_event.set()
                         raise
@@ -244,8 +411,9 @@ class LiveEngine:
                     break
 
                 if self._recovery_requested_reason is None:
-                    logger.info("LiveEngine: Feed ended")
-                    break
+                    self._recovery_requested_reason = "feed_terminated"
+                    self._transition(RuntimeState.DEGRADED, reason="feed_terminated")
+                    logger.warning("LiveEngine: Feed terminated")
 
                 if not self.auto_recover:
                     logger.warning(
@@ -259,36 +427,93 @@ class LiveEngine:
                     break
         except BaseException as error:
             failure = error
+            if not isinstance(error, asyncio.CancelledError):
+                self._terminal_failure_reason = f"runtime:{type(error).__name__}"
         finally:
             self._running = False
             try:
                 await self._cancel_watchdog()
-                self._emit_health_transition(self.runtime_status())
-                if lifecycle_initialized:
-                    try:
-                        await self._dispatch_strategy(
-                            LifecyclePhase.RUN_END,
-                            self._wrapped_broker,
-                        )
-                    except BaseException as finalization_error:
-                        if failure is None:
-                            failure = finalization_error
-                        else:
-                            failure.add_note(
-                                "on_end also failed during cleanup: "
-                                f"{type(finalization_error).__name__}: {finalization_error}"
-                            )
-                if failure is None:
-                    self.lifecycle_dispatcher.validate_completed_run(self._bar_count)
-            finally:
-                self.lifecycle_dispatcher.close()
-                self._run_in_progress = False
-                self._run_done_event.set()
-                logger.info(
-                    "LiveEngine: Stopped. Bars: %s, Errors: %s",
-                    self._bar_count,
-                    self._error_count,
+            except BaseException as finalization_error:
+                failure = self._retain_failure(
+                    failure,
+                    finalization_error,
+                    context="watchdog cancellation",
                 )
+                self._terminal_failure_reason = (
+                    f"watchdog_cancel:{type(finalization_error).__name__}"
+                )
+            try:
+                self._emit_health_transition(self.runtime_status())
+            except BaseException as finalization_error:
+                failure = self._retain_failure(
+                    failure,
+                    finalization_error,
+                    context="health finalization",
+                )
+                self._terminal_failure_reason = (
+                    f"health_finalization:{type(finalization_error).__name__}"
+                )
+            if lifecycle_started:
+                try:
+                    await self._dispatch_strategy(
+                        LifecyclePhase.RUN_END,
+                        self._wrapped_broker,
+                    )
+                except BaseException as finalization_error:
+                    self._terminal_failure_reason = (
+                        f"strategy_end:{type(finalization_error).__name__}"
+                    )
+                    failure = self._retain_failure(
+                        failure,
+                        finalization_error,
+                        context="on_end",
+                    )
+            if failure is None:
+                try:
+                    self.lifecycle_dispatcher.validate_completed_run(
+                        self._run_bar_count,
+                        baseline=callback_baseline,
+                    )
+                except BaseException as finalization_error:
+                    failure = finalization_error
+                    self._terminal_failure_reason = (
+                        f"lifecycle_validation:{type(finalization_error).__name__}"
+                    )
+            try:
+                self.lifecycle_dispatcher.close()
+            except BaseException as finalization_error:
+                failure = self._retain_failure(
+                    failure,
+                    finalization_error,
+                    context="strategy worker shutdown",
+                )
+                self._terminal_failure_reason = (
+                    f"strategy_worker:{type(finalization_error).__name__}"
+                )
+            terminal_state = (
+                RuntimeState.FAILED
+                if self._terminal_failure_reason is not None
+                else RuntimeState.STOPPED
+            )
+            cleanup = await self._finalize_runtime(
+                terminal_state=terminal_state,
+                reason=(
+                    self._terminal_failure_reason or self._stop_requested_reason or "run_completed"
+                ),
+            )
+            if failure is not None:
+                self._add_cleanup_note(failure, cleanup)
+            elif any(value.startswith("failed:") for value in cleanup.values()):
+                failure = RuntimeCleanupError(cleanup)
+            elif self._terminal_failure_reason is not None:
+                failure = RuntimeFailureError(self._terminal_failure_reason)
+            self._run_in_progress = False
+            self._run_done_event.set()
+            logger.info(
+                "LiveEngine: Stopped. Bars: %s, Errors: %s",
+                self._bar_count,
+                self._error_count,
+            )
 
         if failure is not None:
             raise failure.with_traceback(failure.__traceback__)
@@ -323,28 +548,41 @@ class LiveEngine:
                 if health in RECOVERABLE_HEALTH_STATES and self._recovery_requested_reason is None:
                     if self.auto_recover:
                         self._recovery_requested_reason = health
+                        self._transition(RuntimeState.DEGRADED, reason=health)
                         logger.warning(
                             "LiveEngine: Scheduling recovery due to %s",
                             health,
                         )
-                        self.feed.stop()
+                        self._stop_feed_once()
                     elif self.halt_on_unhealthy:
+                        self._transition(RuntimeState.DEGRADED, reason=health)
+                        self._stop_requested_reason = health
                         logger.error(
                             "LiveEngine: Halting due to unhealthy runtime state %s",
                             health,
                         )
                         self._shutdown_event.set()
-                        self.feed.stop()
+                        self._stop_feed_once()
 
                 await asyncio.sleep(self.watchdog_poll_seconds)
         except asyncio.CancelledError:
             return
+        except BaseException as error:
+            self._terminal_failure_reason = f"watchdog:{type(error).__name__}"
+            self._shutdown_event.set()
+            self._stop_feed_once()
+            logger.error(
+                "LiveEngine: Watchdog failed: %s",
+                redact_sensitive(str(error)),
+            )
 
     async def _attempt_recovery(self, reason: str) -> bool:
         """Attempt broker/feed recovery after a watchdog-triggered failure."""
         while self._recovery_attempts < self.max_recovery_attempts:
             self._recovery_attempts += 1
             attempt = self._recovery_attempts
+            started_at = monotonic()
+            self._transition(RuntimeState.RECOVERING, reason=reason, attempt=attempt)
             logger.warning(
                 "LiveEngine: Recovery attempt %s/%s after %s",
                 attempt,
@@ -358,27 +596,46 @@ class LiveEngine:
                 reason=reason,
             )
 
-            try:
-                self.feed.stop()
-            except Exception as exc:
-                logger.warning(
-                    "LiveEngine: Feed stop during recovery failed: %s",
-                    redact_sensitive(str(exc)),
-                )
+            cleanup = await self._release_runtime_resources()
 
-            try:
-                await self.broker.disconnect()
-            except Exception as exc:
-                logger.warning(
-                    "LiveEngine: Broker disconnect during recovery failed: %s",
-                    redact_sensitive(str(exc)),
+            if any(value.startswith("failed:") for value in cleanup.values()):
+                duration = monotonic() - started_at
+                self._transition(
+                    RuntimeState.DEGRADED,
+                    reason="recovery_cleanup_failed",
+                    attempt=attempt,
+                    forward=False,
                 )
+                self._record_runtime_event(
+                    "engine_recovery_failed",
+                    forward=False,
+                    attempt=attempt,
+                    reason=reason,
+                    error="runtime cleanup failed",
+                    duration_seconds=duration,
+                    last_known_sequence=self._bar_count,
+                    cleanup_result=cleanup,
+                    terminal_status=self._runtime_state.value,
+                )
+                await asyncio.sleep(self.recovery_cooldown_seconds)
+                continue
 
             await asyncio.sleep(self.recovery_cooldown_seconds)
 
             try:
-                await self._connect_runtime()
+                await self._acquire_runtime(
+                    ready_state=RuntimeState.RUNNING,
+                    attempt=attempt,
+                )
             except Exception as exc:
+                failed_cleanup = await self._release_runtime_resources()
+                duration = monotonic() - started_at
+                self._transition(
+                    RuntimeState.DEGRADED,
+                    reason=f"recovery_attempt_failed:{type(exc).__name__}",
+                    attempt=attempt,
+                    forward=False,
+                )
                 logger.error(
                     "LiveEngine: Recovery attempt %s failed: %s",
                     attempt,
@@ -386,19 +643,29 @@ class LiveEngine:
                 )
                 self._record_runtime_event(
                     "engine_recovery_failed",
+                    forward=False,
                     attempt=attempt,
                     reason=reason,
                     error=redact_sensitive(str(exc)),
+                    duration_seconds=duration,
+                    last_known_sequence=self._bar_count,
+                    cleanup_result={"before": cleanup, "after": failed_cleanup},
+                    terminal_status=self._runtime_state.value,
                 )
                 continue
 
             self._recovery_requested_reason = None
             self._last_bar_received_at = None
+            duration = monotonic() - started_at
             logger.info("LiveEngine: Recovery succeeded on attempt %s", attempt)
             self._record_runtime_event(
                 "engine_recovery_succeeded",
                 attempt=attempt,
                 reason=reason,
+                duration_seconds=duration,
+                last_known_sequence=self._bar_count,
+                cleanup_result=cleanup,
+                terminal_status=self._runtime_state.value,
             )
             return True
 
@@ -408,9 +675,13 @@ class LiveEngine:
         )
         self._record_runtime_event(
             "engine_recovery_exhausted",
+            forward=False,
             max_attempts=self.max_recovery_attempts,
             reason=reason,
+            last_known_sequence=self._bar_count,
+            terminal_status=RuntimeState.FAILED.value,
         )
+        self._terminal_failure_reason = f"recovery_exhausted:{reason}"
         self._shutdown_event.set()
         return False
 
@@ -422,15 +693,226 @@ class LiveEngine:
         self._watchdog_task = None
 
     async def stop(self) -> None:
-        """Graceful shutdown."""
+        """Request shutdown and release resources exactly once."""
         logger.info("LiveEngine: Stopping...")
+        self._stop_requested_reason = self._stop_requested_reason or "stop_requested"
         self._shutdown_event.set()
         await self._cancel_watchdog()
-        self.feed.stop()
         if self._run_in_progress:
+            self._stop_feed_once()
             await self._run_done_event.wait()
-        await self.broker.disconnect()
+            cleanup = self._last_cleanup_result or {}
+            if any(value.startswith("failed:") for value in cleanup.values()):
+                raise RuntimeCleanupError(cleanup)
+        else:
+            async with self._runtime_lock:
+                cleanup = await self._finalize_runtime(
+                    terminal_state=RuntimeState.STOPPED,
+                    reason=self._stop_requested_reason,
+                )
+            if any(value.startswith("failed:") for value in cleanup.values()):
+                raise RuntimeCleanupError(cleanup)
         logger.info("LiveEngine: Stopped")
+
+    def _stop_feed_once(self) -> str:
+        if not self._feed_start_attempted:
+            return "not_acquired"
+        self._feed_start_attempted = False
+        try:
+            self.feed.stop()
+        except BaseException as error:
+            self._feed_start_attempted = True
+            logger.warning(
+                "LiveEngine: Feed stop failed: %s",
+                redact_sensitive(str(error)),
+            )
+            result = f"failed:{type(error).__name__}"
+            self._release_failures["feed"] = result
+            return result
+        self._release_failures.pop("feed", None)
+        return "released"
+
+    async def _disconnect_broker_once(self) -> str:
+        if not self._broker_connect_attempted:
+            return "not_acquired"
+        self._broker_connect_attempted = False
+        try:
+            await self.broker.disconnect()
+        except BaseException as error:
+            self._broker_connect_attempted = True
+            logger.warning(
+                "LiveEngine: Broker disconnect failed: %s",
+                redact_sensitive(str(error)),
+            )
+            result = f"failed:{type(error).__name__}"
+            self._release_failures["broker"] = result
+            return result
+        self._release_failures.pop("broker", None)
+        return "released"
+
+    async def _release_runtime_resources(self) -> dict[str, str]:
+        """Release feed then broker in reverse acquisition order."""
+        feed = self._stop_feed_once()
+        broker = await self._disconnect_broker_once()
+        return {
+            "feed": self._release_failures.get("feed", feed),
+            "broker": self._release_failures.get("broker", broker),
+        }
+
+    async def _finalize_runtime(
+        self,
+        *,
+        terminal_state: RuntimeState,
+        reason: str,
+    ) -> dict[str, str]:
+        """Serialize cleanup and retain its exact result without masking a primary error."""
+        async with self._cleanup_lock:
+            if (
+                self._runtime_state is terminal_state
+                and not self._feed_start_attempted
+                and not self._broker_connect_attempted
+                and not self._signals_installed
+            ):
+                return self._last_cleanup_result or {
+                    "watchdog": "not_running",
+                    "feed": "not_acquired",
+                    "broker": "not_acquired",
+                    "signals": "not_installed",
+                }
+
+            transition_error = "none"
+            if self._runtime_state is not RuntimeState.STOPPING:
+                try:
+                    self._transition(
+                        RuntimeState.STOPPING,
+                        reason=reason,
+                        forward=False,
+                    )
+                except BaseException as error:
+                    transition_error = f"failed:{type(error).__name__}"
+
+            watchdog = "not_running"
+            if self._watchdog_task is not None:
+                try:
+                    await self._cancel_watchdog()
+                    watchdog = "released"
+                except BaseException as error:
+                    watchdog = f"failed:{type(error).__name__}"
+
+            resources = await self._release_runtime_resources()
+            try:
+                signals = self._remove_signal_handlers()
+            except BaseException as error:
+                signals = f"failed:{type(error).__name__}"
+            result = {
+                "state_transition": transition_error,
+                "watchdog": watchdog,
+                **resources,
+                "signals": signals,
+            }
+            if any(value.startswith("failed:") for value in result.values()):
+                terminal_state = RuntimeState.FAILED
+                self._terminal_failure_reason = self._terminal_failure_reason or "cleanup_failed"
+            try:
+                self._transition(terminal_state, reason=reason, forward=False)
+            except BaseException as error:
+                result["terminal_transition"] = f"failed:{type(error).__name__}"
+                self._runtime_state = terminal_state
+            self._record_runtime_event(
+                "engine_cleanup_completed",
+                forward=False,
+                reason=reason,
+                cleanup_result=result,
+                last_known_sequence=self._bar_count,
+                terminal_status=terminal_state.value,
+            )
+            self._last_cleanup_result = result
+            self._release_failures.clear()
+            return result
+
+    @staticmethod
+    def _add_cleanup_note(error: BaseException, cleanup: dict[str, str]) -> None:
+        failures = {key: value for key, value in cleanup.items() if value.startswith("failed:")}
+        if failures:
+            error.add_note(f"runtime cleanup failures: {failures}")
+
+    @staticmethod
+    def _retain_failure(
+        current: BaseException | None,
+        additional: BaseException,
+        *,
+        context: str,
+    ) -> BaseException:
+        if current is None:
+            return additional
+        current.add_note(
+            f"{context} also failed: {type(additional).__name__}: "
+            f"{redact_sensitive(str(additional))}"
+        )
+        return current
+
+    def _transition(
+        self,
+        current: RuntimeState,
+        *,
+        reason: str,
+        attempt: int | None = None,
+        forward: bool = True,
+    ) -> None:
+        previous = self._runtime_state
+        if current is previous:
+            return
+        if current not in _ALLOWED_RUNTIME_TRANSITIONS[previous]:
+            raise RuntimeError(
+                f"invalid LiveEngine runtime transition {previous.value} -> {current.value}"
+            )
+        transition = RuntimeTransition(
+            occurred_at=datetime.now(UTC),
+            previous=previous,
+            current=current,
+            reason=reason,
+            attempt=attempt,
+            last_known_sequence=self._bar_count,
+        )
+        self._runtime_state = current
+        self._runtime_transitions.append(transition)
+        self._record_runtime_event(
+            "engine_runtime_transition",
+            forward=forward,
+            occurred_at=transition.occurred_at.isoformat(),
+            previous=previous.value,
+            current=current.value,
+            reason=reason,
+            attempt=attempt,
+            last_known_sequence=self._bar_count,
+        )
+
+    @staticmethod
+    def _validate_runtime_configuration(
+        *,
+        feed_silence_seconds: float | None,
+        watchdog_poll_seconds: float,
+        recovery_cooldown_seconds: float,
+        max_recovery_attempts: int,
+    ) -> None:
+        for name, value, allow_zero in (
+            ("feed_silence_seconds", feed_silence_seconds, False),
+            ("watchdog_poll_seconds", watchdog_poll_seconds, False),
+            ("recovery_cooldown_seconds", recovery_cooldown_seconds, True),
+        ):
+            if value is None:
+                continue
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                raise TypeError(f"{name} must be a finite number")
+            if not math.isfinite(value) or value < 0 or (not allow_zero and value == 0):
+                qualifier = "non-negative" if allow_zero else "positive"
+                raise ValueError(f"{name} must be finite and {qualifier}")
+        if (
+            isinstance(max_recovery_attempts, bool)
+            or not isinstance(max_recovery_attempts, int)
+            or max_recovery_attempts < 0
+        ):
+            raise ValueError("max_recovery_attempts must be a non-negative integer")
 
     @staticmethod
     def _validate_strategy_lifecycle(strategy: Strategy) -> None:
@@ -464,13 +946,45 @@ class LiveEngine:
 
         def handler(sig: signal.Signals) -> None:
             logger.info("LiveEngine: Received %s", sig.name)
-            self._shutdown_event.set()
+            self._request_signal_shutdown(sig)
 
         for sig in (signal.SIGINT, signal.SIGTERM):
             try:
                 loop.add_signal_handler(sig, handler, sig)
             except NotImplementedError:
                 pass
+
+    def _request_signal_shutdown(self, sig: signal.Signals) -> None:
+        """Schedule the same transactional stop path used by API callers."""
+        if self._signal_shutdown_task is not None and not self._signal_shutdown_task.done():
+            return
+        self._stop_requested_reason = f"signal:{sig.name}"
+        self._shutdown_event.set()
+        task = asyncio.create_task(self.stop(), name="ml4t-live-signal-shutdown")
+        self._signal_shutdown_task = task
+        task.add_done_callback(self._signal_shutdown_completed)
+
+    def _signal_shutdown_completed(self, task: asyncio.Task[None]) -> None:
+        self._signal_shutdown_task = None
+        if task.cancelled():
+            return
+        error = task.exception()
+        if error is not None:
+            logger.error(
+                "LiveEngine: Signal shutdown failed: %s",
+                redact_sensitive(str(error)),
+            )
+
+    def _remove_signal_handlers(self) -> str:
+        if not self._signals_installed:
+            return "not_installed"
+        loop = self._loop
+        self._signals_installed = False
+        if loop is None or loop.is_closed():
+            return "loop_unavailable"
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            loop.remove_signal_handler(sig)
+        return "released"
 
     def _default_error_handler(self, error: Exception, timestamp: datetime, data: dict) -> None:
         """Default error handler - log and continue."""
@@ -504,11 +1018,21 @@ class LiveEngine:
         if self.on_health_change is not None:
             self.on_health_change(health, status)
 
-    def _record_runtime_event(self, event: str, **payload: Any) -> None:
-        """Forward runtime events into the broker journal when supported."""
+    def _record_runtime_event(
+        self,
+        event: str,
+        *,
+        forward: bool = True,
+        **payload: Any,
+    ) -> None:
+        """Retain an operational event and forward it while the broker is acquired."""
+        redacted_payload = redact_sensitive(payload)
+        self._operational_events.append({"event": event, **redacted_payload})
+        if not forward:
+            return
         recorder = getattr(self.broker, "record_event", None)
         if callable(recorder):
-            recorder(event, **payload)
+            recorder(event, **redacted_payload)
 
     def _normalize_utc(self, timestamp: datetime) -> datetime:
         if timestamp.tzinfo is None:
@@ -594,7 +1118,11 @@ class LiveEngine:
                 (reference_now - self._last_bar_received_at).total_seconds(),
             )
 
-        if not self._running:
+        if self._runtime_state is RuntimeState.FAILED:
+            health = "failed"
+        elif self._runtime_state is RuntimeState.READY:
+            health = "ready"
+        elif not self._running:
             health = "stopped"
         elif broker_connected is False:
             health = "broker_disconnected"
@@ -612,6 +1140,8 @@ class LiveEngine:
 
         return {
             "running": self._running,
+            "runtime_state": self._runtime_state.value,
+            "terminal_failure_reason": self._terminal_failure_reason,
             "bar_count": self._bar_count,
             "error_count": self._error_count,
             "last_bar_time": self._last_bar_time,
@@ -634,7 +1164,23 @@ class LiveEngine:
                 phase.value: count
                 for phase, count in self.lifecycle_dispatcher.callback_counts.items()
             },
+            "last_cleanup_result": self._last_cleanup_result,
         }
+
+    @property
+    def runtime_state(self) -> RuntimeState:
+        """Return the current transactional runtime state."""
+        return self._runtime_state
+
+    @property
+    def runtime_transitions(self) -> tuple[RuntimeTransition, ...]:
+        """Return retained state transitions in occurrence order."""
+        return tuple(self._runtime_transitions)
+
+    @property
+    def operational_events(self) -> tuple[dict[str, Any], ...]:
+        """Return redacted structured runtime diagnostics."""
+        return tuple(dict(event) for event in self._operational_events)
 
     @property
     def stats(self) -> dict[str, Any]:

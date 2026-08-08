@@ -102,9 +102,17 @@ The runtime status values are intentionally narrow:
 - `feed_silent`: engine running, market session appears open or continuous, but the feed has gone quiet too long
 - `idle_market_closed`: no fresh equity data is expected because the market session is closed
 - `broker_disconnected`: engine running but the broker connection is known to be down
+- `ready`: broker reconciliation and feed startup completed; the strategy has not started
+- `failed`: startup, recovery, callback finalization, or resource cleanup failed
 - `stopped`: engine is not running
 
-Those states are for operator interpretation. They do not replace external process monitoring or deployment supervision.
+`runtime_state` reports the transactional phase separately: `preflight`, `connecting_broker`,
+`reconciling`, `starting_feed`, `ready`, `starting_strategy`, `running`, `degraded`, `recovering`,
+`stopping`, `stopped`, or `failed`. A failed broker or feed acquisition is released in reverse
+order. If `on_start` is attempted, `on_end` is attempted exactly once, including startup failure
+and cancellation paths.
+
+These states do not replace external process monitoring or deployment supervision.
 
 ## Execution Journal
 
@@ -140,4 +148,9 @@ engine = LiveEngine(
 )
 ```
 
-This is a best-effort restart of the broker/feed pair, not a substitute for external supervision. If recovery fails repeatedly, the engine stops.
+Recovery releases the feed and broker before each bounded reconnect attempt. It does not repeat
+`on_start` or `on_prepare`, and it retains strategy intent and rule state in the existing runtime.
+`operational_events` contains the recovery reason, attempt, duration, last processed event count,
+cleanup result, and terminal state. Exhausted recovery raises `RuntimeFailureError` and leaves
+`runtime_state=failed`. A resource release failure raises `RuntimeCleanupError`; call `stop()` again
+after correcting a transient provider failure to retry release.

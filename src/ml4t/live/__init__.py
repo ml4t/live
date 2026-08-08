@@ -10,7 +10,13 @@ except ImportError:
 
 from .brokers.alpaca import AlpacaBroker
 from .brokers.ib import IBBroker
-from .engine import LiveEngine
+from .engine import (
+    LiveEngine,
+    RuntimeCleanupError,
+    RuntimeFailureError,
+    RuntimeState,
+    RuntimeTransition,
+)
 from .feeds.aggregator import BarAggregator, BarBuffer
 from .feeds.alpaca_feed import AlpacaDataFeed
 from .feeds.crypto_feed import CryptoFeed
@@ -68,6 +74,10 @@ __all__ = [
     # Engine
     "LifecycleInvocation",
     "LiveEngine",
+    "RuntimeCleanupError",
+    "RuntimeFailureError",
+    "RuntimeState",
+    "RuntimeTransition",
     "BrokerOrderContractError",
     "CanonicalOrderRequest",
     "OrderValidationError",

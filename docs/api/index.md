@@ -33,6 +33,10 @@ from ml4t.live import (
     ReconciliationMismatchError,
     RiskLimitError,
     RiskState,
+    RuntimeCleanupError,
+    RuntimeFailureError,
+    RuntimeState,
+    RuntimeTransition,
     SafeBroker,
     ThreadSafeBrokerWrapper,
     UnsafePersistencePathError,
@@ -44,7 +48,7 @@ from ml4t.live import (
 
 | Group | Primary symbols |
 | --- | --- |
-| Engine | `LiveEngine` |
+| Engine | `LiveEngine`, `RuntimeState`, `RuntimeTransition`, `RuntimeFailureError`, `RuntimeCleanupError` |
 | Brokers | `IBBroker`, `AlpacaBroker` |
 | Feeds | `IBDataFeed`, `AlpacaDataFeed`, `DataBentoFeed`, `CryptoFeed`, `OKXFundingFeed` |
 | Feed helpers | `BarAggregator`, `BarBuffer` |
@@ -56,6 +60,22 @@ from ml4t.live import (
 ## Engine
 
 ::: ml4t.live.engine.LiveEngine
+    options:
+      show_root_heading: true
+
+::: ml4t.live.engine.RuntimeState
+    options:
+      show_root_heading: true
+
+::: ml4t.live.engine.RuntimeTransition
+    options:
+      show_root_heading: true
+
+::: ml4t.live.engine.RuntimeFailureError
+    options:
+      show_root_heading: true
+
+::: ml4t.live.engine.RuntimeCleanupError
     options:
       show_root_heading: true
 
