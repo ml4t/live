@@ -58,7 +58,7 @@ class MovingAverageCrossoverStrategy(Strategy):
             price_history = self.prices[symbol]
             price_history.append(float(bar["close"]))
             if len(price_history) > self.slow_period:
-                del price_history[:-self.slow_period]
+                del price_history[: -self.slow_period]
 
             if len(price_history) < self.slow_period:
                 print(

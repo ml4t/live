@@ -68,7 +68,9 @@ async def main() -> int:
             except TimeoutError:
                 heartbeat_elapsed = int(time.monotonic() - started_at)
                 if heartbeat_elapsed >= next_heartbeat:
-                    print(f"[{heartbeat_elapsed:>3}s] waiting for the next complete 1-minute candle")
+                    print(
+                        f"[{heartbeat_elapsed:>3}s] waiting for the next complete 1-minute candle"
+                    )
                     next_heartbeat += 5.0
                 continue
 

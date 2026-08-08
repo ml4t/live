@@ -152,8 +152,7 @@ class ShadowMomentumStrategy(Strategy):
 
         if len(self.prices) < 6:
             print(
-                f"{timestamp.isoformat()} close={close:.2f}"
-                f" building_history={len(self.prices)}/6"
+                f"{timestamp.isoformat()} close={close:.2f} building_history={len(self.prices)}/6"
             )
             return
 

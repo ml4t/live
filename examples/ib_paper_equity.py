@@ -65,7 +65,9 @@ class ToyMomentumStrategy(Strategy):
                 print(f"{timestamp.isoformat()} {symbol} momentum up {move:.3%} -> buy 1")
                 broker.submit_order(symbol, 1, side=OrderSide.BUY)
             elif move <= -0.002 and quantity > 0:
-                print(f"{timestamp.isoformat()} {symbol} momentum down {move:.3%} -> sell {int(quantity)}")
+                print(
+                    f"{timestamp.isoformat()} {symbol} momentum down {move:.3%} -> sell {int(quantity)}"
+                )
                 broker.submit_order(symbol, int(quantity), side=OrderSide.SELL)
 
 
@@ -126,10 +128,7 @@ async def main() -> int:
     try:
         await engine.connect()
     except Exception as exc:
-        print(
-            "Could not connect to IB paper trading on 127.0.0.1:7497. "
-            f"Details: {exc}"
-        )
+        print(f"Could not connect to IB paper trading on 127.0.0.1:7497. Details: {exc}")
         return 1
 
     print(f"Running IB paper demo for {DURATION_SECONDS}s.")

@@ -25,8 +25,7 @@ from ml4t.live.safety import SafeBroker
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
@@ -34,6 +33,7 @@ logger = logging.getLogger(__name__)
 # ============================================================================
 # STRATEGY DEFINITION (Same as backtest - zero changes!)
 # ============================================================================
+
 
 class SimpleMAStrategy(Strategy):
     """Simple moving average crossover strategy.
@@ -67,11 +67,11 @@ class SimpleMAStrategy(Strategy):
             broker: Broker instance (sync interface via ThreadSafeBrokerWrapper)
         """
         # Get SPY data
-        spy_bar = data.get('SPY')
+        spy_bar = data.get("SPY")
         if not spy_bar:
             return
 
-        close = spy_bar['close']
+        close = spy_bar["close"]
         self.prices.append(close)
 
         # Need enough history
@@ -80,11 +80,11 @@ class SimpleMAStrategy(Strategy):
             return
 
         # Calculate MAs
-        fast_ma = sum(self.prices[-self.fast_period:]) / self.fast_period
-        slow_ma = sum(self.prices[-self.slow_period:]) / self.slow_period
+        fast_ma = sum(self.prices[-self.fast_period :]) / self.fast_period
+        slow_ma = sum(self.prices[-self.slow_period :]) / self.slow_period
 
         # Get current position
-        position = broker.get_position('SPY')
+        position = broker.get_position("SPY")
         has_position = position is not None and position.quantity > 0
 
         logger.info(
@@ -96,12 +96,12 @@ class SimpleMAStrategy(Strategy):
         if fast_ma > slow_ma and not has_position:
             # Bullish crossover - buy
             logger.info("🚀 BUY Signal: Fast MA crossed above Slow MA")
-            broker.submit_order('SPY', 100, side=OrderSide.BUY)
+            broker.submit_order("SPY", 100, side=OrderSide.BUY)
 
         elif fast_ma < slow_ma and has_position:
             # Bearish crossover - sell
             logger.info("📉 SELL Signal: Fast MA crossed below Slow MA")
-            broker.submit_order('SPY', 100, side=OrderSide.SELL)
+            broker.submit_order("SPY", 100, side=OrderSide.SELL)
 
     def on_end(self, broker):
         """Called when engine stops."""
@@ -114,6 +114,7 @@ class SimpleMAStrategy(Strategy):
 # LIVE TRADING SETUP
 # ============================================================================
 
+
 async def main():
     """Main entry point for live trading."""
 
@@ -123,7 +124,7 @@ async def main():
     logger.info("=" * 60)
 
     broker = IBBroker(
-        host='127.0.0.1',
+        host="127.0.0.1",
         port=7497,  # Paper trading port (use 7496 for live)
         client_id=1,
     )
@@ -139,7 +140,7 @@ async def main():
     # IB tick-level data
     ib_feed = IBDataFeed(
         ib=broker.ib,
-        symbols=['SPY'],
+        symbols=["SPY"],
         tick_throttle_ms=1000,  # Emit at most once per second
     )
 
@@ -147,7 +148,7 @@ async def main():
     feed = BarAggregator(
         source_feed=ib_feed,
         bar_size_minutes=1,
-        assets=['SPY'],
+        assets=["SPY"],
     )
 
     logger.info("✅ Feed created: IB ticks → 1-minute bars")
@@ -160,8 +161,8 @@ async def main():
     risk_config = LiveRiskConfig(
         shadow_mode=True,  # CRITICAL: Start with shadow mode!
         max_position_value=50_000.0,  # $50k max position
-        max_order_value=10_000.0,     # $10k max single order
-        max_orders_per_minute=10,     # Rate limiting
+        max_order_value=10_000.0,  # $10k max single order
+        max_orders_per_minute=10,  # Rate limiting
     )
 
     safe_broker = SafeBroker(broker, risk_config)
@@ -221,7 +222,7 @@ async def main():
         logger.info("\n✅ Shutdown complete")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     """
     Prerequisites:
     1. TWS or IB Gateway running
