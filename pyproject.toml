@@ -8,7 +8,7 @@ classifiers = [
 ]
 requires-python = ">=3.12"
 dependencies = [
-    "ml4t-backtest @ git+https://github.com/ml4t/backtest.git@ddac3715f5903dedd187bf2180d163b2e4a196ca",
+    "ml4t-backtest @ git+https://github.com/ml4t/backtest.git@7f9e0ab0666578f05fe69c49d917830825060706",
     "ml4t-specs @ git+https://github.com/ml4t/specs.git@923deaca5ba7a9975052733c20f103b81e4816b9",
     "ib-async>=1.0.0",
     "alpaca-py>=0.30.0",
@@ -74,7 +74,7 @@ dev = [
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 addopts = ["-m", "not integration"]
-testpaths = ["tests/unit"]
+testpaths = ["tests/unit", "tests/contracts"]
 filterwarnings = [
     "ignore:websockets\\.legacy is deprecated.*:DeprecationWarning",
 ]
