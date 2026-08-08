@@ -16,6 +16,7 @@ import threading
 from typing import Any
 
 from ml4t.backtest.types import Order, OrderSide, OrderType, Position
+from ml4t.specs import CanonicalTargetIntent
 
 from ml4t.live.protocols import AsyncBrokerProtocol
 
@@ -51,7 +52,12 @@ class ThreadSafeBrokerWrapper:
         It provides a sync interface backed by async operations.
     """
 
-    def __init__(self, async_broker: AsyncBrokerProtocol, loop: asyncio.AbstractEventLoop):
+    def __init__(
+        self,
+        async_broker: AsyncBrokerProtocol,
+        loop: asyncio.AbstractEventLoop,
+        strategy_runtime: Any | None = None,
+    ):
         """Initialize thread-safe wrapper.
 
         Args:
@@ -61,6 +67,7 @@ class ThreadSafeBrokerWrapper:
         self._broker = async_broker
         self._loop = loop
         self._loop_thread_id = threading.get_ident()
+        self._strategy_runtime = strategy_runtime
 
     # === Properties (direct access, assumed thread-safe) ===
 
@@ -174,12 +181,15 @@ class ThreadSafeBrokerWrapper:
             ValueError: If order parameters are invalid
             RuntimeError: If broker is not connected or error occurs
         """
-        return self._run_sync(
+        order = self._run_sync(
             self._broker.submit_order_async(
                 asset, quantity, side, order_type, limit_price, stop_price, **kwargs
             ),
             timeout=30.0,  # Orders need longer timeout
         )
+        if self._strategy_runtime is not None:
+            self._strategy_runtime.observe_strategy_order(order)
+        return order
 
     def cancel_order(self, order_id: str) -> bool:
         """Cancel pending order.
@@ -231,6 +241,52 @@ class ThreadSafeBrokerWrapper:
             RuntimeError: If broker error occurs
         """
         return self._run_sync(self._broker.close_position_async(asset), timeout=30.0)
+
+    def register_target_intent(
+        self,
+        intent: CanonicalTargetIntent,
+        *,
+        position_rules: Any | None = None,
+    ) -> CanonicalTargetIntent:
+        """Register a persistent target intent during a causal callback."""
+        return self._runtime().register_target_intent(intent, position_rules=position_rules)
+
+    def register_position_rule_policy(self, policy_id: str, rules: Any) -> None:
+        """Bind a portable position-rule policy to its client implementation."""
+        self._runtime().register_position_rule_policy(policy_id, rules)
+
+    def get_target_intents(self) -> tuple[CanonicalTargetIntent, ...]:
+        """Return registered portable target intents."""
+        return self._runtime().targets
+
+    def get_child_order_intents(self) -> tuple[Any, ...]:
+        """Return lowered child-order intents."""
+        return self._runtime().children
+
+    def get_intent_reconciliations(self) -> tuple[Any, ...]:
+        """Return retained target execution evidence."""
+        return self._runtime().reconciliations
+
+    def export_target_intent_state(self) -> dict[str, Any]:
+        """Return restart-safe target and position-rule state."""
+        return self._runtime().to_state()
+
+    def set_position_rules(self, rules: Any | None, asset: str | None = None) -> None:
+        """Set client-evaluated position rules globally or for one asset."""
+        self._runtime().set_position_rules(rules, asset=asset)
+
+    def clear_position_rules(self, asset: str | None = None) -> None:
+        """Clear client-evaluated position rules globally or for one asset."""
+        self._runtime().clear_position_rules(asset=asset)
+
+    def update_position_context(self, asset: str, context: dict[str, Any]) -> None:
+        """Merge portable context used by position-rule evaluation."""
+        self._runtime().update_position_context(asset, context)
+
+    def _runtime(self) -> Any:
+        if self._strategy_runtime is None:
+            raise RuntimeError("Portable strategy runtime is not configured")
+        return self._strategy_runtime
 
     def _run_sync(self, coro: Any, timeout: float = 5.0) -> Any:
         """Schedule coroutine on main loop and wait for result.

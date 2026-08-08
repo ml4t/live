@@ -36,6 +36,7 @@ from zoneinfo import ZoneInfo
 from ml4t.backtest import Strategy
 from ml4t.specs import (
     LIFECYCLE_V1,
+    ExecutionPolicy,
     HistoricalStrategyCompatibilityError,
     LifecyclePhase,
     LifecycleVersion,
@@ -45,6 +46,7 @@ from ml4t.specs import (
 
 from .lifecycle import LiveLifecycleDispatcher
 from .protocols import AsyncBrokerProtocol, DataFeedProtocol
+from .runtime import LiveStrategyRuntime, default_live_execution_policy
 from .wrappers import ThreadSafeBrokerWrapper
 
 logger = logging.getLogger(__name__)
@@ -77,6 +79,7 @@ class LiveEngine:
         max_recovery_attempts: int = 3,
         on_health_change: Callable[[str, dict[str, Any]], None] | None = None,
         lifecycle_version: LifecycleVersion | str = LifecycleVersion.V1,
+        execution_policy: ExecutionPolicy | None = None,
     ):
         """Initialize LiveEngine.
 
@@ -95,6 +98,7 @@ class LiveEngine:
             max_recovery_attempts: Maximum recovery attempts before stopping.
             on_health_change: Optional callback invoked when runtime health changes.
             lifecycle_version: Portable strategy lifecycle version.
+            execution_policy: Explicit live execution capabilities and behavior.
         """
         negotiated_version = negotiate_lifecycle_version(lifecycle_version)
         self._validate_strategy_lifecycle(strategy)
@@ -111,6 +115,12 @@ class LiveEngine:
         self.max_recovery_attempts = max_recovery_attempts
         self.on_health_change = on_health_change
         self.lifecycle_version = negotiated_version
+        self.execution_policy = execution_policy or default_live_execution_policy()
+        self.strategy_runtime = LiveStrategyRuntime(
+            broker,
+            self.execution_policy,
+            negotiated_version,
+        )
         self.lifecycle_dispatcher = LiveLifecycleDispatcher(
             strategy,
             LIFECYCLE_V1,
@@ -144,7 +154,11 @@ class LiveEngine:
 
         self._loop = asyncio.get_running_loop()
         if self._wrapped_broker is None:
-            self._wrapped_broker = ThreadSafeBrokerWrapper(self.broker, self._loop)
+            self._wrapped_broker = ThreadSafeBrokerWrapper(
+                self.broker,
+                self._loop,
+                self.strategy_runtime,
+            )
 
         if not self._signals_installed:
             self._install_signal_handlers()
@@ -175,11 +189,11 @@ class LiveEngine:
         lifecycle_initialized = False
         failure: BaseException | None = None
         try:
-            await self.lifecycle_dispatcher.dispatch(
+            await self._dispatch_strategy(
                 LifecyclePhase.RUN_START,
                 self._wrapped_broker,
             )
-            await self.lifecycle_dispatcher.dispatch(
+            await self._dispatch_strategy(
                 LifecyclePhase.CAUSAL_INITIALIZATION,
                 self._wrapped_broker,
                 None,
@@ -204,7 +218,8 @@ class LiveEngine:
                         record_market_data(timestamp, data, context)
 
                     try:
-                        await self.lifecycle_dispatcher.dispatch(
+                        await self.strategy_runtime.process_market_event(timestamp, data, context)
+                        await self._dispatch_strategy(
                             LifecyclePhase.MARKET_EVENT,
                             timestamp,
                             data,
@@ -250,7 +265,7 @@ class LiveEngine:
                 self._emit_health_transition(self.runtime_status())
                 if lifecycle_initialized:
                     try:
-                        await self.lifecycle_dispatcher.dispatch(
+                        await self._dispatch_strategy(
                             LifecyclePhase.RUN_END,
                             self._wrapped_broker,
                         )
@@ -276,6 +291,25 @@ class LiveEngine:
 
         if failure is not None:
             raise failure.with_traceback(failure.__traceback__)
+
+    async def _dispatch_strategy(
+        self,
+        phase: LifecyclePhase,
+        *args: Any,
+        event_time: datetime | None = None,
+    ) -> Any:
+        """Expose the active causal phase while one strategy callback executes."""
+        self.strategy_runtime.active_phase = phase
+        self.strategy_runtime.current_event_time = event_time
+        try:
+            return await self.lifecycle_dispatcher.dispatch(
+                phase,
+                *args,
+                event_time=event_time,
+            )
+        finally:
+            self.strategy_runtime.active_phase = None
+            self.strategy_runtime.current_event_time = None
 
     async def _watchdog_loop(self) -> None:
         """Monitor runtime health and request recovery/escalation when needed."""
@@ -587,6 +621,9 @@ class LiveEngine:
             "recovery_requested": self._recovery_requested_reason,
             "recovery_attempts": self._recovery_attempts,
             "lifecycle_version": self.lifecycle_version.value,
+            "execution_policy": self.execution_policy.to_dict(),
+            "target_intent_count": len(self.strategy_runtime.targets),
+            "position_rule_state_count": len(self.strategy_runtime.position_rule_states),
             "callback_counts": {
                 phase.value: count
                 for phase, count in self.lifecycle_dispatcher.callback_counts.items()

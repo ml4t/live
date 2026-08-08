@@ -10,6 +10,7 @@ from typing import Any
 
 import pytest
 from ml4t.backtest.types import Order, OrderSide, OrderStatus, OrderType, Position
+from ml4t.specs import CanonicalTargetIntent
 
 from ml4t.live.protocols import (
     AsyncBrokerProtocol,
@@ -60,7 +61,7 @@ class MockBroker:
     def submit_order(
         self,
         asset: str,
-        quantity: int,
+        quantity: float,
         side: OrderSide | None = None,
         order_type: OrderType = OrderType.MARKET,
         limit_price: float | None = None,
@@ -103,7 +104,7 @@ class MockBroker:
                 self._pending_orders.remove(order)
                 return self.submit_order(
                     order.asset,
-                    int(order.quantity if quantity is None else quantity),
+                    order.quantity if quantity is None else quantity,
                     side=order.side,
                     order_type=order.order_type,
                     limit_price=order.limit_price if limit_price is None else limit_price,
@@ -118,6 +119,38 @@ class MockBroker:
         # Submit closing order
         quantity = -pos.quantity if pos.quantity > 0 else abs(pos.quantity)
         return self.submit_order(asset, quantity)
+
+    def register_target_intent(
+        self,
+        intent: CanonicalTargetIntent,
+        *,
+        position_rules: Any | None = None,
+    ) -> CanonicalTargetIntent:
+        return intent
+
+    def register_position_rule_policy(self, policy_id: str, rules: Any) -> None:
+        return None
+
+    def get_target_intents(self) -> tuple[CanonicalTargetIntent, ...]:
+        return ()
+
+    def get_child_order_intents(self) -> tuple[Any, ...]:
+        return ()
+
+    def get_intent_reconciliations(self) -> tuple[Any, ...]:
+        return ()
+
+    def export_target_intent_state(self) -> dict[str, Any]:
+        return {}
+
+    def set_position_rules(self, rules: Any | None, asset: str | None = None) -> None:
+        return None
+
+    def clear_position_rules(self, asset: str | None = None) -> None:
+        return None
+
+    def update_position_context(self, asset: str, context: dict[str, Any]) -> None:
+        return None
 
 
 class MockAsyncBroker:
@@ -160,7 +193,7 @@ class MockAsyncBroker:
     async def submit_order_async(
         self,
         asset: str,
-        quantity: int,
+        quantity: float,
         side: OrderSide | None = None,
         order_type: OrderType = OrderType.MARKET,
         limit_price: float | None = None,
@@ -203,7 +236,7 @@ class MockAsyncBroker:
                 self._pending_orders.remove(order)
                 return await self.submit_order_async(
                     order.asset,
-                    int(order.quantity if quantity is None else quantity),
+                    order.quantity if quantity is None else quantity,
                     side=order.side,
                     order_type=order.order_type,
                     limit_price=order.limit_price if limit_price is None else limit_price,

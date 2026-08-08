@@ -86,6 +86,8 @@ class LiveRiskConfig:
 
     # Kill switch
     kill_switch_enabled: bool = False
+    allow_reducing_risk_when_killed: bool = True
+    halt_on_reducing_risk_failure: bool = True
 
     # Startup reconciliation
     fail_on_reconciliation_mismatch: bool = False
@@ -187,6 +189,8 @@ class RiskState:
     session_start_equity: float | None = None  # Baseline for daily loss checks
     persisted_positions: dict[str, float] = field(default_factory=dict)
     persisted_pending_orders: list[dict[str, Any]] = field(default_factory=list)
+    portable_strategy_state: dict[str, Any] = field(default_factory=dict)
+    shadow_portfolio: dict[str, Any] = field(default_factory=dict)
     kill_switch_activated: bool = False  # Was kill switch triggered?
     kill_switch_reason: str = ""  # Why?
 
@@ -222,6 +226,10 @@ class RiskState:
             data["persisted_positions"] = self.persisted_positions
         if self.persisted_pending_orders:
             data["persisted_pending_orders"] = self.persisted_pending_orders
+        if self.portable_strategy_state:
+            data["portable_strategy_state"] = self.portable_strategy_state
+        if self.shadow_portfolio:
+            data["shadow_portfolio"] = self.shadow_portfolio
         return data
 
     @staticmethod
@@ -470,6 +478,40 @@ class VirtualPortfolio:
             if asset in self._positions:
                 self._positions[asset].current_price = price
 
+    def to_state(self) -> dict[str, Any]:
+        """Return restart-safe shadow cash and position state."""
+        return {
+            "cash": self._cash,
+            "positions": [
+                {
+                    "asset": position.asset,
+                    "quantity": position.quantity,
+                    "entry_price": position.entry_price,
+                    "entry_time": position.entry_time.isoformat(),
+                    "current_price": position.current_price,
+                    "multiplier": position.multiplier,
+                    "context": position.context,
+                }
+                for position in self._positions.values()
+            ],
+        }
+
+    def restore_state(self, state: dict[str, Any]) -> None:
+        """Restore shadow state before runtime reconciliation."""
+        self._cash = float(state.get("cash", self._cash))
+        self._positions.clear()
+        for raw in state.get("positions", ()):
+            entry_time = datetime.fromisoformat(raw["entry_time"])
+            self._positions[raw["asset"]] = Position(
+                asset=raw["asset"],
+                quantity=float(raw["quantity"]),
+                entry_price=float(raw["entry_price"]),
+                entry_time=entry_time,
+                current_price=float(raw["current_price"]),
+                multiplier=float(raw.get("multiplier", 1.0)),
+                context=dict(raw.get("context", {})),
+            )
+
 
 class RiskLimitError(Exception):
     """Raised when an order violates risk limits."""
@@ -545,6 +587,8 @@ class SafeBroker:
 
         # NEW: VirtualPortfolio for shadow mode (Gemini v2 fix)
         self._virtual_portfolio = VirtualPortfolio(initial_cash=100_000.0)
+        if config.shadow_mode and self._state.shadow_portfolio:
+            self._virtual_portfolio.restore_state(self._state.shadow_portfolio)
 
         # Initialize high water mark if not set
         if self._state.high_water_mark == 0.0:
@@ -593,6 +637,20 @@ class SafeBroker:
             return bool(self._broker._connected) if hasattr(self._broker, "_connected") else True
         except Exception:
             return True
+
+    @property
+    def execution_capabilities(self) -> frozenset[Any]:
+        """Return capabilities declared by the wrapped venue."""
+        return frozenset(getattr(self._broker, "execution_capabilities", ()))
+
+    def load_portable_strategy_state(self) -> dict[str, Any]:
+        """Return a copy of persisted target and position-rule state."""
+        return json.loads(json.dumps(self._state.portable_strategy_state))
+
+    def save_portable_strategy_state(self, state: dict[str, Any]) -> None:
+        """Persist target and position-rule state with the safety state."""
+        self._state.portable_strategy_state = json.loads(json.dumps(state))
+        self._save_state()
 
     def get_position(self, asset: str) -> Position | None:
         """Get position for specific asset.
@@ -655,15 +713,98 @@ class SafeBroker:
         Returns:
             Order object if position exists
         """
-        # Close positions bypass normal limits (safety feature)
-        if self.config.shadow_mode:
-            logger.info(f"SHADOW: Would close position in {asset}")
+        position = self.get_position(asset)
+        if position is None or position.quantity == 0:
             return None
-        order = await self._broker.close_position_async(asset)
+        return await self.reduce_position_async(
+            asset,
+            abs(position.quantity),
+            reason="close_position",
+            idempotency_key=(
+                f"close:{asset}:"
+                f"{position.entry_time.isoformat() if position.entry_time else 'unknown-entry'}"
+            ),
+        )
+
+    async def reduce_position_async(
+        self,
+        asset: str,
+        quantity: float,
+        *,
+        reason: str,
+        idempotency_key: str,
+        fill_price: float | None = None,
+    ) -> Order:
+        """Submit an explicitly reducing order under the configured kill-switch policy."""
+        position = self.get_position(asset)
+        if position is None or quantity <= 0 or quantity > abs(position.quantity):
+            raise RiskLimitError(f"Reducing order for {asset} exceeds the open position")
+        if (
+            self.config.kill_switch_enabled or self._state.kill_switch_activated
+        ) and not self.config.allow_reducing_risk_when_killed:
+            raise RiskLimitError("Kill switch policy blocks reducing-risk orders")
+        side = OrderSide.SELL if position.quantity > 0 else OrderSide.BUY
+        price = fill_price
+        if price is None and self.config.shadow_mode:
+            snapshot = self._get_market_snapshot(asset)
+            price = (
+                snapshot.price
+                if snapshot is not None
+                else float(position.current_price or position.entry_price)
+            )
+        try:
+            if self.config.shadow_mode:
+                order = Order(
+                    asset=asset,
+                    side=side,
+                    quantity=quantity,
+                    order_type=OrderType.MARKET,
+                    order_id=f"SHADOW-REDUCE-{int(time.time() * 1_000_000)}",
+                    status=OrderStatus.FILLED,
+                    filled_quantity=quantity,
+                    filled_price=price,
+                    filled_at=datetime.now(UTC),
+                    intent_idempotency_key=idempotency_key,
+                )
+                self._virtual_portfolio.process_fill(order)
+            else:
+                if reason == "close_position" and quantity == abs(position.quantity):
+                    order = await self._broker.close_position_async(asset)
+                    if order is None:
+                        raise RiskLimitError(f"Venue did not create a closing order for {asset}")
+                else:
+                    order = await self._broker.submit_order_async(
+                        asset,
+                        quantity,
+                        side,
+                        OrderType.MARKET,
+                        reducing_risk=True,
+                        reason=reason,
+                        intent_idempotency_key=idempotency_key,
+                    )
+        except Exception as error:
+            self.record_event(
+                "reducing_risk_failed",
+                asset=asset,
+                quantity=quantity,
+                reason=reason,
+                idempotency_key=idempotency_key,
+                error_type=type(error).__name__,
+                error=str(error),
+            )
+            if self.config.halt_on_reducing_risk_failure:
+                raise
+            raise RiskLimitError(f"Reducing-risk order failed for {asset}: {error}") from error
+        self._state.orders_placed += 1
+        self._refresh_state_snapshot_from_cache()
+        self._save_state()
         self.record_event(
-            "close_position_requested",
+            "reducing_risk_submitted",
             asset=asset,
             order_id=self._order_identifier(order),
+            quantity=quantity,
+            reason=reason,
+            idempotency_key=idempotency_key,
         )
         return order
 
@@ -718,7 +859,7 @@ class SafeBroker:
     async def submit_order_async(
         self,
         asset: str,
-        quantity: int,
+        quantity: float,
         side: OrderSide | None = None,
         order_type: OrderType = OrderType.MARKET,
         limit_price: float | None = None,
@@ -799,7 +940,10 @@ class SafeBroker:
                 status=OrderStatus.FILLED,
                 filled_quantity=quantity,
                 filled_price=price,
-                filled_at=datetime.now(),
+                filled_at=datetime.now(UTC),
+                target_intent_id=kwargs.get("target_intent_id"),
+                child_intent_id=kwargs.get("child_intent_id"),
+                intent_idempotency_key=kwargs.get("intent_idempotency_key"),
             )
 
             # CRITICAL: Update VirtualPortfolio (fixes infinite buy loop)
@@ -1093,7 +1237,7 @@ class SafeBroker:
             )
 
     async def _check_position_limits(
-        self, asset: str, quantity: int, order_value: float, side: OrderSide
+        self, asset: str, quantity: float, order_value: float, side: OrderSide
     ) -> None:
         """Check position size limits.
 
@@ -1306,6 +1450,8 @@ class SafeBroker:
         Prevents corruption if process dies mid-write.
         """
         try:
+            if self.config.shadow_mode:
+                self._state.shadow_portfolio = self._virtual_portfolio.to_state()
             path = Path(self.config.state_file)
             tmp_path = path.with_suffix(".json.tmp")
 

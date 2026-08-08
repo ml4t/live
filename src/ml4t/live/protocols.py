@@ -12,11 +12,18 @@ The sync/async split enables strategies to remain simple (no async/await) while
 brokers can use modern async I/O for efficiency.
 """
 
+from __future__ import annotations
+
 from collections.abc import AsyncIterator
 from datetime import datetime
-from typing import Any, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
+from ml4t.backtest import IntentReconciliation
 from ml4t.backtest.types import Order, OrderSide, OrderType, Position
+from ml4t.specs import CanonicalChildOrderIntent, CanonicalTargetIntent
+
+if TYPE_CHECKING:
+    from ml4t.backtest.risk.position import PositionRule
 
 
 @runtime_checkable
@@ -159,6 +166,51 @@ class BrokerProtocol(Protocol):
         Returns:
             Order object if position exists, None if no position
         """
+        ...
+
+    def register_target_intent(
+        self,
+        intent: CanonicalTargetIntent,
+        *,
+        position_rules: PositionRule | None = None,
+    ) -> CanonicalTargetIntent:
+        """Register an idempotent target for a causal opening phase."""
+        ...
+
+    def register_position_rule_policy(self, policy_id: str, rules: PositionRule) -> None:
+        """Bind a portable policy identity to its client rule implementation."""
+        ...
+
+    def get_target_intents(self) -> tuple[CanonicalTargetIntent, ...]:
+        """Return accepted canonical target intents."""
+        ...
+
+    def get_child_order_intents(self) -> tuple[CanonicalChildOrderIntent, ...]:
+        """Return canonical child intents derived from accepted targets."""
+        ...
+
+    def get_intent_reconciliations(self) -> tuple[IntentReconciliation, ...]:
+        """Return retained child fill and remainder evidence."""
+        ...
+
+    def export_target_intent_state(self) -> dict[str, Any]:
+        """Serialize accepted target, child, reconciliation, and rule state."""
+        ...
+
+    def set_position_rules(
+        self,
+        rules: PositionRule | None,
+        asset: str | None = None,
+    ) -> None:
+        """Set client-evaluated position rules globally or for one asset."""
+        ...
+
+    def clear_position_rules(self, asset: str | None = None) -> None:
+        """Clear client-evaluated position rules globally or for one asset."""
+        ...
+
+    def update_position_context(self, asset: str, context: dict[str, Any]) -> None:
+        """Update persistent context used by position-rule evaluation."""
         ...
 
 
