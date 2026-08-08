@@ -92,6 +92,10 @@ class BrokerProtocol(Protocol):
         """
         ...
 
+    def get_pending_orders(self, asset: str | None = None) -> list[Order]:
+        """Get pending orders, optionally filtered by asset."""
+        ...
+
     def submit_order(
         self,
         asset: str,
@@ -206,8 +210,8 @@ class AsyncBrokerProtocol(Protocol):
         """Get all positions (async version)."""
         ...
 
-    async def get_pending_orders_async(self) -> list[Order]:
-        """Get all pending orders (async version)."""
+    async def get_pending_orders_async(self, asset: str | None = None) -> list[Order]:
+        """Get pending orders, optionally filtered by asset."""
         ...
 
     async def get_position_async(self, asset: str) -> Position | None:

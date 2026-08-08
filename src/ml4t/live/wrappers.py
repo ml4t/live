@@ -4,7 +4,7 @@ This module provides the ThreadSafeBrokerWrapper that bridges the sync/async
 boundary between Strategy.on_data() and async broker implementations.
 
 Key Design:
-- Strategy runs in worker thread (via asyncio.to_thread)
+- Every portable strategy callback runs on one dedicated worker thread
 - Broker methods run on main event loop
 - run_coroutine_threadsafe() handles cross-thread communication
 - Differentiated timeouts (5s getters, 30s orders)
@@ -30,7 +30,7 @@ class ThreadSafeBrokerWrapper:
     event loop and blocking the worker thread until they complete.
 
     Thread Safety:
-    - Strategy runs in worker thread (via asyncio.to_thread)
+    - Every portable strategy callback runs on one dedicated worker thread
     - Broker methods run on main event loop
     - run_coroutine_threadsafe() handles the cross-thread communication
 
@@ -136,10 +136,19 @@ class ThreadSafeBrokerWrapper:
         """
         return self._run_sync(self._broker.get_cash_async(), timeout=5.0)
 
+    def get_pending_orders(self, asset: str | None = None) -> list[Order]:
+        """Get pending orders, optionally filtered by asset."""
+        operation = (
+            self._broker.get_pending_orders_async()
+            if asset is None
+            else self._broker.get_pending_orders_async(asset)
+        )
+        return self._run_sync(operation, timeout=5.0)
+
     def submit_order(
         self,
         asset: str,
-        quantity: int,
+        quantity: float,
         side: OrderSide | None = None,
         order_type: OrderType = OrderType.MARKET,
         limit_price: float | None = None,
@@ -243,30 +252,21 @@ class ThreadSafeBrokerWrapper:
         - Getters (get_cash, get_account_value): 5s (default)
         - Order operations (submit, cancel, close): 30s
         """
+        if threading.get_ident() == self._loop_thread_id:
+            close = getattr(coro, "close", None)
+            if callable(close):
+                close()
+            raise RuntimeError(
+                "Synchronous broker methods require a strategy worker thread; "
+                "await the async broker method from the event-loop thread"
+            )
+        future = asyncio.run_coroutine_threadsafe(coro, self._loop)
         try:
-            if threading.get_ident() == self._loop_thread_id:
-                return self._run_on_loop_thread(coro, timeout)
-
-            future = asyncio.run_coroutine_threadsafe(coro, self._loop)
             return future.result(timeout=timeout)
         except TimeoutError:
+            future.cancel()
             logger.error(f"ThreadSafeBrokerWrapper: Operation timed out after {timeout}s")
             raise
         except Exception as e:
             logger.error(f"ThreadSafeBrokerWrapper: Error running coroutine: {e}", exc_info=True)
             raise RuntimeError(f"Broker operation failed: {e}") from e
-
-    def _run_on_loop_thread(self, coro: Any, timeout: float) -> Any:
-        """Run a broker coroutine from the event loop thread.
-
-        Scripts and notebooks may call sync broker methods directly from the
-        event loop thread after patching the loop with nest_asyncio. In that
-        case run_coroutine_threadsafe() can deadlock because nothing drains the
-        cross-thread callback queue until control returns to the loop.
-        """
-        if self._loop.is_running():
-            import nest_asyncio
-
-            nest_asyncio.apply(self._loop)
-
-        return self._loop.run_until_complete(asyncio.wait_for(coro, timeout=timeout))

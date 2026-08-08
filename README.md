@@ -276,16 +276,20 @@ await LiveEngine(MyStrategy(), safe_broker, live_feed).run()
 
 ## Documentation
 
-- [Installation](docs/getting-started/installation.md) — setup instructions
-- [Quick Start](docs/getting-started/quickstart.md) — first live strategy
-- [Brokers](docs/user-guide/brokers.md) — IB and Alpaca setup
-- [Data Feeds](docs/user-guide/feeds.md) — 6 feed types
-- [Risk Management](docs/user-guide/risk.md) — LiveRiskConfig and SafeBroker
+- [Installation](docs/getting-started/installation.md) - setup instructions
+- [Quick Start](docs/getting-started/quickstart.md) - first live strategy
+- [Brokers](docs/user-guide/brokers.md) - IB and Alpaca setup
+- [Data Feeds](docs/user-guide/feeds.md) - 6 feed types
+- [Risk Management](docs/user-guide/risk.md) - LiveRiskConfig and SafeBroker
 
 ## Technical Characteristics
 
-- **Async/sync bridge**: Sync strategy callbacks work with async broker connections via `ThreadSafeBrokerWrapper`
-- **Thread-safe**: Strategy runs in worker thread, broker I/O on async event loop
+- **Versioned lifecycle**: `on_start`, `on_prepare`, `on_data`, and `on_end` follow the
+  negotiated shared lifecycle contract
+- **Async/sync bridge**: All synchronous strategy callbacks run on one dedicated worker thread;
+  broker I/O stays on the async event loop without event-loop re-entry
+- **Exception behavior**: Strategy exceptions abort the run, invoke `on_end` once after a
+  successful run start, and are reraised after cleanup
 - **Protocol-based**: `BrokerProtocol`, `AsyncBrokerProtocol`, `DataFeedProtocol` for extensibility
 - **Virtual portfolio**: Shadow mode tracks positions without broker interaction
 - **Atomic state**: Risk state persisted via POSIX-atomic file writes (crash-safe)

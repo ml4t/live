@@ -56,7 +56,8 @@ asyncio.run(main())
 
 - Your strategy stays synchronous, just like in `ml4t-backtest`
 - `LiveEngine` runs broker/feed I/O asynchronously
-- `ThreadSafeBrokerWrapper` lets strategy code call `broker.submit_order(...)` safely
+- `LiveEngine` runs every lifecycle callback on one worker thread, so synchronous broker calls do
+  not re-enter or block the async event loop
 - `SafeBroker` enforces limits before any live order can be placed
 
 ## First-Run Checklist

@@ -51,6 +51,12 @@ class MockBroker:
     def get_cash(self) -> float:
         return self._cash
 
+    def get_pending_orders(self, asset: str | None = None) -> list[Order]:
+        orders = self._pending_orders.copy()
+        if asset is None:
+            return orders
+        return [order for order in orders if order.asset == asset]
+
     def submit_order(
         self,
         asset: str,
@@ -135,8 +141,11 @@ class MockAsyncBroker:
     async def get_positions_async(self) -> dict[str, Position]:
         return self._positions.copy()
 
-    async def get_pending_orders_async(self) -> list[Order]:
-        return self._pending_orders.copy()
+    async def get_pending_orders_async(self, asset: str | None = None) -> list[Order]:
+        orders = self._pending_orders.copy()
+        if asset is None:
+            return orders
+        return [order for order in orders if order.asset == asset]
 
     async def get_position_async(self, asset: str) -> Position | None:
         return self._positions.get(asset)
@@ -467,6 +476,7 @@ def test_broker_protocol_has_all_required_methods():
         "get_position",
         "get_account_value",
         "get_cash",
+        "get_pending_orders",
         "submit_order",
         "cancel_order",
         "replace_order",

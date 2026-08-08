@@ -89,8 +89,12 @@ class NullBroker:
     async def get_positions_async(self) -> dict[str, Position]:
         return dict(self._positions)
 
-    async def get_pending_orders_async(self) -> list[Order]:
-        return list(self._pending_orders)
+    async def get_pending_orders_async(self, asset: str | None = None) -> list[Order]:
+        orders = list(self._pending_orders)
+        if asset is None:
+            return orders
+        normalized = asset.upper()
+        return [order for order in orders if order.asset.upper() == normalized]
 
     async def get_position_async(self, asset: str) -> Position | None:
         return self._positions.get(asset)

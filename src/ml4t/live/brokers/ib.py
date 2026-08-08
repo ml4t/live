@@ -77,7 +77,7 @@ class IBBroker(AsyncBrokerProtocol):
             client_id: Unique client ID (default: 1)
             account: IB account ID (default: use first account)
             market_data_type: IB market-data type to request after connect.
-                ``None`` (default) leaves TWS at its configured default —
+                ``None`` (default) leaves TWS at its configured default -
                 use this when the account has live Level 1 subscriptions.
                 ``1`` = real-time, ``2`` = frozen, ``3`` = delayed,
                 ``4`` = delayed-frozen. Paper accounts without market-data
@@ -226,6 +226,14 @@ class IBBroker(AsyncBrokerProtocol):
         """
         async with self._position_lock:
             return dict(self._positions)
+
+    async def get_pending_orders_async(self, asset: str | None = None) -> list[Order]:
+        """Return pending orders, optionally filtered by asset."""
+        orders = list(self._pending_orders.values())
+        if asset is None:
+            return orders
+        normalized = asset.upper()
+        return [order for order in orders if order.asset.upper() == normalized]
 
     async def get_account_value_async(self) -> float:
         """Get Net Liquidation Value.

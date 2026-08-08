@@ -3,14 +3,14 @@
 Bridges async infrastructure (brokers, data feeds) with synchronous Strategy.on_data().
 
 Key Design:
-1. Strategy runs in thread pool (via asyncio.to_thread)
+1. Strategy lifecycle runs on one dedicated worker thread
 2. ThreadSafeBrokerWrapper passed to strategy for sync broker calls
 3. Graceful shutdown on SIGINT/SIGTERM
 4. Configurable error handling and watchdog-based recovery
 
 Thread Model:
 - Main thread: asyncio event loop (broker I/O, data feed)
-- Worker thread(s): Strategy.on_data() execution
+- Worker thread: all synchronous strategy lifecycle callbacks
 - Communication: run_coroutine_threadsafe() via ThreadSafeBrokerWrapper
 
 Example:
@@ -24,6 +24,7 @@ Example:
 """
 
 import asyncio
+import inspect
 import logging
 import signal
 from collections.abc import Callable
@@ -33,7 +34,16 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from ml4t.backtest import Strategy
+from ml4t.specs import (
+    LIFECYCLE_V1,
+    HistoricalStrategyCompatibilityError,
+    LifecyclePhase,
+    LifecycleVersion,
+    negotiate_lifecycle_version,
+    require_historical_strategy_compatibility,
+)
 
+from .lifecycle import LiveLifecycleDispatcher
 from .protocols import AsyncBrokerProtocol, DataFeedProtocol
 from .wrappers import ThreadSafeBrokerWrapper
 
@@ -66,6 +76,7 @@ class LiveEngine:
         recovery_cooldown_seconds: float = 5.0,
         max_recovery_attempts: int = 3,
         on_health_change: Callable[[str, dict[str, Any]], None] | None = None,
+        lifecycle_version: LifecycleVersion | str = LifecycleVersion.V1,
     ):
         """Initialize LiveEngine.
 
@@ -74,7 +85,8 @@ class LiveEngine:
             broker: Async broker implementation.
             feed: Data feed providing timestamp, data, context tuples.
             on_error: Custom error handler callback.
-            halt_on_error: Stop engine on strategy exceptions.
+            halt_on_error: Deprecated compatibility input. Lifecycle v1 always aborts and reraises
+                strategy exceptions after cleanup.
             feed_silence_seconds: Optional threshold for degraded feed reporting.
             watchdog_poll_seconds: Poll interval for runtime health monitoring.
             halt_on_unhealthy: Stop the engine when watchdog detects a degraded state.
@@ -82,7 +94,10 @@ class LiveEngine:
             recovery_cooldown_seconds: Delay between recovery attempts.
             max_recovery_attempts: Maximum recovery attempts before stopping.
             on_health_change: Optional callback invoked when runtime health changes.
+            lifecycle_version: Portable strategy lifecycle version.
         """
+        negotiated_version = negotiate_lifecycle_version(lifecycle_version)
+        self._validate_strategy_lifecycle(strategy)
         self.strategy = strategy
         self.broker = broker
         self.feed = feed
@@ -95,6 +110,12 @@ class LiveEngine:
         self.recovery_cooldown_seconds = recovery_cooldown_seconds
         self.max_recovery_attempts = max_recovery_attempts
         self.on_health_change = on_health_change
+        self.lifecycle_version = negotiated_version
+        self.lifecycle_dispatcher = LiveLifecycleDispatcher(
+            strategy,
+            LIFECYCLE_V1,
+            event_recorder=self._record_runtime_event,
+        )
 
         self._running = False
         self._shutdown_event = asyncio.Event()
@@ -102,6 +123,8 @@ class LiveEngine:
         self._wrapped_broker: ThreadSafeBrokerWrapper | None = None
         self._watchdog_task: asyncio.Task | None = None
         self._signals_installed = False
+        self._run_in_progress = False
+        self._run_done_event = asyncio.Event()
 
         self._bar_count = 0
         self._error_count = 0
@@ -138,51 +161,68 @@ class LiveEngine:
         """Main async loop - receives bars and dispatches to strategy."""
         if self._wrapped_broker is None:
             raise RuntimeError("Call connect() before run()")
+        if self._run_in_progress:
+            raise RuntimeError("LiveEngine.run() is already active")
 
+        self._run_in_progress = True
+        self._run_done_event.clear()
         self._running = True
         self._recovery_requested_reason = None
         self._recovery_attempts = 0
         self._shutdown_event.clear()
         logger.info("LiveEngine: Starting main loop")
 
-        self.strategy.on_start(self._wrapped_broker)
-        self._watchdog_task = asyncio.create_task(self._watchdog_loop())
-
+        lifecycle_initialized = False
+        failure: BaseException | None = None
         try:
+            await self.lifecycle_dispatcher.dispatch(
+                LifecyclePhase.RUN_START,
+                self._wrapped_broker,
+            )
+            await self.lifecycle_dispatcher.dispatch(
+                LifecyclePhase.CAUSAL_INITIALIZATION,
+                self._wrapped_broker,
+                None,
+            )
+            lifecycle_initialized = True
+            self._watchdog_task = asyncio.create_task(
+                self._watchdog_loop(),
+                name="ml4t-live-watchdog",
+            )
             while not self._shutdown_event.is_set():
-                try:
-                    async for timestamp, data, context in self.feed:
-                        if self._shutdown_event.is_set():
-                            logger.info("LiveEngine: Shutdown requested")
-                            break
+                async for timestamp, data, context in self.feed:
+                    if self._shutdown_event.is_set():
+                        logger.info("LiveEngine: Shutdown requested")
+                        break
 
-                        self._bar_count += 1
-                        self._last_bar_time = timestamp
-                        self._last_bar_received_at = datetime.now(UTC)
+                    self._bar_count += 1
+                    self._last_bar_time = timestamp
+                    self._last_bar_received_at = datetime.now(UTC)
 
-                        record_market_data = getattr(self.broker, "_record_market_data", None)
-                        if callable(record_market_data):
-                            record_market_data(timestamp, data, context)
+                    record_market_data = getattr(self.broker, "_record_market_data", None)
+                    if callable(record_market_data):
+                        record_market_data(timestamp, data, context)
 
+                    try:
+                        await self.lifecycle_dispatcher.dispatch(
+                            LifecyclePhase.MARKET_EVENT,
+                            timestamp,
+                            data,
+                            context,
+                            self._wrapped_broker,
+                            event_time=timestamp,
+                        )
+                    except Exception as error:
+                        self._error_count += 1
                         try:
-                            await asyncio.to_thread(
-                                self.strategy.on_data,
-                                timestamp,
-                                data,
-                                context,
-                                self._wrapped_broker,
+                            self.on_error(error, timestamp, data)
+                        except BaseException as handler_error:
+                            error.add_note(
+                                "on_error also failed: "
+                                f"{type(handler_error).__name__}: {handler_error}"
                             )
-                        except Exception as e:
-                            self._error_count += 1
-                            self.on_error(e, timestamp, data)
-
-                            if self.halt_on_error:
-                                logger.error("LiveEngine: Halting due to strategy error")
-                                self._shutdown_event.set()
-                                break
-                except asyncio.CancelledError:
-                    logger.info("LiveEngine: Cancelled")
-                    raise
+                        self._shutdown_event.set()
+                        raise
 
                 if self._shutdown_event.is_set():
                     break
@@ -201,18 +241,41 @@ class LiveEngine:
                 recovered = await self._attempt_recovery(self._recovery_requested_reason)
                 if not recovered:
                     break
-        except asyncio.CancelledError:
-            logger.info("LiveEngine: Cancelled")
+        except BaseException as error:
+            failure = error
         finally:
             self._running = False
-            await self._cancel_watchdog()
-            self._emit_health_transition(self.runtime_status())
-            self.strategy.on_end(self._wrapped_broker)
-            logger.info(
-                "LiveEngine: Stopped. Bars: %s, Errors: %s",
-                self._bar_count,
-                self._error_count,
-            )
+            try:
+                await self._cancel_watchdog()
+                self._emit_health_transition(self.runtime_status())
+                if lifecycle_initialized:
+                    try:
+                        await self.lifecycle_dispatcher.dispatch(
+                            LifecyclePhase.RUN_END,
+                            self._wrapped_broker,
+                        )
+                    except BaseException as finalization_error:
+                        if failure is None:
+                            failure = finalization_error
+                        else:
+                            failure.add_note(
+                                "on_end also failed during cleanup: "
+                                f"{type(finalization_error).__name__}: {finalization_error}"
+                            )
+                if failure is None:
+                    self.lifecycle_dispatcher.validate_completed_run(self._bar_count)
+            finally:
+                self.lifecycle_dispatcher.close()
+                self._run_in_progress = False
+                self._run_done_event.set()
+                logger.info(
+                    "LiveEngine: Stopped. Bars: %s, Errors: %s",
+                    self._bar_count,
+                    self._error_count,
+                )
+
+        if failure is not None:
+            raise failure.with_traceback(failure.__traceback__)
 
     async def _watchdog_loop(self) -> None:
         """Monitor runtime health and request recovery/escalation when needed."""
@@ -323,8 +386,36 @@ class LiveEngine:
         self._shutdown_event.set()
         await self._cancel_watchdog()
         self.feed.stop()
+        if self._run_in_progress:
+            await self._run_done_event.wait()
         await self.broker.disconnect()
         logger.info("LiveEngine: Stopped")
+
+    @staticmethod
+    def _validate_strategy_lifecycle(strategy: Strategy) -> None:
+        """Reject lifecycle surfaces that require unavailable historical state."""
+        strategy_type = type(strategy)
+        callback_names = tuple(dir(strategy_type))
+        require_historical_strategy_compatibility(strategy_type.__name__, callback_names)
+        if getattr(strategy_type, "on_before_risk", None) is not None:
+            raise HistoricalStrategyCompatibilityError(
+                strategy_type.__name__,
+                "on_before_risk",
+                LifecyclePhase.PRE_OPEN,
+            )
+        parameters = tuple(inspect.signature(strategy_type.on_prepare).parameters.values())
+        positional = tuple(
+            parameter
+            for parameter in parameters
+            if parameter.kind
+            in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
+        )
+        if any(parameter.name == "timestamps" for parameter in parameters) or len(positional) > 3:
+            raise HistoricalStrategyCompatibilityError(
+                strategy_type.__name__,
+                "on_prepare(timestamps)",
+                LifecyclePhase.CAUSAL_INITIALIZATION,
+            )
 
     def _install_signal_handlers(self) -> None:
         """Install SIGINT/SIGTERM handlers for graceful shutdown."""
@@ -495,6 +586,11 @@ class LiveEngine:
             "auto_recover": self.auto_recover,
             "recovery_requested": self._recovery_requested_reason,
             "recovery_attempts": self._recovery_attempts,
+            "lifecycle_version": self.lifecycle_version.value,
+            "callback_counts": {
+                phase.value: count
+                for phase, count in self.lifecycle_dispatcher.callback_counts.items()
+            },
         }
 
     @property

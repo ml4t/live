@@ -15,7 +15,6 @@ IMPORTANT: Tests must call wrapper methods from worker thread
 import asyncio
 from datetime import datetime
 
-import nest_asyncio
 import pytest
 from ml4t.backtest.types import Order, OrderSide, OrderStatus, OrderType, Position
 
@@ -59,10 +58,13 @@ class MockAsyncBroker:
             await asyncio.sleep(self._delay)
         return self._positions.copy()
 
-    async def get_pending_orders_async(self) -> list[Order]:
+    async def get_pending_orders_async(self, asset: str | None = None) -> list[Order]:
         if self._delay > 0:
             await asyncio.sleep(self._delay)
-        return self._pending_orders.copy()
+        orders = self._pending_orders.copy()
+        if asset is None:
+            return orders
+        return [order for order in orders if order.asset == asset]
 
     async def get_position_async(self, asset: str) -> Position | None:
         if self._delay > 0:
@@ -437,16 +439,57 @@ async def test_run_from_worker_thread():
 
 
 @pytest.mark.asyncio
-async def test_submit_order_from_event_loop_thread_with_nest_asyncio():
-    """Test reentrant script/notebook usage from the loop thread."""
+async def test_sync_broker_call_from_event_loop_thread_fails_without_reentry():
+    """Test loop-thread misuse fails immediately without event-loop re-entry."""
     broker = MockAsyncBroker()
     loop = asyncio.get_running_loop()
     wrapper = ThreadSafeBrokerWrapper(broker, loop)
 
-    nest_asyncio.apply(loop)
+    with pytest.raises(RuntimeError, match="worker thread"):
+        wrapper.submit_order("AAPL", 100, OrderSide.BUY)
 
-    order = wrapper.submit_order("AAPL", 100, OrderSide.BUY)
 
-    assert order.asset == "AAPL"
-    assert order.side == OrderSide.BUY
-    assert order.quantity == 100
+@pytest.mark.asyncio
+async def test_get_pending_orders_filters_asset_from_worker_thread() -> None:
+    broker = MockAsyncBroker()
+    broker._pending_orders.extend(
+        [
+            Order(
+                asset="AAPL",
+                side=OrderSide.BUY,
+                quantity=1,
+                order_id="aapl-order",
+                status=OrderStatus.PENDING,
+            ),
+            Order(
+                asset="MSFT",
+                side=OrderSide.BUY,
+                quantity=1,
+                order_id="msft-order",
+                status=OrderStatus.PENDING,
+            ),
+        ]
+    )
+    wrapper = ThreadSafeBrokerWrapper(broker, asyncio.get_running_loop())
+
+    orders = await asyncio.to_thread(wrapper.get_pending_orders, "AAPL")
+
+    assert [order.order_id for order in orders] == ["aapl-order"]
+
+
+@pytest.mark.asyncio
+async def test_timeout_cancels_underlying_broker_coroutine() -> None:
+    cancelled = asyncio.Event()
+
+    async def slow_operation() -> None:
+        try:
+            await asyncio.sleep(60)
+        finally:
+            cancelled.set()
+
+    wrapper = ThreadSafeBrokerWrapper(MockAsyncBroker(), asyncio.get_running_loop())
+
+    with pytest.raises(TimeoutError):
+        await asyncio.to_thread(wrapper._run_sync, slow_operation(), 0.01)
+
+    await asyncio.wait_for(cancelled.wait(), timeout=0.5)

@@ -961,7 +961,7 @@ class SafeBroker:
         - A test harness setting up controlled state.
 
         It is **not** the right tool inside a notebook that already runs a
-        live engine — there the streaming path covers staleness implicitly.
+        live engine - there the streaming path covers staleness implicitly.
         Reaching for ``record_market_snapshot`` from inside a tick-driven
         flow is a code smell: it usually means the engine isn't actually
         wired up, and the snapshot will go stale silently.
@@ -1672,13 +1672,15 @@ class SafeBroker:
             return self._virtual_portfolio.positions
         return await self._broker.get_positions_async()
 
-    async def get_pending_orders_async(self) -> list[Order]:
+    async def get_pending_orders_async(self, asset: str | None = None) -> list[Order]:
         """Get pending orders (async).
 
         Returns:
             List of pending orders
         """
-        return await self._broker.get_pending_orders_async()
+        if asset is None:
+            return await self._broker.get_pending_orders_async()
+        return await self._broker.get_pending_orders_async(asset)
 
     async def get_position_async(self, asset: str) -> Position | None:
         """Get position (async).

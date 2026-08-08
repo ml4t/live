@@ -231,6 +231,14 @@ class AlpacaBroker(AsyncBrokerProtocol):
         async with self._position_lock:
             return dict(self._positions)
 
+    async def get_pending_orders_async(self, asset: str | None = None) -> list[Order]:
+        """Return pending orders, optionally filtered by asset."""
+        orders = list(self._pending_orders.values())
+        if asset is None:
+            return orders
+        normalized = asset.upper()
+        return [order for order in orders if order.asset.upper() == normalized]
+
     async def get_account_value_async(self) -> float:
         """Get portfolio value (equity).
 

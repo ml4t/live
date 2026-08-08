@@ -1,13 +1,19 @@
 """Tests for LiveEngine - async orchestration layer."""
 
 import asyncio
+import threading
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
 from ml4t.backtest import Strategy
-from ml4t.backtest.types import Order, OrderSide, OrderType, Position
+from ml4t.backtest.types import Order, OrderSide, OrderStatus, OrderType, Position
+from ml4t.specs import (
+    HistoricalStrategyCompatibilityError,
+    LifecyclePhase,
+    UnsupportedLifecycleVersionError,
+)
 
 from ml4t.live.engine import LiveEngine
 from ml4t.live.protocols import AsyncBrokerProtocol, DataFeedProtocol
@@ -26,6 +32,10 @@ class MockAsyncBroker:
         self._cash = 100_000.0
         self._account_value = 100_000.0
         self.submit_calls = 0
+        self.runtime_events: list[tuple[str, dict[str, Any]]] = []
+
+    def record_event(self, event: str, **payload: Any) -> None:
+        self.runtime_events.append((event, payload))
 
     # Properties (expected by ThreadSafeBrokerWrapper)
     @property
@@ -60,9 +70,12 @@ class MockAsyncBroker:
         """Get all positions (async version)."""
         return self._positions.copy()
 
-    async def get_pending_orders_async(self) -> list[Order]:
+    async def get_pending_orders_async(self, asset: str | None = None) -> list[Order]:
         """Get pending orders (async version)."""
-        return self._pending_orders.copy()
+        orders = self._pending_orders.copy()
+        if asset is None:
+            return orders
+        return [order for order in orders if order.asset == asset]
 
     async def get_position_async(self, asset: str) -> Position | None:
         """Get position (async version)."""
@@ -94,14 +107,14 @@ class MockAsyncBroker:
             quantity = abs(quantity)
 
         order = Order(
-            id=f"order_{len(self._pending_orders) + 1}",
+            order_id=f"order_{len(self._pending_orders) + 1}",
             asset=asset,
             quantity=quantity,
             side=side,
-            type=order_type,
+            order_type=order_type,
             limit_price=limit_price,
             stop_price=stop_price,
-            timestamp=datetime.now(),
+            status=OrderStatus.PENDING,
         )
         self._pending_orders.append(order)
         return order
@@ -110,7 +123,7 @@ class MockAsyncBroker:
         """Cancel order."""
         await asyncio.sleep(0.01)
         for order in self._pending_orders:
-            if order.id == order_id:
+            if order.order_id == order_id:
                 self._pending_orders.remove(order)
                 return True
         return False
@@ -126,13 +139,13 @@ class MockAsyncBroker:
         """Replace order."""
         await asyncio.sleep(0.01)
         for order in list(self._pending_orders):
-            if order.id == order_id:
+            if order.order_id == order_id:
                 self._pending_orders.remove(order)
                 return await self.submit_order_async(
                     asset=order.asset,
                     quantity=int(order.quantity if quantity is None else quantity),
                     side=order.side,
-                    order_type=order.type,
+                    order_type=order.order_type,
                     limit_price=order.limit_price if limit_price is None else limit_price,
                     stop_price=order.stop_price if stop_price is None else stop_price,
                 )
@@ -258,6 +271,40 @@ class RecordingStrategy(Strategy):
 
     def on_end(self, broker: Any) -> None:
         self.on_end_called = True
+
+
+class LifecycleStrategy(Strategy):
+    """Record callback order, thread identity, and portable broker access."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, int, float]] = []
+
+    def _record(self, callback: str, broker: Any) -> None:
+        assert broker.is_connected is True
+        assert broker.get_position("AAPL") is not None
+        assert "AAPL" in broker.positions
+        assert broker.get_account_value() == 100_000.0
+        assert broker.get_pending_orders() == []
+        order = broker.submit_order("MSFT", 1)
+        replacement = broker.replace_order(order.order_id, quantity=2)
+        assert broker.cancel_order(replacement.order_id) is True
+        closing = broker.close_position("AAPL")
+        assert closing is not None
+        assert broker.cancel_order(closing.order_id) is True
+        assert broker.pending_orders == []
+        self.calls.append((callback, threading.get_ident(), broker.get_cash()))
+
+    def on_start(self, broker: Any) -> None:
+        self._record("on_start", broker)
+
+    def on_prepare(self, broker: Any, config: Any | None = None) -> None:
+        self._record("on_prepare", broker)
+
+    def on_data(self, timestamp: datetime, data: dict, context: dict, broker: Any) -> None:
+        self._record("on_data", broker)
+
+    def on_end(self, broker: Any) -> None:
+        self._record("on_end", broker)
 
 
 class ErrorStrategy(Strategy):
@@ -389,6 +436,90 @@ async def test_run_with_data():
 
 
 @pytest.mark.asyncio
+async def test_shared_lifecycle_dispatches_all_callbacks_on_one_worker_thread() -> None:
+    strategy = LifecycleStrategy()
+    broker = MockAsyncBroker()
+    broker._positions["AAPL"] = Position(
+        asset="AAPL",
+        quantity=1,
+        entry_price=100.0,
+        entry_time=datetime(2024, 1, 1, tzinfo=UTC),
+        current_price=100.0,
+    )
+    feed = MockDataFeed([(datetime(2024, 1, 1, 9, 30), {"AAPL": {"close": 150.0}}, {})])
+    loop_thread = threading.get_ident()
+    engine = LiveEngine(strategy, broker, feed)
+
+    await engine.connect()
+    await engine.run()
+
+    assert [callback for callback, _, _ in strategy.calls] == [
+        "on_start",
+        "on_prepare",
+        "on_data",
+        "on_end",
+    ]
+    callback_threads = {thread_id for _, thread_id, _ in strategy.calls}
+    assert len(callback_threads) == 1
+    assert loop_thread not in callback_threads
+    assert all(cash == 100_000.0 for _, _, cash in strategy.calls)
+    assert [entry.phase for entry in engine.lifecycle_dispatcher.invocations] == [
+        LifecyclePhase.RUN_START,
+        LifecyclePhase.CAUSAL_INITIALIZATION,
+        LifecyclePhase.MARKET_EVENT,
+        LifecyclePhase.RUN_END,
+    ]
+    assert engine.stats["lifecycle_version"] == "1"
+    assert engine.stats["callback_counts"] == {
+        "run_start": 1,
+        "causal_initialization": 1,
+        "pre_open": 0,
+        "opening_auction": 0,
+        "fill_reconciliation": 0,
+        "intrabar": 0,
+        "close": 0,
+        "market_event": 1,
+        "run_end": 1,
+    }
+    assert [event for event, _ in broker.runtime_events if event.startswith("strategy_")] == [
+        "strategy_callback_started",
+        "strategy_callback_succeeded",
+        "strategy_callback_started",
+        "strategy_callback_succeeded",
+        "strategy_callback_started",
+        "strategy_callback_succeeded",
+        "strategy_callback_started",
+        "strategy_callback_succeeded",
+    ]
+
+
+def test_unsupported_lifecycle_rejected_before_runtime_side_effects() -> None:
+    broker = MockAsyncBroker()
+    feed = MockDataFeed([])
+
+    with pytest.raises(UnsupportedLifecycleVersionError, match="unsupported"):
+        LiveEngine(RecordingStrategy(), broker, feed, lifecycle_version="unsupported")
+
+    assert broker.is_connected is False
+    assert feed._started is False
+
+
+def test_historical_strategy_rejected_before_runtime_side_effects() -> None:
+    class HistoricalStrategy(RecordingStrategy):
+        def on_before_risk(self, timestamp, data, context, broker) -> None:
+            return None
+
+    broker = MockAsyncBroker()
+    feed = MockDataFeed([])
+
+    with pytest.raises(HistoricalStrategyCompatibilityError, match="on_before_risk"):
+        LiveEngine(HistoricalStrategy(), broker, feed)
+
+    assert broker.is_connected is False
+    assert feed._started is False
+
+
+@pytest.mark.asyncio
 async def test_strategy_receives_wrapper():
     """Test strategy receives ThreadSafeBrokerWrapper, not raw broker."""
     strategy = RecordingStrategy()
@@ -442,8 +573,8 @@ async def test_graceful_shutdown_via_stop():
 
 
 @pytest.mark.asyncio
-async def test_error_handling_continue():
-    """Test engine continues on strategy error when halt_on_error=False."""
+async def test_strategy_error_aborts_and_runs_cleanup_once():
+    """Test shared rollback-and-abort semantics for a strategy error."""
     strategy = ErrorStrategy(error_on_bar=2)  # Raise error on 2nd bar
     broker = MockAsyncBroker()
     bars = [
@@ -460,10 +591,10 @@ async def test_error_handling_continue():
 
     engine = LiveEngine(strategy, broker, feed, on_error=error_handler, halt_on_error=False)
     await engine.connect()
-    await engine.run()
+    with pytest.raises(ValueError, match="Test error"):
+        await engine.run()
 
-    # All bars processed despite error
-    assert strategy.call_count == 3
+    assert strategy.call_count == 2
 
     # Error captured
     assert len(errors) == 1
@@ -471,8 +602,17 @@ async def test_error_handling_continue():
     assert str(errors[0]) == "Test error"
 
     # Stats updated
-    assert engine.stats["bar_count"] == 3
+    assert engine.stats["bar_count"] == 2
     assert engine.stats["error_count"] == 1
+    assert engine.lifecycle_dispatcher.callback_counts[LifecyclePhase.RUN_END] == 1
+    strategy_events = [
+        event for event, _ in broker.runtime_events if event.startswith("strategy_callback_")
+    ]
+    assert strategy_events[-3:] == [
+        "strategy_callback_failed",
+        "strategy_callback_started",
+        "strategy_callback_succeeded",
+    ]
 
 
 @pytest.mark.asyncio
@@ -494,7 +634,8 @@ async def test_error_handling_halt():
 
     engine = LiveEngine(strategy, broker, feed, on_error=error_handler, halt_on_error=True)
     await engine.connect()
-    await engine.run()
+    with pytest.raises(ValueError, match="Test error"):
+        await engine.run()
 
     # Engine stopped after error
     assert strategy.call_count == 2  # Only first 2 bars
@@ -505,6 +646,52 @@ async def test_error_handling_halt():
     # Stats show partial processing
     assert engine.stats["bar_count"] == 2
     assert engine.stats["error_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_external_cancellation_runs_cleanup_once_and_propagates() -> None:
+    strategy = RecordingStrategy()
+    broker = MockAsyncBroker()
+    feed = RecoverableFeed([[]])
+    engine = LiveEngine(strategy, broker, feed)
+    await engine.connect()
+    run_task = asyncio.create_task(engine.run())
+
+    while not any(
+        event == "strategy_callback_succeeded"
+        and payload.get("phase") == LifecyclePhase.CAUSAL_INITIALIZATION.value
+        for event, payload in broker.runtime_events
+    ):
+        await asyncio.sleep(0)
+    run_task.cancel()
+
+    with pytest.raises(asyncio.CancelledError):
+        await run_task
+
+    assert strategy.on_end_called is True
+    assert engine.lifecycle_dispatcher.callback_counts[LifecyclePhase.RUN_END] == 1
+    assert engine._watchdog_task is None
+    assert [event for event, _ in broker.runtime_events[-2:]] == [
+        "strategy_callback_started",
+        "strategy_callback_succeeded",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_repeated_runs_leave_no_lifecycle_threads_or_watchdog_tasks() -> None:
+    for _ in range(5):
+        engine = LiveEngine(RecordingStrategy(), MockAsyncBroker(), MockDataFeed([]))
+        await engine.connect()
+        await engine.run()
+
+        assert engine._watchdog_task is None
+        assert not any(
+            task.get_name() == "ml4t-live-watchdog"
+            for task in asyncio.all_tasks()
+            if task is not asyncio.current_task()
+        )
+
+    assert not any(thread.name.startswith("ml4t-live-strategy") for thread in threading.enumerate())
 
 
 @pytest.mark.asyncio
@@ -607,7 +794,6 @@ async def test_watchdog_halts_when_unhealthy_without_auto_recover():
         [[(datetime(2024, 1, 1, 9, 30), {"AAPL": {"close": 150.0}}, {})]],
         delay=0.01,
     )
-    feed._stock_symbols = ["AAPL"]
 
     engine = LiveEngine(
         strategy,

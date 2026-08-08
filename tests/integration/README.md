@@ -14,10 +14,6 @@ These tests require IB TWS or IB Gateway running in paper trading mode.
    - Socket port: 7497
    - Uncheck "Read-Only API"
 
-### Event Loop Fix Applied
-
-The tests use `ib_async.util.patchAsyncio()` in `conftest.py` to allow nested event loops. This resolves compatibility issues between ib_async and pytest-asyncio.
-
 ### Running Tests
 
 **All tests should now run together:**
@@ -53,14 +49,6 @@ TWS has a limit on concurrent/recent connections. Running many tests quickly can
 2. **Run tests individually** with delays between runs
 3. **Use the delay fixture** - `conftest.py` now adds 0.5s delay after each test
 4. **Kill zombie connections**: `pkill -f "java.*Jts"` then restart TWS
-
-#### 2. Event Loop Management
-
-ib_async + pytest-asyncio can have event loop conflicts when running tests together.
-
-**Root cause**: ib_async holds event loop references between pytest test functions.
-
-**Solution**: `ib_async.util.patchAsyncio()` is applied in `conftest.py` to mitigate this, plus delays between tests.
 
 ### Test Coverage
 

@@ -17,6 +17,7 @@ from .feeds.crypto_feed import CryptoFeed
 from .feeds.databento_feed import DataBentoFeed
 from .feeds.ib_feed import IBDataFeed
 from .feeds.okx_feed import OKXFundingFeed
+from .lifecycle import LifecycleInvocation, LiveLifecycleDispatcher, callback_trace
 from .protocols import AsyncBrokerProtocol, BrokerProtocol, DataFeedProtocol
 from .safety import (
     LiveRiskConfig,
@@ -41,7 +42,10 @@ __all__ = [
     "IBDataFeed",
     "OKXFundingFeed",
     # Engine
+    "LifecycleInvocation",
     "LiveEngine",
+    "LiveLifecycleDispatcher",
+    "callback_trace",
     # Protocols
     "AsyncBrokerProtocol",
     "BrokerProtocol",

@@ -1,10 +1,4 @@
-"""Pytest configuration for integration tests.
-
-Applies ib_async.util.patchAsyncio() for nested event loop support.
-
-Critical fix for pytest: Clear util.getLoop() cache before each test to prevent
-"Event loop is closed" errors. See: https://github.com/ib-api-reloaded/ib_async/issues/186
-"""
+"""Pytest configuration for Interactive Brokers integration tests."""
 
 import asyncio
 
@@ -12,9 +6,6 @@ import pytest
 from ib_async import util
 
 from ml4t.live.brokers.ib import IBBroker
-
-# Patch asyncio to allow nested event loops
-util.patchAsyncio()
 
 
 @pytest.fixture
