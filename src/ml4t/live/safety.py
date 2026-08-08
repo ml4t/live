@@ -16,7 +16,6 @@ The design addresses several critical safety issues identified in code review:
 import json
 import logging
 import math
-import os
 import time
 from copy import deepcopy
 from dataclasses import dataclass, field
@@ -27,6 +26,16 @@ from typing import Any
 from ml4t.backtest.types import Order, OrderSide, OrderStatus, OrderType, Position
 
 from .orders import CanonicalOrderRequest
+from .persistence import (
+    AcceptedOrderPersistenceError,
+    AuditJournalError,
+    ConcurrentStateWriterError,
+    CorruptStateError,
+    PersistenceSafetyError,
+    SecureAuditJournal,
+    SecureStateStore,
+    redact_sensitive,
+)
 from .protocols import AsyncBrokerProtocol
 
 logger = logging.getLogger(__name__)
@@ -98,6 +107,7 @@ class LiveRiskConfig:
     # State persistence
     state_file: str = ".ml4t_risk_state.json"
     journal_file: str | None = None
+    fail_on_journal_error: bool = True
 
     def __post_init__(self) -> None:
         """Validate configuration parameters."""
@@ -134,6 +144,14 @@ class LiveRiskConfig:
             raise ValueError("state_file cannot be empty")
         if self.journal_file is not None and not self.journal_file:
             raise ValueError("journal_file cannot be empty when provided")
+        if self.journal_file is not None:
+            state_path = Path(self.state_file).absolute()
+            journal_path = Path(self.journal_file).absolute()
+            if journal_path in {
+                state_path,
+                state_path.with_name(f"{state_path.name}.lock"),
+            }:
+                raise ValueError("journal_file must not overlap state_file or its lock")
 
     def _validate_optional_number(
         self,
@@ -171,8 +189,8 @@ class LiveRiskConfig:
 class RiskState:
     """Persisted risk state - survives restarts.
 
-    This state is saved to disk after every order and on shutdown.
-    Uses atomic JSON writes (write to .tmp then os.replace) to prevent corruption.
+    This state is validated and written in a versioned integrity envelope after every accepted
+    order and on shutdown.
 
     Example:
         state = RiskState(date="2023-10-15", daily_loss=1500.0)
@@ -180,8 +198,7 @@ class RiskState:
         state.kill_switch_reason = "Max daily loss exceeded"
 
     Note:
-        The kill switch state persists across restarts and must be manually reset
-        by deleting the state file or setting kill_switch_activated=False.
+        The kill switch state persists across restarts and must be reset explicitly.
     """
 
     date: str  # YYYY-MM-DD
@@ -207,7 +224,126 @@ class RiskState:
         Returns:
             RiskState instance
         """
-        return cls(**data)
+        if not isinstance(data, dict):
+            raise CorruptStateError("risk state payload must be an object")
+        allowed = {
+            "date",
+            "daily_loss",
+            "orders_placed",
+            "high_water_mark",
+            "session_start_equity",
+            "persisted_positions",
+            "persisted_pending_orders",
+            "portable_strategy_state",
+            "replacement_gaps",
+            "shadow_portfolio",
+            "kill_switch_activated",
+            "kill_switch_reason",
+        }
+        unknown = set(data) - allowed
+        if unknown:
+            raise CorruptStateError(
+                f"risk state payload contains unsupported fields: {sorted(unknown)}"
+            )
+        state = cls(**data)
+        state.validate()
+        return state
+
+    def validate(self) -> None:
+        """Validate persisted field types and numeric boundaries."""
+        try:
+            date.fromisoformat(self.date)
+        except (TypeError, ValueError) as error:
+            raise CorruptStateError("risk state date must be an ISO calendar date") from error
+        self._non_negative_number(self.daily_loss, "daily_loss")
+        self._non_negative_number(self.high_water_mark, "high_water_mark")
+        if self.session_start_equity is not None:
+            self._non_negative_number(self.session_start_equity, "session_start_equity")
+        if isinstance(self.orders_placed, bool) or not isinstance(self.orders_placed, int):
+            raise CorruptStateError("risk state orders_placed must be a non-negative integer")
+        if self.orders_placed < 0:
+            raise CorruptStateError("risk state orders_placed must be a non-negative integer")
+        if not isinstance(self.kill_switch_activated, bool) or not isinstance(
+            self.kill_switch_reason, str
+        ):
+            raise CorruptStateError("risk state kill-switch fields have invalid types")
+        if not isinstance(self.persisted_positions, dict):
+            raise CorruptStateError("risk state persisted_positions must be an object")
+        for asset, quantity in self.persisted_positions.items():
+            if not isinstance(asset, str) or not asset:
+                raise CorruptStateError("persisted position assets must be non-empty strings")
+            self._finite_number(quantity, "persisted position quantity")
+        if not isinstance(self.persisted_pending_orders, list):
+            raise CorruptStateError("risk state persisted_pending_orders must be a list")
+        for order in self.persisted_pending_orders:
+            self._validate_pending_order(order)
+        for name in (
+            "portable_strategy_state",
+            "replacement_gaps",
+            "shadow_portfolio",
+        ):
+            value = getattr(self, name)
+            if not isinstance(value, dict):
+                raise CorruptStateError(f"risk state {name} must be an object")
+            self._validate_json_tree(value, name)
+
+    @staticmethod
+    def _finite_number(value: Any, name: str) -> float:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise CorruptStateError(f"{name} must be numeric")
+        number = float(value)
+        if not math.isfinite(number):
+            raise CorruptStateError(f"{name} must be finite")
+        return number
+
+    @classmethod
+    def _non_negative_number(cls, value: Any, name: str) -> float:
+        number = cls._finite_number(value, name)
+        if number < 0:
+            raise CorruptStateError(f"{name} must be non-negative")
+        return number
+
+    @classmethod
+    def _validate_pending_order(cls, order: Any) -> None:
+        if not isinstance(order, dict):
+            raise CorruptStateError("persisted pending order must be an object")
+        required = {"asset", "side", "quantity", "order_type"}
+        allowed = required | {"limit_price", "stop_price"}
+        if not required <= set(order) or set(order) - allowed:
+            raise CorruptStateError("persisted pending order fields are invalid")
+        if not isinstance(order["asset"], str) or not order["asset"]:
+            raise CorruptStateError("persisted pending order asset is invalid")
+        try:
+            OrderSide(order["side"])
+            OrderType(order["order_type"])
+        except (TypeError, ValueError) as error:
+            raise CorruptStateError("persisted pending order enum value is invalid") from error
+        if cls._finite_number(order["quantity"], "pending order quantity") <= 0:
+            raise CorruptStateError("pending order quantity must be positive")
+        for name in ("limit_price", "stop_price"):
+            value = order.get(name)
+            if value is not None and cls._finite_number(value, name) <= 0:
+                raise CorruptStateError(f"{name} must be positive")
+
+    @classmethod
+    def _validate_json_tree(cls, value: Any, name: str) -> None:
+        if value is None or isinstance(value, (str, bool, int)):
+            return
+        if isinstance(value, float):
+            if not math.isfinite(value):
+                raise CorruptStateError(f"risk state {name} contains a non-finite number")
+            return
+        if isinstance(value, list):
+            for item in value:
+                cls._validate_json_tree(item, name)
+            return
+        if isinstance(value, dict):
+            for key, item in value.items():
+                if not isinstance(key, str):
+                    raise CorruptStateError(f"risk state {name} contains a non-string key")
+                cls._validate_json_tree(item, name)
+            return
+        raise CorruptStateError(f"risk state {name} contains an unsupported value")
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary (for JSON saving).
@@ -250,12 +386,8 @@ class RiskState:
         Raises:
             OSError: If write fails
         """
-        tmp_file = f"{filepath}.tmp"
-        with open(tmp_file, "w") as f:
-            json.dump(state.to_dict(), f, indent=2)
-
-        # Atomic rename (POSIX guarantees atomicity)
-        os.replace(tmp_file, filepath)
+        state.validate()
+        SecureStateStore(filepath).save(state.to_dict(), expected_generation=None)
 
     @staticmethod
     def load(filepath: str) -> "RiskState | None":
@@ -265,20 +397,19 @@ class RiskState:
             filepath: Path to load from
 
         Returns:
-            RiskState if file exists and is valid, None otherwise
+            RiskState if the file exists, otherwise None
+
+        Raises:
+            PersistenceSafetyError: If the file is unsafe, corrupt, or incompatible
         """
         path = Path(filepath)
         if not path.exists():
             return None
 
-        try:
-            with open(filepath) as f:
-                data = json.load(f)
-            return RiskState.from_dict(data)
-        except (json.JSONDecodeError, TypeError, KeyError) as e:
-            # Corrupted file or invalid format
-            print(f"Warning: Could not load risk state from {filepath}: {e}")
+        snapshot = SecureStateStore(filepath).load()
+        if snapshot is None:
             return None
+        return RiskState.from_dict(snapshot.payload)
 
     @staticmethod
     def create_for_today() -> "RiskState":
@@ -541,14 +672,6 @@ class ReconciliationMismatchError(RuntimeError):
 class SafeBroker:
     """Risk-controlled wrapper with state persistence.
 
-    Addresses Gemini v1: "If script crashes and restarts, SafeBroker resets
-    max_daily_loss to 0. A losing strategy could burn through the limit again."
-
-    Addresses Gemini v2:
-    - Critical Issue A: VirtualPortfolio for shadow mode
-    - Memory leaks: _recent_orders pruned even if dedup disabled
-    - Atomic JSON writes: write to .tmp then os.replace()
-
     Safety Features:
     1. Pre-trade validation against all risk limits
     2. Order rate limiting
@@ -557,7 +680,7 @@ class SafeBroker:
     5. Stale data protection
     6. Duplicate order filter
     7. Shadow mode with VirtualPortfolio (realistic paper trading)
-    8. State persistence across restarts
+    8. Owner-only, versioned state and chained audit persistence across restarts
 
     Example:
         broker = IBBroker()
@@ -584,9 +707,19 @@ class SafeBroker:
         """
         self._broker = broker
         self.config = config
+        self._state_store = SecureStateStore(config.state_file)
+        self._state_generation = 0
+        self._state_error: PersistenceSafetyError | None = None
+        self._journal_error: AuditJournalError | None = None
+        self._state_store.acquire_writer()
 
-        # Load or initialize state
-        self._state = self._load_state()
+        try:
+            self._state = self._load_state()
+            self._audit_journal = SecureAuditJournal(self._journal_path())
+            self._validate_journal()
+        except BaseException:
+            self._state_store.release_writer()
+            raise
 
         # Rate limiting
         self._order_timestamps: list[float] = []
@@ -618,6 +751,18 @@ class SafeBroker:
                 f"Kill switch was previously activated: {self._state.kill_switch_reason}"
             )
 
+    def close_persistence(self) -> None:
+        """Release the exclusive state-writer lease for this broker instance."""
+        self._state_store.release_writer()
+
+    def __del__(self) -> None:
+        store = getattr(self, "_state_store", None)
+        if store is not None:
+            try:
+                store.release_writer()
+            except Exception:
+                pass
+
     # === AsyncBrokerProtocol Implementation ===
     # NEW: Routes to VirtualPortfolio when shadow_mode=True (Gemini v2 fix)
 
@@ -646,6 +791,17 @@ class SafeBroker:
     def replacement_gaps(self) -> dict[str, dict[str, Any]]:
         """Return unresolved cancel-and-resubmit operations."""
         return deepcopy(self._state.replacement_gaps)
+
+    @property
+    def persistence_status(self) -> dict[str, Any]:
+        """Return the current state and journal health without secret values."""
+        return {
+            "state_schema_version": 1,
+            "state_generation": self._state_generation,
+            "state_error": type(self._state_error).__name__ if self._state_error else None,
+            "journal_required": self.config.fail_on_journal_error,
+            "journal_error": type(self._journal_error).__name__ if self._journal_error else None,
+        }
 
     @property
     def is_connected(self) -> bool:
@@ -712,6 +868,8 @@ class SafeBroker:
         Returns:
             True if cancel request submitted
         """
+        self._assert_persistence_ready()
+        self.record_event("order_cancel_intent", order_id=order_id)
         cancelled = await self._broker.cancel_order_async(order_id)
         self.record_event(
             "order_cancel_requested",
@@ -771,6 +929,15 @@ class SafeBroker:
             self.config.kill_switch_enabled or self._state.kill_switch_activated
         ) and not self.config.allow_reducing_risk_when_killed:
             raise RiskLimitError("Kill switch policy blocks reducing-risk orders")
+        self._assert_persistence_ready()
+        self.record_event(
+            "reducing_risk_intent",
+            asset=request.asset,
+            quantity=request.quantity,
+            side=request.side.value,
+            reason=reason,
+            idempotency_key=idempotency_key,
+        )
         price = fill_price
         if price is None and self.config.shadow_mode:
             snapshot = self._get_market_snapshot(asset)
@@ -823,7 +990,8 @@ class SafeBroker:
             )
             if self.config.halt_on_reducing_risk_failure:
                 raise
-            raise RiskLimitError(f"Reducing-risk order failed for {asset}: {error}") from error
+            detail = redact_sensitive(str(error))
+            raise RiskLimitError(f"Reducing-risk order failed for {asset}: {detail}") from None
         if order.status in {OrderStatus.REJECTED, OrderStatus.CANCELLED}:
             self.record_event(
                 "reducing_risk_rejected",
@@ -856,6 +1024,7 @@ class SafeBroker:
         stop_price: float | None = None,
     ) -> Order:
         """Replace a pending order via cancel-and-resubmit."""
+        self._assert_persistence_ready()
         original = self._pending_order_by_id(order_id)
         if original is None:
             raise RiskLimitError(f"Pending order {order_id} not found")
@@ -871,6 +1040,14 @@ class SafeBroker:
             replacement_limit,
             replacement_stop,
             capabilities=self.execution_capabilities,
+        )
+        self.record_event(
+            "order_replacement_intent",
+            original_order_id=order_id,
+            asset=request.asset,
+            quantity=request.quantity,
+            side=request.side.value,
+            order_type=request.order_type.value,
         )
 
         cancelled = await self.cancel_order_async(order_id)
@@ -913,8 +1090,9 @@ class SafeBroker:
             self._save_state()
             self.record_event("order_replacement_gap_unresolved", **gap)
             raise OrderReplacementGapError(
-                f"Order {order_id} cancellation was requested but replacement failed: {error}"
-            ) from error
+                f"Order {order_id} cancellation was requested but replacement failed: "
+                f"{redact_sensitive(str(error))}"
+            ) from None
         gap["replacement_order_id"] = self._order_identifier(replacement)
         gap["replacement_status"] = replacement.status.value
         gap["status"] = "replacement_submitted"
@@ -976,6 +1154,7 @@ class SafeBroker:
             stop_price,
             capabilities=self.execution_capabilities,
         )
+        self._assert_persistence_ready()
         asset = request.asset
         quantity = request.quantity
         side = request.side
@@ -1013,6 +1192,16 @@ class SafeBroker:
                 self.config.kill_switch_enabled = config_kill_before
             raise
 
+        self.record_event(
+            "order_submission_intent",
+            asset=request.asset,
+            quantity=request.quantity,
+            side=request.side.value,
+            order_type=request.order_type.value,
+            limit_price=request.limit_price,
+            stop_price=request.stop_price,
+        )
+
         # === Shadow Mode (Gemini v2 fix: use VirtualPortfolio) ===
         if self.config.shadow_mode:
             # Create filled order
@@ -1042,12 +1231,18 @@ class SafeBroker:
                 f"(value: ${order_value:,.0f})"
             )
 
-            self._commit_accepted_order(request)
-            self.record_event(
-                "shadow_order_filled",
-                **self._order_event_payload(order),
-                order_value=order_value,
-            )
+            try:
+                self._commit_accepted_order(request)
+                self.record_event(
+                    "shadow_order_filled",
+                    **self._order_event_payload(order),
+                    order_value=order_value,
+                )
+            except PersistenceSafetyError as error:
+                raise AcceptedOrderPersistenceError(
+                    f"Shadow order {self._order_identifier(order)} was accepted but its "
+                    "persistence confirmation failed; do not retry"
+                ) from error
 
             return order
 
@@ -1072,12 +1267,18 @@ class SafeBroker:
             )
             return order
 
-        self._commit_accepted_order(request)
-        self.record_event(
-            "order_submitted",
-            **self._order_event_payload(order),
-            order_value=order_value,
-        )
+        try:
+            self._commit_accepted_order(request)
+            self.record_event(
+                "order_submitted",
+                **self._order_event_payload(order),
+                order_value=order_value,
+            )
+        except PersistenceSafetyError as error:
+            raise AcceptedOrderPersistenceError(
+                f"Order {self._order_identifier(order)} was accepted but its persistence "
+                "confirmation failed; do not retry"
+            ) from error
 
         return order
 
@@ -1273,7 +1474,9 @@ class SafeBroker:
         try:
             current_equity = await self.get_account_value_async()
         except Exception as error:
-            raise BrokerSnapshotError(f"account value unavailable: {error}") from error
+            raise BrokerSnapshotError(
+                f"account value unavailable: {redact_sensitive(str(error))}"
+            ) from None
         if not math.isfinite(current_equity) or current_equity < 0:
             raise BrokerSnapshotError("account value must be finite and non-negative")
 
@@ -1469,7 +1672,9 @@ class SafeBroker:
         try:
             current = await self.get_account_value_async()
         except Exception as error:
-            raise BrokerSnapshotError(f"account value unavailable: {error}") from error
+            raise BrokerSnapshotError(
+                f"account value unavailable: {redact_sensitive(str(error))}"
+            ) from None
         if not math.isfinite(current) or current < 0:
             raise BrokerSnapshotError("account value must be finite and non-negative")
 
@@ -1566,47 +1771,46 @@ class SafeBroker:
             RiskState object
         """
         today = date.today().isoformat()
-        path = Path(self.config.state_file)
+        snapshot = self._state_store.load()
+        if snapshot is None:
+            return RiskState(date=today)
+        state = RiskState.from_dict(snapshot.payload)
+        self._state_generation = snapshot.generation
+        changed = snapshot.legacy
 
-        if path.exists():
-            try:
-                data = json.loads(path.read_text())
-                state = RiskState(**data)
+        if state.date != today:
+            logger.info("New trading day - resetting daily counters")
+            state.date = today
+            state.daily_loss = 0.0
+            state.orders_placed = 0
+            state.session_start_equity = None
+            changed = True
 
-                # Reset if new day
-                if state.date != today:
-                    logger.info("New trading day - resetting daily counters")
-                    state.date = today
-                    state.daily_loss = 0.0
-                    state.orders_placed = 0
-                    state.session_start_equity = None
-                    # Keep kill switch state - must be manually reset!
-
-                return state
-            except Exception as e:
-                logger.warning(f"Failed to load risk state: {e}")
-
-        return RiskState(date=today)
+        if changed:
+            self._state_generation = self._state_store.save(
+                state.to_dict(), expected_generation=self._state_generation
+            )
+        return state
 
     def _save_state(self) -> None:
-        """Save state to file using atomic write (Gemini v2 fix).
-
-        Writes to .tmp file first, then atomically replaces the target.
-        Prevents corruption if process dies mid-write.
-        """
+        """Validate and durably replace the versioned state envelope."""
         try:
             if self.config.shadow_mode:
                 self._state.shadow_portfolio = self._virtual_portfolio.to_state()
-            path = Path(self.config.state_file)
-            tmp_path = path.with_suffix(".json.tmp")
-
-            # Write to temp file
-            tmp_path.write_text(json.dumps(self._state.to_dict(), indent=2))
-
-            # Atomic replace (POSIX and Windows)
-            os.replace(tmp_path, path)
-        except Exception as e:
-            logger.error(f"Failed to save risk state: {e}")
+            self._state.validate()
+            self._state_generation = self._state_store.save(
+                self._state.to_dict(), expected_generation=self._state_generation
+            )
+            self._state_error = None
+        except PersistenceSafetyError as error:
+            self._state_error = error
+            logger.error("Risk state persistence failed: %s", type(error).__name__)
+            raise
+        except (OSError, TypeError, ValueError) as error:
+            wrapped = PersistenceSafetyError("risk state persistence failed")
+            self._state_error = wrapped
+            logger.error("Risk state persistence failed: %s", type(error).__name__)
+            raise wrapped from error
 
     def _journal_path(self) -> Path:
         """Return the configured JSONL journal path."""
@@ -1626,16 +1830,52 @@ class SafeBroker:
             "kill_switch": self._state.kill_switch_activated,
             "orders_placed": self._state.orders_placed,
             "daily_loss": self._state.daily_loss,
-            "payload": self._json_safe(payload),
+            "payload": redact_sensitive(self._json_safe(payload)),
         }
 
         try:
-            path = self._journal_path()
-            path.parent.mkdir(parents=True, exist_ok=True)
-            with path.open("a", encoding="utf-8") as handle:
-                handle.write(json.dumps(entry, sort_keys=True) + "\n")
-        except Exception as exc:
-            logger.error("Failed to append journal entry: %s", exc)
+            self._audit_journal.append(entry)
+            self._journal_error = None
+        except AuditJournalError as error:
+            self._journal_error = error
+            logger.error("Audit journal append failed: %s", type(error).__name__)
+            if self.config.fail_on_journal_error:
+                raise
+
+    def _validate_journal(self) -> None:
+        try:
+            self._audit_journal.validate()
+            self._journal_error = None
+        except AuditJournalError as error:
+            self._journal_error = error
+            logger.error("Audit journal validation failed: %s", type(error).__name__)
+            if self.config.fail_on_journal_error:
+                raise
+
+    def _assert_persistence_ready(self) -> None:
+        self._ensure_persistence_writer()
+        if self._state_error is not None:
+            raise PersistenceSafetyError(
+                "risk state persistence is unavailable"
+            ) from self._state_error
+        if self.config.fail_on_journal_error and self._journal_error is not None:
+            raise AuditJournalError(
+                "required audit journal is unavailable"
+            ) from self._journal_error
+
+    def _ensure_persistence_writer(self) -> None:
+        if self._state_store.has_writer:
+            return
+        self._state_store.acquire_writer()
+        try:
+            snapshot = self._state_store.load()
+            generation = snapshot.generation if snapshot is not None else 0
+            if generation != self._state_generation:
+                raise ConcurrentStateWriterError("risk state changed while this broker was closed")
+            self._validate_journal()
+        except BaseException:
+            self._state_store.release_writer()
+            raise
 
     def _json_safe(self, value: Any) -> Any:
         """Convert runtime payloads into JSON-serializable primitives."""
@@ -1775,12 +2015,16 @@ class SafeBroker:
         try:
             positions = await self._broker.get_positions_async()
         except Exception as error:
-            raise BrokerSnapshotError(f"positions snapshot unavailable: {error}") from error
+            raise BrokerSnapshotError(
+                f"positions snapshot unavailable: {redact_sensitive(str(error))}"
+            ) from None
 
         try:
             pending_orders = await self._broker.get_pending_orders_async()
         except Exception as error:
-            raise BrokerSnapshotError(f"pending-orders snapshot unavailable: {error}") from error
+            raise BrokerSnapshotError(
+                f"pending-orders snapshot unavailable: {redact_sensitive(str(error))}"
+            ) from None
 
         if not isinstance(positions, dict):
             raise BrokerSnapshotError("positions snapshot must be dict[str, Position]")
@@ -1989,6 +2233,7 @@ class SafeBroker:
 
     async def preflight_async(self) -> dict[str, Any]:
         """Probe broker reachability and startup reconciliation without persisting state."""
+        self._assert_persistence_ready()
         await self._broker.connect()
         try:
             account_value = await self.get_account_value_async()
@@ -2024,6 +2269,7 @@ class SafeBroker:
 
     async def connect(self) -> None:
         """Connect to broker and reconcile persisted state."""
+        self._assert_persistence_ready()
         await self._broker.connect()
         try:
             connected = await self._broker.is_connected_async()
@@ -2059,14 +2305,20 @@ class SafeBroker:
     async def disconnect(self) -> None:
         """Disconnect from broker and save state."""
         try:
-            live_positions, live_pending_orders = await self._capture_runtime_snapshot_async()
-            self._set_state_snapshot(live_positions, live_pending_orders)
-        except Exception as e:
-            logger.warning(f"Failed to capture broker snapshot during disconnect: {e}")
-            self._refresh_state_snapshot_from_cache()
-        self._save_state()
-        await self._broker.disconnect()
-        self.record_event("broker_disconnected")
+            try:
+                live_positions, live_pending_orders = await self._capture_runtime_snapshot_async()
+                self._set_state_snapshot(live_positions, live_pending_orders)
+            except Exception as error:
+                logger.warning(
+                    "Failed to capture broker snapshot during disconnect: %s",
+                    type(error).__name__,
+                )
+                self._refresh_state_snapshot_from_cache()
+            self._save_state()
+            await self._broker.disconnect()
+            self.record_event("broker_disconnected")
+        finally:
+            self.close_persistence()
 
     async def is_connected_async(self) -> bool:
         """Check if connected (async)."""

@@ -432,6 +432,7 @@ async def test_failed_cancel_and_resubmit_gap_is_persisted_and_visible(tmp_path)
         await safe.replace_order_async("original-1", limit_price=99)
 
     assert safe.replacement_gaps["original-1"]["status"] == "replacement_failed"
+    safe.close_persistence()
     restored = SafeBroker(broker, risk_config(tmp_path))
     assert restored.replacement_gaps["original-1"]["status"] == "replacement_failed"
     report = await restored.preview_reconciliation_async()
@@ -459,5 +460,6 @@ async def test_cancel_and_resubmit_gap_reconciles_only_after_original_disappears
 
     await safe.connect()
     assert safe.replacement_gaps == {}
+    safe.close_persistence()
     restored = SafeBroker(broker, safe.config)
     assert restored.replacement_gaps == {}

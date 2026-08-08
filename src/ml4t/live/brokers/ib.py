@@ -37,6 +37,7 @@ from ml4t.backtest.types import Order, OrderSide, OrderStatus, OrderType, Positi
 from ml4t.specs import ExecutionCapability
 
 from ml4t.live.orders import CanonicalOrderRequest
+from ml4t.live.persistence import redact_sensitive
 
 logger = logging.getLogger(__name__)
 
@@ -153,11 +154,13 @@ class IBBroker:
                 timeout=20,  # Outer timeout wrapper
             )
         except (TimeoutError, ConnectionRefusedError) as e:
-            logger.error(f"IBBroker: Connection failed: {e}")
-            raise
-        except Exception:
-            logger.exception("IBBroker: Unexpected error during connect")
-            raise
+            detail = str(redact_sensitive(str(e)))
+            logger.error("IBBroker: Connection failed: %s", detail)
+            raise RuntimeError(f"IB connection failed: {detail}") from None
+        except Exception as e:
+            detail = str(redact_sensitive(str(e)))
+            logger.error("IBBroker: Unexpected connect error: %s", detail)
+            raise RuntimeError(f"IB connection failed: {detail}") from None
 
         try:
             accounts = self.ib.managedAccounts()
@@ -166,7 +169,7 @@ class IBBroker:
             if self._account is None:
                 self._account = accounts[0]
             elif self._account not in accounts:
-                raise RuntimeError(f"Configured IB account {self._account!r} is not managed")
+                raise RuntimeError("Configured IB account is not managed")
 
             # Subscribe before sync so updates cannot be missed between the snapshot and stream.
             self.ib.orderStatusEvent += self._on_order_status
@@ -197,7 +200,7 @@ class IBBroker:
 
         self._snapshot_error = None
         self._connected = True
-        logger.info("IBBroker: Connected successfully, account=%s", self._account)
+        logger.info("IBBroker: Connected successfully")
 
     async def disconnect(self) -> None:
         """Disconnect from IB."""
@@ -396,7 +399,10 @@ class IBBroker:
                 trade = self.ib.placeOrder(contract, ib_order)
             except Exception as e:
                 # Surface a clear error; nothing has been tracked yet, so state stays consistent.
-                raise RuntimeError(f"IBBroker: failed to place order for {asset}: {e}") from e
+                detail = str(redact_sensitive(str(e)))
+                raise RuntimeError(
+                    f"IBBroker: failed to place order for {asset}: {detail}"
+                ) from None
 
             # Create our order
             order = Order(

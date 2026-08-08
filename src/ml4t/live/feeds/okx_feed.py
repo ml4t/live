@@ -34,6 +34,7 @@ from typing import Any
 
 import httpx
 
+from ml4t.live.persistence import redact_sensitive
 from ml4t.live.protocols import DataFeedProtocol
 
 logger = logging.getLogger(__name__)
@@ -135,7 +136,7 @@ class OKXFundingFeed(DataFeedProtocol):
         except asyncio.CancelledError:
             logger.info("OKXFundingFeed: Poll loop cancelled")
         except Exception as e:
-            logger.error(f"OKXFundingFeed: Error in poll loop: {e}")
+            logger.error("OKXFundingFeed: Error in poll loop: %s", redact_sensitive(str(e)))
 
     async def _fetch_and_emit(self) -> None:
         """Fetch latest data and emit to queue."""
@@ -173,7 +174,7 @@ class OKXFundingFeed(DataFeedProtocol):
                 )
 
         except Exception as e:
-            logger.error(f"OKXFundingFeed: Error fetching data: {e}")
+            logger.error("OKXFundingFeed: Error fetching data: %s", redact_sensitive(str(e)))
 
     async def _fetch_latest_ohlcv(self, symbol: str) -> tuple[datetime, dict] | None:
         """Fetch the most recent complete OHLCV bar.
@@ -225,7 +226,7 @@ class OKXFundingFeed(DataFeedProtocol):
             return timestamp, bar_data
 
         except Exception as e:
-            logger.error(f"Error fetching OHLCV for {symbol}: {e}")
+            logger.error("Error fetching OHLCV for %s: %s", symbol, redact_sensitive(str(e)))
             return None
 
     async def _fetch_funding_rate(self, symbol: str) -> dict[str, Any] | None:
@@ -268,7 +269,11 @@ class OKXFundingFeed(DataFeedProtocol):
             }
 
         except Exception as e:
-            logger.error(f"Error fetching funding rate for {symbol}: {e}")
+            logger.error(
+                "Error fetching funding rate for %s: %s",
+                symbol,
+                redact_sensitive(str(e)),
+            )
             return None
 
     def __aiter__(self):

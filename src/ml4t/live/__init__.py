@@ -24,6 +24,14 @@ from .orders import (
     OrderValidationError,
     UnsupportedOrderCapabilityError,
 )
+from .persistence import (
+    AcceptedOrderPersistenceError,
+    AuditJournalError,
+    ConcurrentStateWriterError,
+    CorruptStateError,
+    PersistenceSafetyError,
+    UnsafePersistencePathError,
+)
 from .protocols import AsyncBrokerProtocol, BrokerProtocol, DataFeedProtocol
 from .runtime import (
     LiveIntentError,
@@ -77,13 +85,19 @@ __all__ = [
     "BrokerProtocol",
     "DataFeedProtocol",
     # Safety
+    "AcceptedOrderPersistenceError",
+    "AuditJournalError",
     "BrokerSnapshotError",
+    "ConcurrentStateWriterError",
+    "CorruptStateError",
     "LiveRiskConfig",
     "OrderReplacementGapError",
+    "PersistenceSafetyError",
     "ReconciliationMismatchError",
     "RiskLimitError",
     "RiskState",
     "SafeBroker",
+    "UnsafePersistencePathError",
     "VirtualPortfolio",
     # Wrappers
     "ThreadSafeBrokerWrapper",

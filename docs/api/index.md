@@ -14,7 +14,11 @@ from ml4t.live import (
     BarBuffer,
     BrokerProtocol,
     BrokerOrderContractError,
+    AcceptedOrderPersistenceError,
+    AuditJournalError,
     CanonicalOrderRequest,
+    ConcurrentStateWriterError,
+    CorruptStateError,
     CryptoFeed,
     DataBentoFeed,
     DataFeedProtocol,
@@ -25,11 +29,13 @@ from ml4t.live import (
     OKXFundingFeed,
     OrderReplacementGapError,
     OrderValidationError,
+    PersistenceSafetyError,
     ReconciliationMismatchError,
     RiskLimitError,
     RiskState,
     SafeBroker,
     ThreadSafeBrokerWrapper,
+    UnsafePersistencePathError,
     VirtualPortfolio,
 )
 ```
@@ -43,7 +49,7 @@ from ml4t.live import (
 | Feeds | `IBDataFeed`, `AlpacaDataFeed`, `DataBentoFeed`, `CryptoFeed`, `OKXFundingFeed` |
 | Feed helpers | `BarAggregator`, `BarBuffer` |
 | Orders | `CanonicalOrderRequest`, `OrderValidationError`, `BrokerOrderContractError` |
-| Safety | `LiveRiskConfig`, `SafeBroker`, `RiskState`, `RiskLimitError`, `OrderReplacementGapError`, `ReconciliationMismatchError`, `VirtualPortfolio` |
+| Safety | `LiveRiskConfig`, `SafeBroker`, `RiskState`, `RiskLimitError`, `PersistenceSafetyError`, `AuditJournalError`, `AcceptedOrderPersistenceError`, `VirtualPortfolio` |
 | Sync/async bridge | `ThreadSafeBrokerWrapper` |
 | Protocols | `BrokerProtocol`, `AsyncBrokerProtocol`, `DataFeedProtocol` |
 

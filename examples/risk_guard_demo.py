@@ -106,40 +106,40 @@ class DemoBroker:
 
 
 async def main() -> int:
-    state_file = Path(tempfile.gettempdir()) / "ml4t-live-risk-guard-demo-state.json"
-    raw_broker = DemoBroker()
-    safe_broker = SafeBroker(
-        raw_broker,
-        LiveRiskConfig(
-            shadow_mode=False,
-            max_order_value=5_000.0,
-            max_daily_loss=500.0,
-            max_data_staleness_seconds=1.0,
-            state_file=str(state_file),
-        ),
-    )
-    await safe_broker.connect()
+    with tempfile.TemporaryDirectory(prefix="ml4t-live-risk-guard-") as directory:
+        state_file = Path(directory) / "state.json"
+        raw_broker = DemoBroker()
+        safe_broker = SafeBroker(
+            raw_broker,
+            LiveRiskConfig(
+                shadow_mode=False,
+                max_order_value=5_000.0,
+                max_daily_loss=500.0,
+                max_data_staleness_seconds=1.0,
+                state_file=str(state_file),
+            ),
+        )
+        await safe_broker.connect()
 
-    safe_broker._record_market_data(datetime.now(UTC), {"DEMO": {"close": 100.0}}, {})
-    order = await safe_broker.submit_order_async("DEMO", 10)
-    print(f"fresh_data_order: accepted order_type={order.order_type.value}")
+        safe_broker._record_market_data(datetime.now(UTC), {"DEMO": {"close": 100.0}}, {})
+        order = await safe_broker.submit_order_async("DEMO", 10)
+        print(f"fresh_data_order: accepted order_type={order.order_type.value}")
 
-    await asyncio.sleep(1.5)
-    try:
-        await safe_broker.submit_order_async("DEMO", 1)
-    except RiskLimitError as exc:
-        print(f"stale_data_block: {exc}")
+        await asyncio.sleep(1.5)
+        try:
+            await safe_broker.submit_order_async("DEMO", 1)
+        except RiskLimitError as exc:
+            print(f"stale_data_block: {exc}")
 
-    safe_broker._record_market_data(datetime.now(UTC), {"DEMO": {"close": 101.0}}, {})
-    raw_broker.account_value = 99_000.0
-    try:
-        await safe_broker.submit_order_async("DEMO", 1)
-    except RiskLimitError as exc:
-        print(f"daily_loss_block: {exc}")
-        print(f"kill_switch_active: {safe_broker._state.kill_switch_activated}")
+        safe_broker._record_market_data(datetime.now(UTC), {"DEMO": {"close": 101.0}}, {})
+        raw_broker.account_value = 99_000.0
+        try:
+            await safe_broker.submit_order_async("DEMO", 1)
+        except RiskLimitError as exc:
+            print(f"daily_loss_block: {exc}")
+            print(f"kill_switch_active: {safe_broker._state.kill_switch_activated}")
 
-    await safe_broker.disconnect()
-    state_file.unlink(missing_ok=True)
+        await safe_broker.disconnect()
     return 0
 
 

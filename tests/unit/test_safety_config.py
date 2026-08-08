@@ -13,6 +13,7 @@ from pathlib import Path
 
 import pytest
 
+from ml4t.live.persistence import CorruptStateError
 from ml4t.live.safety import LiveRiskConfig, RiskState
 
 # === LiveRiskConfig Tests ===
@@ -168,6 +169,12 @@ def test_live_risk_config_validation_state_file():
     # Empty state_file
     with pytest.raises(ValueError, match="state_file cannot be empty"):
         LiveRiskConfig(state_file="")
+
+    with pytest.raises(ValueError, match="must not overlap"):
+        LiveRiskConfig(state_file="state.json", journal_file="state.json")
+
+    with pytest.raises(ValueError, match="must not overlap"):
+        LiveRiskConfig(state_file="state.json", journal_file="state.json.lock")
 
 
 def test_live_risk_config_none_disables_limits_explicitly():
@@ -361,9 +368,9 @@ def test_risk_state_load_corrupted():
         with open(filepath, "w") as f:
             f.write("{ this is not valid json }")
 
-        # Should return None (not crash)
-        state = RiskState.load(filepath)
-        assert state is None
+        Path(filepath).chmod(0o600)
+        with pytest.raises(CorruptStateError):
+            RiskState.load(filepath)
 
 
 def test_risk_state_load_invalid_format():
@@ -375,9 +382,9 @@ def test_risk_state_load_invalid_format():
         with open(filepath, "w") as f:
             f.write('{"wrong": "format"}')
 
-        # Should return None (not crash)
-        state = RiskState.load(filepath)
-        assert state is None
+        Path(filepath).chmod(0o600)
+        with pytest.raises(CorruptStateError):
+            RiskState.load(filepath)
 
 
 def test_risk_state_create_for_today():

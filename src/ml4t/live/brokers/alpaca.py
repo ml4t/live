@@ -33,6 +33,7 @@ from ml4t.backtest.types import Order, OrderSide, OrderStatus, OrderType, Positi
 from ml4t.specs import ExecutionCapability
 
 from ml4t.live.orders import CanonicalOrderRequest
+from ml4t.live.persistence import redact_sensitive
 
 logger = logging.getLogger(__name__)
 
@@ -175,21 +176,25 @@ class AlpacaBroker:
             logger.info("AlpacaBroker: Connected successfully")
 
         except Exception as e:
-            logger.error(f"AlpacaBroker: Connection failed: {e}")
+            detail = str(redact_sensitive(str(e)))
+            logger.error("AlpacaBroker: Connection failed: %s", detail)
             if self._stream_task is not None:
                 self._stream_task.cancel()
             if self._trading_stream is not None:
                 try:
                     self._trading_stream.stop()
-                except Exception:
-                    logger.exception("AlpacaBroker: Failed to stop stream after connect failure")
+                except Exception as stop_error:
+                    logger.error(
+                        "AlpacaBroker: Failed to stop stream after connect failure: %s",
+                        redact_sensitive(str(stop_error)),
+                    )
             self._connected = False
             self._snapshot_error = RuntimeError("Alpaca initial broker snapshot is unavailable")
             self._account_id = None
             self._trading_client = None
             self._trading_stream = None
             self._stream_task = None
-            raise RuntimeError(f"Failed to connect to Alpaca: {e}") from e
+            raise RuntimeError(f"Failed to connect to Alpaca: {detail}") from None
 
     async def disconnect(self) -> None:
         """Disconnect from Alpaca."""
@@ -209,7 +214,7 @@ class AlpacaBroker:
             try:
                 self._trading_stream.stop()
             except Exception as e:
-                logger.warning(f"AlpacaBroker: Error stopping stream: {e}")
+                logger.warning("AlpacaBroker: Error stopping stream: %s", redact_sensitive(str(e)))
 
         self._connected = False
         self._account_id = None
@@ -453,7 +458,11 @@ class AlpacaBroker:
             logger.info(f"AlpacaBroker: Cancellation requested for order {order_id}")
             return True
         except Exception as e:
-            logger.warning(f"AlpacaBroker: Failed to cancel order {order_id}: {e}")
+            logger.warning(
+                "AlpacaBroker: Failed to cancel order %s: %s",
+                order_id,
+                redact_sensitive(str(e)),
+            )
             return False
 
     async def replace_order_async(
@@ -747,9 +756,10 @@ class AlpacaBroker:
                 raise RuntimeError(f"unsupported Alpaca order event {event!r}")
 
         except Exception as e:
-            self._snapshot_error = RuntimeError(f"Alpaca order state is unavailable: {e}")
+            detail = str(redact_sensitive(str(e)))
+            self._snapshot_error = RuntimeError(f"Alpaca order state is unavailable: {detail}")
             self._connected = False
-            logger.error(f"AlpacaBroker: Error processing trade update: {e}")
+            logger.error("AlpacaBroker: Error processing trade update: %s", detail)
 
     async def _run_trading_stream(self) -> None:
         """Run TradingStream in background thread.
@@ -769,7 +779,7 @@ class AlpacaBroker:
             if self._trading_stream:
                 self._trading_stream.stop()
         except Exception as e:
-            logger.error(f"AlpacaBroker: Trading stream error: {e}")
+            logger.error("AlpacaBroker: Trading stream error: %s", redact_sensitive(str(e)))
             self._connected = False
 
     async def _sync_positions(self) -> None:

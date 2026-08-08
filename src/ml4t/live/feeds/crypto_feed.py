@@ -38,6 +38,7 @@ from collections.abc import AsyncIterator
 from datetime import datetime
 from typing import Any
 
+from ml4t.live.persistence import redact_sensitive
 from ml4t.live.protocols import DataFeedProtocol
 
 logger = logging.getLogger(__name__)
@@ -224,7 +225,11 @@ class CryptoFeed(DataFeedProtocol):
         except asyncio.CancelledError:
             logger.info(f"CryptoFeed: Trade stream for {symbol} cancelled")
         except Exception as e:
-            logger.error(f"CryptoFeed: Error streaming trades for {symbol}: {e}")
+            logger.error(
+                "CryptoFeed: Error streaming trades for %s: %s",
+                symbol,
+                redact_sensitive(str(e)),
+            )
 
     async def _stream_ohlcv_for_symbol(self, symbol: str) -> None:
         """Stream OHLCV candles for a symbol."""
@@ -253,7 +258,11 @@ class CryptoFeed(DataFeedProtocol):
         except asyncio.CancelledError:
             logger.info(f"CryptoFeed: OHLCV stream for {symbol} cancelled")
         except Exception as e:
-            logger.error(f"CryptoFeed: Error streaming OHLCV for {symbol}: {e}")
+            logger.error(
+                "CryptoFeed: Error streaming OHLCV for %s: %s",
+                symbol,
+                redact_sensitive(str(e)),
+            )
 
     async def _process_trade(self, trade: dict, symbol: str) -> None:
         """Process and emit a trade tick.

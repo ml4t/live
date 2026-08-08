@@ -88,6 +88,7 @@ orders-per-minute remain positive integers.
 - `fail_on_reconciliation_mismatch`
 - `state_file`
 - `journal_file`
+- `fail_on_journal_error`
 
 ## Persisted State
 
@@ -102,6 +103,12 @@ The risk state file persists more than just the kill switch. It now captures:
 That persisted snapshot is used again on the next `SafeBroker.connect()` to generate the startup reconciliation report.
 If `fail_on_reconciliation_mismatch=True`, a non-clean reconciliation raises `ReconciliationMismatchError` and blocks startup outside shadow mode.
 
+State is stored in a versioned envelope with a generation number and SHA-256 integrity check.
+State, journal, integrity-head, and lock files are created and replaced with mode `0600`. A state
+path that is a symlink, is not owned by the current user, has another mode, contains invalid field
+types, fails its integrity check, or uses an unsupported schema blocks `SafeBroker` construction.
+One `SafeBroker` owns an exclusive writer lease until disconnect or `close_persistence()`.
+
 ## Execution Journal
 
 `SafeBroker` also writes a JSONL execution journal. By default it lives next to the risk-state file and includes:
@@ -111,7 +118,26 @@ If `fail_on_reconciliation_mismatch=True`, a non-clean reconciliation raises `Re
 - startup reconciliation outcomes
 - engine health transitions and recovery attempts when the broker is used through `LiveEngine`
 
-Set `journal_file` explicitly when you want the journal stored elsewhere.
+Each journal record includes its sequence, predecessor hash, and record hash. A separate atomic
+head file detects removal of complete trailing records. The default `fail_on_journal_error=True`
+writes an order-intent record before a broker call and blocks the call if that write fails. Set it
+to `False` only when a documented deployment policy permits trading without an audit record;
+`safe_broker.persistence_status` reports the active policy and any failure.
+
+Set `journal_file` explicitly when you want the journal stored elsewhere. It must not overlap the
+state path or state lock.
+
+## Migration And Recovery
+
+A structurally valid legacy state file is converted to the versioned envelope when `SafeBroker` is
+first constructed. Before migration, the legacy file must already be a regular file owned by the
+current user with mode `0600`.
+
+Corrupt, truncated, tampered, unsafe, and unsupported files are never replaced during startup.
+Keep the original file as diagnostic evidence and restore a known-good backup to a new path. An
+existing unchained journal is not rewritten in place; archive it and configure a new journal path.
+Do not retry an order after `AcceptedOrderPersistenceError`: the venue or shadow portfolio already
+accepted it, and operator reconciliation must determine its state.
 
 ## Shadow Mode
 

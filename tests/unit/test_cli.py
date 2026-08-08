@@ -11,6 +11,8 @@ from ml4t.live.cli.main import (
     _module_symbols,
     run_cli,
 )
+from ml4t.live.persistence import SecureAuditJournal
+from ml4t.live.safety import RiskState
 
 
 def test_load_strategy_instance_from_single_subclass(tmp_path: Path):
@@ -71,23 +73,25 @@ def test_status_command_shows_persisted_snapshot(monkeypatch, tmp_path: Path, ca
 
     state_file = tmp_path / "risk-state.json"
     journal_file = tmp_path / "risk-state-journal.jsonl"
-    state_file.write_text(
-        """{
-  "date": "2024-01-02",
-  "daily_loss": 12.5,
-  "orders_placed": 3,
-  "high_water_mark": 100500.0,
-  "persisted_positions": {"AAPL": 5.0},
-  "persisted_pending_orders": [
-    {"asset": "AAPL", "side": "buy", "quantity": 5.0, "order_type": "limit"}
-  ],
-  "kill_switch_activated": false,
-  "kill_switch_reason": ""
-}
-"""
+    RiskState.save_atomic(
+        RiskState(
+            date="2024-01-02",
+            daily_loss=12.5,
+            orders_placed=3,
+            high_water_mark=100_500.0,
+            persisted_positions={"AAPL": 5.0},
+            persisted_pending_orders=[
+                {"asset": "AAPL", "side": "buy", "quantity": 5.0, "order_type": "limit"}
+            ],
+        ),
+        str(state_file),
     )
-    journal_file.write_text(
-        '{"timestamp":"2026-04-25T16:00:00Z","event":"reconciliation_clean","payload":{}}\n'
+    SecureAuditJournal(journal_file).append(
+        {
+            "timestamp": "2026-04-25T16:00:00Z",
+            "event": "reconciliation_clean",
+            "payload": {},
+        }
     )
 
     exit_code = run_cli(["status", "--state-file", str(state_file)])
@@ -119,6 +123,19 @@ def test_status_command_without_state_file(monkeypatch, tmp_path: Path, capsys):
     assert "status_summary: unavailable - no live broker probes configured" in output
     assert "alpaca: skipped" in output
     assert "ib: skipped" in output
+
+
+def test_status_command_fails_cleanly_on_corrupt_state(monkeypatch, tmp_path: Path, capsys):
+    state_file = tmp_path / "corrupt.json"
+    state_file.write_text("{")
+    state_file.chmod(0o600)
+
+    exit_code = run_cli(["status", "--state-file", str(state_file)])
+    output = capsys.readouterr().out
+
+    assert exit_code == 1
+    assert "persistence_error: CorruptStateError" in output
+    assert state_file.read_text() == "{"
 
 
 def test_preflight_command_reports_success(monkeypatch, tmp_path: Path, capsys):

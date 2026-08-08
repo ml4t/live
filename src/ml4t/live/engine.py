@@ -45,6 +45,7 @@ from ml4t.specs import (
 )
 
 from .lifecycle import LiveLifecycleDispatcher
+from .persistence import redact_sensitive
 from .protocols import AsyncBrokerProtocol, DataFeedProtocol
 from .runtime import LiveStrategyRuntime, default_live_execution_policy
 from .wrappers import ThreadSafeBrokerWrapper
@@ -360,12 +361,18 @@ class LiveEngine:
             try:
                 self.feed.stop()
             except Exception as exc:
-                logger.warning("LiveEngine: Feed stop during recovery failed: %s", exc)
+                logger.warning(
+                    "LiveEngine: Feed stop during recovery failed: %s",
+                    redact_sensitive(str(exc)),
+                )
 
             try:
                 await self.broker.disconnect()
             except Exception as exc:
-                logger.warning("LiveEngine: Broker disconnect during recovery failed: %s", exc)
+                logger.warning(
+                    "LiveEngine: Broker disconnect during recovery failed: %s",
+                    redact_sensitive(str(exc)),
+                )
 
             await asyncio.sleep(self.recovery_cooldown_seconds)
 
@@ -375,13 +382,13 @@ class LiveEngine:
                 logger.error(
                     "LiveEngine: Recovery attempt %s failed: %s",
                     attempt,
-                    exc,
+                    redact_sensitive(str(exc)),
                 )
                 self._record_runtime_event(
                     "engine_recovery_failed",
                     attempt=attempt,
                     reason=reason,
-                    error=str(exc),
+                    error=redact_sensitive(str(exc)),
                 )
                 continue
 
@@ -471,14 +478,13 @@ class LiveEngine:
             "Strategy error at %s: %s: %s",
             timestamp,
             type(error).__name__,
-            error,
-            exc_info=True,
+            redact_sensitive(str(error)),
         )
         self._record_runtime_event(
             "strategy_error",
             timestamp=timestamp.isoformat(),
             error_type=type(error).__name__,
-            error=str(error),
+            error=redact_sensitive(str(error)),
         )
 
     def _emit_health_transition(self, status: dict[str, Any]) -> None:

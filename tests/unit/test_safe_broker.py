@@ -66,8 +66,16 @@ def temp_state_file():
     """Create a temporary state file."""
     with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
         path = f.name
+    Path(path).unlink()
     yield path
     Path(path).unlink(missing_ok=True)
+    Path(f"{path}.lock").unlink(missing_ok=True)
+
+
+def write_legacy_state(path: str, state: RiskState) -> None:
+    target = Path(path)
+    target.write_text(json.dumps(state.to_dict(), indent=2))
+    target.chmod(0o600)
 
 
 @pytest.fixture
@@ -109,7 +117,7 @@ def test_safe_broker_loads_existing_state(mock_broker, temp_state_file):
         orders_placed=10,
         high_water_mark=105_000.0,
     )
-    Path(temp_state_file).write_text(json.dumps(state.__dict__, indent=2))
+    write_legacy_state(temp_state_file, state)
 
     config = LiveRiskConfig(state_file=temp_state_file)
     safe = SafeBroker(mock_broker, config)
@@ -683,7 +691,7 @@ def test_save_state_atomic_write(mock_broker, config):
     assert Path(config.state_file).exists()
 
     # Content should be valid JSON
-    data = json.loads(Path(config.state_file).read_text())
+    data = json.loads(Path(config.state_file).read_text())["payload"]
     assert data["orders_placed"] == 42
 
 
@@ -698,7 +706,7 @@ def test_load_state_resets_daily_counters_on_new_day(mock_broker, temp_state_fil
         daily_loss=500.0,
         orders_placed=10,
     )
-    Path(temp_state_file).write_text(json.dumps(state.__dict__))
+    write_legacy_state(temp_state_file, state)
 
     config = LiveRiskConfig(state_file=temp_state_file)
     safe = SafeBroker(mock_broker, config)
@@ -720,7 +728,7 @@ def test_load_state_preserves_kill_switch_across_days(mock_broker, temp_state_fi
         kill_switch_activated=True,
         kill_switch_reason="Max drawdown",
     )
-    Path(temp_state_file).write_text(json.dumps(state.__dict__))
+    write_legacy_state(temp_state_file, state)
 
     config = LiveRiskConfig(state_file=temp_state_file)
     safe = SafeBroker(mock_broker, config)
@@ -926,7 +934,7 @@ async def test_connect_reconciles_startup_state(mock_broker, config):
             }
         ],
     )
-    Path(config.state_file).write_text(json.dumps(state.to_dict(), indent=2))
+    write_legacy_state(config.state_file, state)
     mock_broker.get_positions_async = AsyncMock(
         return_value={
             "MSFT": Position(
@@ -954,7 +962,7 @@ async def test_connect_blocks_on_mismatch_when_configured(mock_broker, config):
     """Test startup can fail closed when reconciliation mismatches are detected."""
     today = datetime.now().strftime("%Y-%m-%d")
     state = RiskState(date=today, persisted_positions={"AAPL": 10.0})
-    Path(config.state_file).write_text(json.dumps(state.to_dict(), indent=2))
+    write_legacy_state(config.state_file, state)
     config.fail_on_reconciliation_mismatch = True
     mock_broker.get_positions_async = AsyncMock(return_value={})
 
@@ -974,7 +982,7 @@ async def test_preflight_async_returns_report_without_persisting_state(mock_brok
     assert result["passed"] is True
     assert result["reconciliation"]["clean"] is True
     assert result["journal_file"].endswith(".jsonl")
-    assert not Path(config.state_file).read_text().strip()
+    assert not Path(config.state_file).exists()
 
 
 async def test_disconnect_saves_state(mock_broker, config):
@@ -1007,7 +1015,7 @@ async def test_disconnect_saves_state(mock_broker, config):
     )
     await safe.disconnect()
 
-    data = json.loads(Path(config.state_file).read_text())
+    data = json.loads(Path(config.state_file).read_text())["payload"]
     assert data["orders_placed"] == 42
     assert data["persisted_positions"] == {"AAPL": 3.0}
     assert data["persisted_pending_orders"] == [

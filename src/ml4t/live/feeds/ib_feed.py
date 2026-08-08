@@ -28,6 +28,7 @@ from typing import Any
 
 from ib_async import IB, Stock, Ticker
 
+from ml4t.live.persistence import redact_sensitive
 from ml4t.live.protocols import DataFeedProtocol
 
 logger = logging.getLogger(__name__)
@@ -143,7 +144,11 @@ class IBDataFeed(DataFeedProtocol):
             try:
                 self.ib.cancelMktData(contract)
             except Exception as e:
-                logger.warning(f"IBDataFeed: Error canceling {symbol}: {e}")
+                logger.warning(
+                    "IBDataFeed: Error canceling %s: %s",
+                    symbol,
+                    redact_sensitive(str(e)),
+                )
 
         # Remove callback
         self.ib.pendingTickersEvent -= self._on_pending_tickers

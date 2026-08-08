@@ -30,6 +30,7 @@ from typing import Any
 from alpaca.data.enums import DataFeed
 from alpaca.data.live import CryptoDataStream, StockDataStream
 
+from ml4t.live.persistence import redact_sensitive
 from ml4t.live.protocols import DataFeedProtocol
 
 logger = logging.getLogger(__name__)
@@ -200,13 +201,19 @@ class AlpacaDataFeed(DataFeedProtocol):
             try:
                 self._stock_stream.stop()
             except Exception as e:
-                logger.warning(f"AlpacaDataFeed: Error stopping stock stream: {e}")
+                logger.warning(
+                    "AlpacaDataFeed: Error stopping stock stream: %s",
+                    redact_sensitive(str(e)),
+                )
 
         if self._crypto_stream:
             try:
                 self._crypto_stream.stop()
             except Exception as e:
-                logger.warning(f"AlpacaDataFeed: Error stopping crypto stream: {e}")
+                logger.warning(
+                    "AlpacaDataFeed: Error stopping crypto stream: %s",
+                    redact_sensitive(str(e)),
+                )
 
         # Signal consumer to exit
         self._queue.put_nowait(None)
@@ -430,7 +437,7 @@ class AlpacaDataFeed(DataFeedProtocol):
             if self._stock_stream:
                 self._stock_stream.stop()
         except Exception as e:
-            logger.error(f"AlpacaDataFeed: Stock stream error: {e}")
+            logger.error("AlpacaDataFeed: Stock stream error: %s", redact_sensitive(str(e)))
 
     async def _run_crypto_stream(self) -> None:
         """Run crypto data stream in background thread.
@@ -450,7 +457,7 @@ class AlpacaDataFeed(DataFeedProtocol):
             if self._crypto_stream:
                 self._crypto_stream.stop()
         except Exception as e:
-            logger.error(f"AlpacaDataFeed: Crypto stream error: {e}")
+            logger.error("AlpacaDataFeed: Crypto stream error: %s", redact_sensitive(str(e)))
 
     # === Async Iterator ===
 

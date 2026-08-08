@@ -5,7 +5,6 @@ from __future__ import annotations
 import argparse
 import asyncio
 import importlib.util
-import json
 import os
 import sys
 from dataclasses import dataclass
@@ -23,6 +22,11 @@ from ml4t.live.brokers.ib import IBBroker
 from ml4t.live.engine import US_EASTERN, US_EQUITY_CLOSE, US_EQUITY_OPEN, LiveEngine
 from ml4t.live.feeds.alpaca_feed import AlpacaDataFeed
 from ml4t.live.feeds.okx_feed import OKXFundingFeed
+from ml4t.live.persistence import (
+    PersistenceSafetyError,
+    SecureAuditJournal,
+    redact_sensitive,
+)
 from ml4t.live.protocols import AsyncBrokerProtocol, DataFeedProtocol
 from ml4t.live.safety import LiveRiskConfig, RiskState, SafeBroker
 
@@ -394,18 +398,7 @@ def _journal_path_for_state_file(state_file: Path) -> Path:
 
 
 def _tail_journal(path: Path, limit: int = 3) -> list[dict[str, Any]]:
-    if not path.exists():
-        return []
-
-    entries: list[dict[str, Any]] = []
-    for line in path.read_text(encoding="utf-8").splitlines()[-limit:]:
-        if not line.strip():
-            continue
-        try:
-            entries.append(cast(dict[str, Any], json.loads(line)))
-        except Exception:
-            continue
-    return entries
+    return SecureAuditJournal(path).tail(limit)
 
 
 def _format_journal_entry(entry: dict[str, Any]) -> str:
@@ -605,7 +598,7 @@ async def _probe_alpaca() -> BrokerProbeResult:
     except Exception as exc:
         return BrokerProbeResult(
             status="error",
-            detail=str(exc),
+            detail=str(redact_sensitive(str(exc))),
             positions={},
             pending_orders=[],
         )
@@ -648,7 +641,7 @@ async def _probe_ib() -> BrokerProbeResult:
     except Exception as exc:
         return BrokerProbeResult(
             status="error",
-            detail=str(exc),
+            detail=str(redact_sensitive(str(exc))),
             positions={},
             pending_orders=[],
         )
@@ -661,12 +654,17 @@ async def _probe_ib() -> BrokerProbeResult:
 
 async def _run_status_command(args: argparse.Namespace) -> int:
     state_path = Path(args.state_file).expanduser().resolve()
-    state = RiskState.load(str(state_path))
     journal_path = _journal_path_for_state_file(state_path)
 
     print(f"ml4t-live {__version__}")
     print(f"risk_state_file: {state_path}")
     print(f"journal_file: {journal_path}")
+    try:
+        state = RiskState.load(str(state_path))
+        journal_entries = _tail_journal(journal_path)
+    except PersistenceSafetyError as error:
+        print(f"persistence_error: {type(error).__name__} - {redact_sensitive(str(error))}")
+        return 1
     if state is None:
         print("risk_state: missing")
     else:
@@ -700,7 +698,7 @@ async def _run_status_command(args: argparse.Namespace) -> int:
         print(f"ib_positions: {_format_positions(ib.positions)}")
         print(f"ib_pending_orders: {_format_pending_orders(ib.pending_orders)}")
 
-    for entry in _tail_journal(journal_path):
+    for entry in journal_entries:
         print(f"journal_tail: {_format_journal_entry(entry)}")
     return 0
 
@@ -737,21 +735,36 @@ async def _preflight_broker(args: argparse.Namespace) -> PreflightResult:
         )
         broker = IBBroker(host=host, port=port, client_id=client_id)
 
-    safe_broker = SafeBroker(
-        broker,
-        LiveRiskConfig(
-            state_file=str(state_path),
-            fail_on_reconciliation_mismatch=args.strict,
-        ),
-    )
     session_state, next_boundary = _equity_session_snapshot()
+
+    try:
+        safe_broker = SafeBroker(
+            broker,
+            LiveRiskConfig(
+                state_file=str(state_path),
+                fail_on_reconciliation_mismatch=args.strict,
+            ),
+        )
+    except PersistenceSafetyError as exc:
+        return PreflightResult(
+            status="error",
+            detail=str(redact_sensitive(str(exc))),
+            account_value=None,
+            cash=None,
+            reconciliation_report=None,
+            kill_switch_activated=False,
+            kill_switch_reason="",
+            journal_file=str(_journal_path_for_state_file(state_path)),
+            session_state=session_state,
+            next_session_boundary=next_boundary,
+        )
 
     try:
         result = await safe_broker.preflight_async()
     except Exception as exc:
         return PreflightResult(
             status="error",
-            detail=str(exc),
+            detail=str(redact_sensitive(str(exc))),
             account_value=None,
             cash=None,
             reconciliation_report=None,
@@ -761,6 +774,8 @@ async def _preflight_broker(args: argparse.Namespace) -> PreflightResult:
             session_state=session_state,
             next_session_boundary=next_boundary,
         )
+    finally:
+        safe_broker.close_persistence()
 
     status = "ok" if result["passed"] else "degraded"
     detail = "preflight passed" if result["passed"] else "preflight found blocking issues"

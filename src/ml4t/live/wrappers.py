@@ -19,6 +19,7 @@ from ml4t.backtest.types import Order, OrderSide, OrderType, Position
 from ml4t.specs import CanonicalTargetIntent
 
 from ml4t.live.orders import CanonicalOrderRequest
+from ml4t.live.persistence import redact_sensitive
 from ml4t.live.protocols import AsyncBrokerProtocol
 
 logger = logging.getLogger(__name__)
@@ -342,5 +343,6 @@ class ThreadSafeBrokerWrapper:
             logger.error(f"ThreadSafeBrokerWrapper: Operation timed out after {timeout}s")
             raise
         except Exception as e:
-            logger.error(f"ThreadSafeBrokerWrapper: Error running coroutine: {e}", exc_info=True)
-            raise RuntimeError(f"Broker operation failed: {e}") from e
+            detail = str(redact_sensitive(str(e)))
+            logger.error("ThreadSafeBrokerWrapper: Broker operation failed: %s", detail)
+            raise RuntimeError(f"Broker operation failed: {detail}") from None

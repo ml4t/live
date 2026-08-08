@@ -95,30 +95,30 @@ class DemoBroker:
 
 
 async def main() -> int:
-    state_file = Path(tempfile.gettempdir()) / "ml4t-live-reconciliation-demo-state.json"
-    persisted_state = RiskState(
-        date=datetime.now(UTC).date().isoformat(),
-        persisted_positions={"AAPL": 10.0},
-        persisted_pending_orders=[
-            {
-                "asset": "AAPL",
-                "side": "buy",
-                "quantity": 10.0,
-                "order_type": "limit",
-                "limit_price": 150.0,
-            }
-        ],
-    )
-    state_file.write_text(json.dumps(persisted_state.to_dict(), indent=2))
+    with tempfile.TemporaryDirectory(prefix="ml4t-live-reconciliation-") as directory:
+        state_file = Path(directory) / "state.json"
+        persisted_state = RiskState(
+            date=datetime.now(UTC).date().isoformat(),
+            persisted_positions={"AAPL": 10.0},
+            persisted_pending_orders=[
+                {
+                    "asset": "AAPL",
+                    "side": "buy",
+                    "quantity": 10.0,
+                    "order_type": "limit",
+                    "limit_price": 150.0,
+                }
+            ],
+        )
+        RiskState.save_atomic(persisted_state, str(state_file))
 
-    safe_broker = SafeBroker(DemoBroker(), LiveRiskConfig(state_file=str(state_file)))
-    await safe_broker.connect()
+        safe_broker = SafeBroker(DemoBroker(), LiveRiskConfig(state_file=str(state_file)))
+        await safe_broker.connect()
 
-    print("Startup reconciliation report:")
-    print(json.dumps(safe_broker.reconciliation_report, indent=2, sort_keys=True))
+        print("Startup reconciliation report:")
+        print(json.dumps(safe_broker.reconciliation_report, indent=2, sort_keys=True))
 
-    await safe_broker.disconnect()
-    state_file.unlink(missing_ok=True)
+        await safe_broker.disconnect()
     return 0
 
 

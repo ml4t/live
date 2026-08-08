@@ -118,6 +118,12 @@ Those states are for operator interpretation. They do not replace external proce
 
 Use `status` when you want a short journal tail, and inspect the JSONL file directly when you need a deeper operator trail.
 
+`status` validates state permissions, schema, integrity, and the journal hash chain before showing
+the tail. A persistence error returns a nonzero status and leaves the failing file unchanged. Treat
+`AcceptedOrderPersistenceError` as an order that may not be retried: reconcile venue orders and
+positions first. State and audit files, including `.lock` and `.head` sidecars, must remain owned by
+the service user with mode `0600`.
+
 ## Optional Watchdog Recovery
 
 If you want the engine to attempt bounded recovery instead of only reporting degraded health, configure it in Python:

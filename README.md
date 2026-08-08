@@ -211,14 +211,16 @@ portfolio = VirtualPortfolio(initial_cash=100_000)
 
 ### State Persistence
 
-Risk state survives process crashes via atomic file writes:
+Risk state survives process crashes through a versioned, checksummed atomic file:
 
 - `daily_loss` - Cumulative daily loss
 - `orders_placed` - Orders placed today
 - `high_water_mark` - Session high equity
 - `kill_switch_activated` - Persists until manually reset
 
-`SafeBroker` also writes a JSONL execution journal with reconciliation, order, kill-switch, and runtime health events. By default it sits next to the state file.
+State and audit files use mode `0600`, reject unsafe ownership or symlinks, and permit one writer.
+`SafeBroker` also writes a hash-chained JSONL execution journal with reconciliation, order,
+kill-switch, and runtime health events. Audit failure blocks broker calls by default.
 
 ## Operator CLI
 

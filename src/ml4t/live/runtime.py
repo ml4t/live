@@ -34,6 +34,8 @@ from ml4t.specs import (
 from ml4t.specs import OrderSide as SpecOrderSide
 from ml4t.specs import OrderType as SpecOrderType
 
+from .persistence import redact_sensitive
+
 if TYPE_CHECKING:
     from ml4t.backtest.risk.position import PositionRule
 
@@ -639,8 +641,9 @@ class LiveStrategyRuntime:
             except Exception as error:
                 if self._halt_on_reducing_risk_failure():
                     raise ReducingRiskExecutionError(
-                        f"reducing-risk execution failed for {asset}: {error}"
-                    ) from error
+                        f"reducing-risk execution failed for {asset}: "
+                        f"{redact_sensitive(str(error))}"
+                    ) from None
                 continue
             self._exit_idempotency.add(exit_key)
             reason = self._exit_reason(action.reason)
