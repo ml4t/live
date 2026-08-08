@@ -2,7 +2,7 @@
 
 Codex uses `AGENTS.md` as the repo entry point.
 
-@.agents/shared-context.md
+@.workspace/shared-context.md
 
 ## Navigation
 
