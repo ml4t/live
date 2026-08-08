@@ -28,6 +28,7 @@ from .runtime import (
     default_live_execution_policy,
 )
 from .safety import (
+    BrokerSnapshotError,
     LiveRiskConfig,
     ReconciliationMismatchError,
     RiskLimitError,
@@ -65,6 +66,7 @@ __all__ = [
     "BrokerProtocol",
     "DataFeedProtocol",
     # Safety
+    "BrokerSnapshotError",
     "LiveRiskConfig",
     "ReconciliationMismatchError",
     "RiskLimitError",

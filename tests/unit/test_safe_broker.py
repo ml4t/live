@@ -39,6 +39,7 @@ def mock_broker():
     broker.pending_orders = []
     broker.get_position = MagicMock(return_value=None)
     broker.get_positions_async = AsyncMock(return_value={})
+    broker.get_pending_orders_async = AsyncMock(return_value=[])
     broker.get_account_value_async = AsyncMock(return_value=100_000.0)
     broker.get_cash_async = AsyncMock(return_value=50_000.0)
     broker.submit_order_async = AsyncMock()
@@ -922,7 +923,7 @@ async def test_connect_reconciles_startup_state(mock_broker, config):
                 asset="MSFT",
                 quantity=5,
                 entry_price=300.0,
-                entry_time=datetime.now(),
+                entry_time=datetime.now(UTC),
             )
         }
     )
@@ -977,7 +978,7 @@ async def test_disconnect_saves_state(mock_broker, config):
                 asset="AAPL",
                 quantity=3,
                 entry_price=150.0,
-                entry_time=datetime.now(),
+                entry_time=datetime.now(UTC),
             )
         }
     )
@@ -989,7 +990,8 @@ async def test_disconnect_saves_state(mock_broker, config):
                 quantity=3,
                 order_type=OrderType.LIMIT,
                 limit_price=149.5,
-                created_at=datetime.now(),
+                order_id="ML4T-1",
+                created_at=datetime.now(UTC),
             )
         ]
     )

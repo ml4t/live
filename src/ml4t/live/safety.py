@@ -15,6 +15,7 @@ The design addresses several critical safety issues identified in code review:
 
 import json
 import logging
+import math
 import os
 import time
 from dataclasses import dataclass, field
@@ -515,6 +516,10 @@ class VirtualPortfolio:
 
 class RiskLimitError(Exception):
     """Raised when an order violates risk limits."""
+
+
+class BrokerSnapshotError(RuntimeError):
+    """Raised when broker state is unavailable or violates the adapter contract."""
 
     pass
 
@@ -1629,19 +1634,85 @@ class SafeBroker:
 
         try:
             positions = await self._broker.get_positions_async()
-        except Exception:
-            positions = getattr(self._broker, "positions", {})
+        except Exception as error:
+            raise BrokerSnapshotError(f"positions snapshot unavailable: {error}") from error
 
         try:
             pending_orders = await self._broker.get_pending_orders_async()
-        except Exception:
-            pending_orders = getattr(self._broker, "pending_orders", [])
+        except Exception as error:
+            raise BrokerSnapshotError(f"pending-orders snapshot unavailable: {error}") from error
 
         if not isinstance(positions, dict):
-            positions = {}
+            raise BrokerSnapshotError("positions snapshot must be dict[str, Position]")
         if not isinstance(pending_orders, list):
-            pending_orders = []
+            raise BrokerSnapshotError("pending-orders snapshot must be list[Order]")
+        self._validate_position_snapshot(positions)
+        self._validate_pending_order_snapshot(pending_orders)
         return positions, pending_orders
+
+    @staticmethod
+    def _validate_position_snapshot(positions: dict[Any, Any]) -> None:
+        for asset, position in positions.items():
+            if (
+                not isinstance(asset, str)
+                or not asset.strip()
+                or not isinstance(position, Position)
+            ):
+                raise BrokerSnapshotError("positions snapshot contains an invalid entry")
+            if not position.asset or position.asset.upper() != asset.upper():
+                raise BrokerSnapshotError("positions snapshot asset key does not match position")
+            if not math.isfinite(position.quantity) or position.quantity == 0:
+                raise BrokerSnapshotError("positions snapshot quantity must be finite and non-zero")
+            if not math.isfinite(position.entry_price) or position.entry_price <= 0:
+                raise BrokerSnapshotError(
+                    "positions snapshot entry price must be finite and positive"
+                )
+            if (
+                not isinstance(position.entry_time, datetime)
+                or position.entry_time.utcoffset() is None
+            ):
+                raise BrokerSnapshotError("positions snapshot entry time must be timezone-aware")
+            if position.current_price is not None and (
+                not math.isfinite(position.current_price) or position.current_price <= 0
+            ):
+                raise BrokerSnapshotError(
+                    "positions snapshot current price must be finite and positive"
+                )
+
+    @staticmethod
+    def _validate_pending_order_snapshot(orders: list[Any]) -> None:
+        order_ids: set[str] = set()
+        for order in orders:
+            if not isinstance(order, Order):
+                raise BrokerSnapshotError("pending-orders snapshot contains a non-Order entry")
+            if not order.order_id or order.order_id in order_ids:
+                raise BrokerSnapshotError(
+                    "pending-orders snapshot identifiers must be non-empty and unique"
+                )
+            order_ids.add(order.order_id)
+            if not order.asset:
+                raise BrokerSnapshotError("pending-orders snapshot asset must be non-empty")
+            if not isinstance(order.side, OrderSide) or not isinstance(order.order_type, OrderType):
+                raise BrokerSnapshotError("pending-orders snapshot has an invalid side or type")
+            if not math.isfinite(order.quantity) or order.quantity <= 0:
+                raise BrokerSnapshotError(
+                    "pending-orders snapshot quantity must be finite and positive"
+                )
+            if order.status is not OrderStatus.PENDING:
+                raise BrokerSnapshotError("pending-orders snapshot contains a terminal order")
+            if not 0 <= order.filled_quantity <= order.quantity:
+                raise BrokerSnapshotError(
+                    "pending-orders snapshot cumulative fill is outside the order quantity"
+                )
+            if not isinstance(order.created_at, datetime) or order.created_at.utcoffset() is None:
+                raise BrokerSnapshotError(
+                    "pending-orders snapshot created time must be timezone-aware"
+                )
+            for price in (order.limit_price, order.stop_price):
+                if price is not None and (not math.isfinite(price) or price <= 0):
+                    raise BrokerSnapshotError(
+                        "pending-orders snapshot prices must be finite and positive"
+                    )
 
     def _build_reconciliation_report(
         self,
@@ -1743,6 +1814,8 @@ class SafeBroker:
             cash = await self.get_cash_async()
             report = await self.preview_reconciliation_async()
             connected = await self._broker.is_connected_async()
+            if not isinstance(connected, bool):
+                raise BrokerSnapshotError("broker connectivity snapshot must be boolean")
             result = {
                 "broker_connected": connected,
                 "account_value": account_value,
@@ -1771,7 +1844,14 @@ class SafeBroker:
     async def connect(self) -> None:
         """Connect to broker and reconcile persisted state."""
         await self._broker.connect()
-        report = await self.preview_reconciliation_async()
+        try:
+            connected = await self._broker.is_connected_async()
+            if not isinstance(connected, bool) or not connected:
+                raise BrokerSnapshotError("broker did not report a connected state")
+            report = await self.preview_reconciliation_async()
+        except BaseException:
+            await self._broker.disconnect()
+            raise
         self._last_reconciliation_report = report
         self._log_reconciliation_report(report)
         if report["clean"]:

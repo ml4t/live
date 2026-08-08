@@ -13,8 +13,9 @@ IB Integration Layer: COMPLETE ✅
 
 import asyncio
 import logging
+import math
 import time
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from ib_async import (
@@ -34,12 +35,10 @@ from ib_async import (
 )
 from ml4t.backtest.types import Order, OrderSide, OrderStatus, OrderType, Position
 
-from ml4t.live.protocols import AsyncBrokerProtocol
-
 logger = logging.getLogger(__name__)
 
 
-class IBBroker(AsyncBrokerProtocol):
+class IBBroker:
     """Interactive Brokers implementation.
 
     Design:
@@ -103,6 +102,7 @@ class IBBroker(AsyncBrokerProtocol):
         # Order tracking
         self._order_counter = 0
         self._ib_order_map: dict[int, tuple[str, float]] = {}  # IB orderId -> (our_id, timestamp)
+        self._snapshot_error: RuntimeError | None = None
 
         # Contract cache
         self._contracts: dict[str, Contract] = {}
@@ -121,7 +121,9 @@ class IBBroker(AsyncBrokerProtocol):
         logger.info(
             f"IBBroker: Connecting to {self._host}:{self._port} (client_id={self._client_id})"
         )
+        self._snapshot_error = None
 
+        callbacks_registered = False
         try:
             # Use outer timeout wrapper like production code
             await asyncio.wait_for(
@@ -141,35 +143,51 @@ class IBBroker(AsyncBrokerProtocol):
             logger.exception("IBBroker: Unexpected error during connect")
             raise
 
-        self._connected = True
-
-        # Get account if not specified
-        if self._account is None:
+        try:
             accounts = self.ib.managedAccounts()
-            if accounts:
+            if not isinstance(accounts, list) or not accounts:
+                raise RuntimeError("IB returned no managed account identity")
+            if self._account is None:
                 self._account = accounts[0]
-        logger.info(f"IBBroker: Connected successfully, account={self._account}")
+            elif self._account not in accounts:
+                raise RuntimeError(f"Configured IB account {self._account!r} is not managed")
 
-        # Subscribe to events
-        self.ib.orderStatusEvent += self._on_order_status
-        self.ib.positionEvent += self._on_position
+            # Subscribe before sync so updates cannot be missed between the snapshot and stream.
+            self.ib.orderStatusEvent += self._on_order_status
+            self.ib.positionEvent += self._on_position
+            callbacks_registered = True
 
-        # Optional market-data type override (e.g. delayed quotes for paper
-        # accounts without live subscriptions).
-        if self._market_data_type is not None:
-            self.ib.reqMarketDataType(self._market_data_type)
-            logger.info(
-                "IBBroker: market_data_type=%d (1=realtime, 2=frozen, 3=delayed, 4=delayed-frozen)",
-                self._market_data_type,
-            )
+            if self._market_data_type is not None:
+                self.ib.reqMarketDataType(self._market_data_type)
+                logger.info(
+                    "IBBroker: market_data_type=%d "
+                    "(1=realtime, 2=frozen, 3=delayed, 4=delayed-frozen)",
+                    self._market_data_type,
+                )
 
-        # Initial sync
-        await self._sync_positions()
-        await self._sync_orders()
+            await self._sync_positions()
+            await self._sync_orders()
+        except Exception:
+            if callbacks_registered:
+                try:
+                    self.ib.orderStatusEvent -= self._on_order_status
+                    self.ib.positionEvent -= self._on_position
+                except Exception:
+                    logger.exception("IBBroker: Failed to remove callbacks after connect failure")
+            self.ib.disconnect()
+            self._connected = False
+            self._snapshot_error = RuntimeError("IB initial broker snapshot is unavailable")
+            raise
+
+        self._snapshot_error = None
+        self._connected = True
+        logger.info("IBBroker: Connected successfully, account=%s", self._account)
 
     async def disconnect(self) -> None:
         """Disconnect from IB."""
         if self._connected:
+            self.ib.orderStatusEvent -= self._on_order_status
+            self.ib.positionEvent -= self._on_position
             self.ib.disconnect()
             self._connected = False
             # Give time for socket cleanup to prevent zombie connections
@@ -180,6 +198,10 @@ class IBBroker(AsyncBrokerProtocol):
     def is_connected(self) -> bool:
         """Check if connected to IB."""
         return self._connected and self.ib.isConnected()
+
+    async def is_connected_async(self) -> bool:
+        """Return current adapter and vendor connection state."""
+        return bool(self.is_connected)
 
     # === AsyncBrokerProtocol Implementation ===
 
@@ -224,11 +246,19 @@ class IBBroker(AsyncBrokerProtocol):
         Returns:
             Dictionary mapping asset symbols to Position objects
         """
+        self._raise_snapshot_error()
         async with self._position_lock:
             return dict(self._positions)
 
+    async def get_position_async(self, asset: str) -> Position | None:
+        """Return one position from the synchronized adapter snapshot."""
+        self._raise_snapshot_error()
+        async with self._position_lock:
+            return self._positions.get(asset.upper())
+
     async def get_pending_orders_async(self, asset: str | None = None) -> list[Order]:
         """Return pending orders, optionally filtered by asset."""
+        self._raise_snapshot_error()
         orders = list(self._pending_orders.values())
         if asset is None:
             return orders
@@ -247,8 +277,8 @@ class IBBroker(AsyncBrokerProtocol):
                 and av.currency == "USD"
                 and (av.account == self._account or self._account is None)
             ):
-                return float(av.value)
-        return 0.0
+                return self._validate_account_metric(av.value, "NetLiquidation")
+        raise RuntimeError("IB NetLiquidation is unavailable for the configured account")
 
     async def get_cash_async(self) -> float:
         """Get available funds.
@@ -262,8 +292,22 @@ class IBBroker(AsyncBrokerProtocol):
                 and av.currency == "USD"
                 and (av.account == self._account or self._account is None)
             ):
-                return float(av.value)
-        return 0.0
+                return self._validate_account_metric(av.value, "AvailableFunds")
+        raise RuntimeError("IB AvailableFunds is unavailable for the configured account")
+
+    def _raise_snapshot_error(self) -> None:
+        if self._snapshot_error is not None:
+            raise RuntimeError(str(self._snapshot_error)) from self._snapshot_error
+
+    @staticmethod
+    def _validate_account_metric(value: Any, name: str) -> float:
+        try:
+            metric = float(value)
+        except (TypeError, ValueError) as error:
+            raise RuntimeError(f"IB {name} is not numeric") from error
+        if not math.isfinite(metric) or metric < 0:
+            raise RuntimeError(f"IB {name} must be finite and non-negative")
+        return metric
 
     async def submit_order_async(
         self,
@@ -342,7 +386,7 @@ class IBBroker(AsyncBrokerProtocol):
                 stop_price=stop_price,
                 order_id=order_id,
                 status=OrderStatus.PENDING,
-                created_at=datetime.now(),
+                created_at=datetime.now(UTC),
             )
 
             # Track order
@@ -530,13 +574,43 @@ class IBBroker(AsyncBrokerProtocol):
             # Order already processed or removed
             return
 
-        status_str = trade.orderStatus.status
+        status_str = str(trade.orderStatus.status)
+        try:
+            filled_quantity = float(trade.orderStatus.filled or 0.0)
+            filled_price = float(trade.orderStatus.avgFillPrice or 0.0)
+        except (TypeError, ValueError) as error:
+            self._invalidate_snapshot("IB order update contains non-numeric fill data", error)
+            return
+        if (
+            not math.isfinite(filled_quantity)
+            or filled_quantity < 0
+            or filled_quantity > order.quantity
+            or filled_quantity < order.filled_quantity
+        ):
+            if filled_quantity < order.filled_quantity:
+                logger.warning(
+                    "IBBroker: Ignoring out-of-order fill update for %s: %s < %s",
+                    order_id,
+                    filled_quantity,
+                    order.filled_quantity,
+                )
+                return
+            self._invalidate_snapshot("IB order update contains an invalid cumulative fill")
+            return
+
         if status_str == "Filled":
+            if (
+                filled_quantity != order.quantity
+                or not math.isfinite(filled_price)
+                or filled_price <= 0
+            ):
+                self._invalidate_snapshot("IB filled update is incomplete or invalid")
+                return
             # Order filled - update status and remove from pending
             order.status = OrderStatus.FILLED
-            order.filled_price = trade.orderStatus.avgFillPrice
-            order.filled_quantity = trade.orderStatus.filled
-            order.filled_at = datetime.now()
+            order.filled_price = filled_price
+            order.filled_quantity = filled_quantity
+            order.filled_at = datetime.now(UTC)
             del self._pending_orders[order_id]
             logger.info(f"IBBroker: Order {order_id} FILLED @ {order.filled_price}")
 
@@ -563,7 +637,7 @@ class IBBroker(AsyncBrokerProtocol):
 
             if loop is not None and not closed:
                 loop.call_later(3600, cleanup_ib_order)
-        elif status_str == "Cancelled":
+        elif status_str in ("Cancelled", "ApiCancelled"):
             # Order cancelled - update status and cleanup immediately
             order.status = OrderStatus.CANCELLED
             if order_id in self._pending_orders:
@@ -571,6 +645,25 @@ class IBBroker(AsyncBrokerProtocol):
             # Memory leak fix: cleanup immediately for cancelled orders (no need to keep)
             self._ib_order_map.pop(ib_order_id, None)
             logger.info(f"IBBroker: Order {order_id} CANCELLED")
+        elif status_str == "Inactive":
+            order.status = OrderStatus.REJECTED
+            self._pending_orders.pop(order_id, None)
+            self._ib_order_map.pop(ib_order_id, None)
+            logger.info("IBBroker: Order %s REJECTED", order_id)
+        elif status_str in (
+            "PendingSubmit",
+            "ApiPending",
+            "PreSubmitted",
+            "Submitted",
+            "PartiallyFilled",
+            "PendingCancel",
+        ):
+            if filled_quantity > order.filled_quantity:
+                order.filled_quantity = filled_quantity
+                if filled_price > 0 and math.isfinite(filled_price):
+                    order.filled_price = filled_price
+        else:
+            self._invalidate_snapshot(f"unsupported IB order status {status_str!r}")
 
     def _on_position(self, position: Any) -> None:
         """Handle IB position update (with lock for thread safety).
@@ -578,21 +671,33 @@ class IBBroker(AsyncBrokerProtocol):
         Args:
             position: IB Position object
         """
-        asset = position.contract.symbol.upper()
+        try:
+            asset = str(position.contract.symbol).strip().upper()
+            quantity = float(position.position)
+            average_cost = float(position.avgCost or 0.0)
+        except (AttributeError, TypeError, ValueError) as error:
+            self._invalidate_snapshot("IB position update is invalid", error)
+            return
+        if not asset or not math.isfinite(quantity):
+            self._invalidate_snapshot("IB position update has invalid identity or quantity")
+            return
+        if quantity != 0 and (not math.isfinite(average_cost) or average_cost <= 0):
+            self._invalidate_snapshot("IB position update has invalid average cost")
+            return
 
         # Note: This runs in the IB event loop. We update directly since
         # _positions is only read via copy in the positions property.
-        if position.position != 0:
+        if quantity != 0:
             # IB position events carry only average cost, not a live mark (unlike
             # Alpaca). avgCost seeds current_price as the initial reference for the
             # risk layer's price-deviation check; the live data feed overwrites it
             # with the real mark on the first tick.
             self._positions[asset] = Position(
                 asset=asset,
-                quantity=float(position.position),
-                entry_price=float(position.avgCost) if position.avgCost else 0.0,
-                entry_time=datetime.now(),
-                current_price=float(position.avgCost) if position.avgCost else None,
+                quantity=quantity,
+                entry_price=average_cost,
+                entry_time=datetime.now(UTC),
+                current_price=average_cost,
             )
         elif asset in self._positions:
             del self._positions[asset]
@@ -600,8 +705,18 @@ class IBBroker(AsyncBrokerProtocol):
     async def _sync_positions(self) -> None:
         """Sync positions from IB."""
         positions = await self.ib.reqPositionsAsync()
-        for pos in positions:
-            self._on_position(pos)
+        if not isinstance(positions, list):
+            raise RuntimeError("IB positions snapshot must be a list")
+        original_positions = self._positions
+        candidate_positions: dict[str, Position] = {}
+        self._positions = candidate_positions
+        try:
+            for pos in positions:
+                self._on_position(pos)
+                self._raise_snapshot_error()
+        except Exception:
+            self._positions = original_positions
+            raise
         logger.info(f"IBBroker: Synced {len(self._positions)} positions")
 
     async def _sync_orders(self) -> None:
@@ -609,8 +724,19 @@ class IBBroker(AsyncBrokerProtocol):
 
         TASK-013: Full order sync implementation.
         """
-        for trade in self.ib.openTrades():
-            if trade.orderStatus.status in ("PreSubmitted", "Submitted"):
+        trades = self.ib.openTrades()
+        if not isinstance(trades, list):
+            raise RuntimeError("IB open-orders snapshot must be a list")
+        candidate_orders: dict[str, Order] = {}
+        candidate_map: dict[int, tuple[str, float]] = {}
+        for trade in trades:
+            if trade.orderStatus.status in (
+                "PendingSubmit",
+                "ApiPending",
+                "PreSubmitted",
+                "Submitted",
+                "PendingCancel",
+            ):
                 # Generate order ID for existing order
                 self._order_counter += 1
                 order_id = f"ML4T-{self._order_counter}"
@@ -629,15 +755,68 @@ class IBBroker(AsyncBrokerProtocol):
                     order_type = OrderType.STOP
 
                 # Create our order object
-                self._pending_orders[order_id] = Order(
-                    asset=trade.contract.symbol.upper(),
-                    side=OrderSide.BUY if trade.order.action == "BUY" else OrderSide.SELL,
-                    quantity=trade.order.totalQuantity,
+                asset = str(trade.contract.symbol).strip().upper()
+                quantity = float(trade.order.totalQuantity)
+                action = str(trade.order.action).upper()
+                limit_value = trade.order.lmtPrice
+                stop_value = trade.order.auxPrice
+                limit_price = (
+                    float(limit_value)
+                    if order_type in (OrderType.LIMIT, OrderType.STOP_LIMIT)
+                    and limit_value is not None
+                    else None
+                )
+                stop_price = (
+                    float(stop_value)
+                    if order_type in (OrderType.STOP, OrderType.STOP_LIMIT)
+                    and stop_value is not None
+                    else None
+                )
+                venue_id = int(trade.order.orderId)
+                if (
+                    not asset
+                    or action not in ("BUY", "SELL")
+                    or not math.isfinite(quantity)
+                    or quantity <= 0
+                    or (
+                        order_type in (OrderType.LIMIT, OrderType.STOP_LIMIT)
+                        and limit_price is None
+                    )
+                    or (order_type in (OrderType.STOP, OrderType.STOP_LIMIT) and stop_price is None)
+                    or (
+                        limit_price is not None
+                        and (not math.isfinite(limit_price) or limit_price <= 0)
+                    )
+                    or (
+                        stop_price is not None
+                        and (not math.isfinite(stop_price) or stop_price <= 0)
+                    )
+                    or venue_id in candidate_map
+                ):
+                    raise RuntimeError("IB open-orders snapshot contains an invalid order")
+                candidate_orders[order_id] = Order(
+                    asset=asset,
+                    side=OrderSide.BUY if action == "BUY" else OrderSide.SELL,
+                    quantity=quantity,
                     order_type=order_type,
+                    limit_price=limit_price,
+                    stop_price=stop_price,
                     order_id=order_id,
                     status=OrderStatus.PENDING,
-                    created_at=datetime.now(),
+                    created_at=datetime.now(UTC),
                 )
-                self._ib_order_map[trade.order.orderId] = (order_id, time.time())
+                candidate_map[venue_id] = (order_id, time.time())
+
+        async with self._order_lock:
+            self._pending_orders = candidate_orders
+            self._ib_order_map = candidate_map
 
         logger.info(f"IBBroker: Synced {len(self._pending_orders)} open orders")
+
+    def _invalidate_snapshot(self, message: str, cause: Exception | None = None) -> None:
+        error = RuntimeError(message)
+        if cause is not None:
+            error.__cause__ = cause
+        self._snapshot_error = error
+        self._connected = False
+        logger.error("IBBroker: %s", message)

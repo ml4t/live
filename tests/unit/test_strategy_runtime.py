@@ -105,6 +105,7 @@ class RuntimeBroker:
             stop_price=stop_price,
             order_id=f"runtime-{self.submit_calls}",
             status=OrderStatus.PENDING,
+            created_at=datetime.now(UTC),
         )
         self._pending_orders.append(order)
         return order
@@ -165,6 +166,7 @@ class FillBroker(RuntimeBroker):
             stop_price=stop_price,
             order_id=f"fill-{self.submit_calls}",
             status=OrderStatus.FILLED if filled == quantity else OrderStatus.PENDING,
+            created_at=datetime(2026, 8, 10, 13, 30, tzinfo=UTC),
             filled_quantity=filled,
             filled_price=100.0,
             filled_at=datetime(2026, 8, 10, 13, 30, tzinfo=UTC),

@@ -358,23 +358,23 @@ class TestAlpacaBrokerAccount:
 
     @pytest.mark.asyncio
     async def test_get_account_value_not_connected(self):
-        """Test get_account_value_async returns 0 when not connected."""
+        """Test unavailable account state cannot be mistaken for zero equity."""
         broker = AlpacaBroker(api_key="PKTEST", secret_key="SECRET")
         broker._connected = False
         broker._trading_client = None
 
-        value = await broker.get_account_value_async()
-        assert value == 0.0
+        with pytest.raises(RuntimeError, match="unavailable"):
+            await broker.get_account_value_async()
 
     @pytest.mark.asyncio
     async def test_get_cash_not_connected(self):
-        """Test get_cash_async returns 0 when not connected."""
+        """Test unavailable account state cannot be mistaken for zero cash."""
         broker = AlpacaBroker(api_key="PKTEST", secret_key="SECRET")
         broker._connected = False
         broker._trading_client = None
 
-        cash = await broker.get_cash_async()
-        assert cash == 0.0
+        with pytest.raises(RuntimeError, match="unavailable"):
+            await broker.get_cash_async()
 
 
 class TestAlpacaBrokerOrderSubmission:
