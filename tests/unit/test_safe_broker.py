@@ -18,6 +18,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from ml4t.backtest.types import Order, OrderSide, OrderStatus, OrderType, Position
+from ml4t.specs import ExecutionCapability
 
 from ml4t.live.safety import (
     LiveRiskConfig,
@@ -35,6 +36,14 @@ def mock_broker():
     """Create a mock async broker."""
     broker = MagicMock()
     broker._connected = True
+    broker.execution_capabilities = frozenset(
+        {
+            ExecutionCapability.LIMIT,
+            ExecutionCapability.STOP,
+            ExecutionCapability.STOP_LIMIT,
+            ExecutionCapability.CLOSE_AUCTION,
+        }
+    )
     broker.positions = {}
     broker.pending_orders = []
     broker.get_position = MagicMock(return_value=None)
@@ -236,8 +245,8 @@ def test_check_duplicate_allows_different_quantity(mock_broker, config):
     safe._check_duplicate("AAPL", 200.0)
 
 
-def test_check_duplicate_prunes_old_entries(mock_broker, config):
-    """Test _check_duplicate prunes old entries."""
+def test_check_duplicate_ignores_old_entries_without_mutating_history(mock_broker, config):
+    """Test rejected checks do not mutate accepted-order history."""
     safe = SafeBroker(mock_broker, config)
 
     # Add old order (beyond dedup window)
@@ -246,8 +255,7 @@ def test_check_duplicate_prunes_old_entries(mock_broker, config):
     # Should pass since old entry is pruned
     safe._check_duplicate("AAPL", 100.0)
 
-    # Old entry should be removed
-    assert len(safe._recent_orders) == 0
+    assert len(safe._recent_orders) == 1
 
 
 def test_check_rate_limit_enforced(mock_broker, config):
@@ -255,9 +263,7 @@ def test_check_rate_limit_enforced(mock_broker, config):
     config.max_orders_per_minute = 3
     safe = SafeBroker(mock_broker, config)
 
-    # Submit 3 orders (at limit)
-    for _ in range(3):
-        safe._check_rate_limit()
+    safe._order_timestamps = [time.time()] * 3
 
     # 4th order should fail
     with pytest.raises(RiskLimitError, match="Rate limit"):
@@ -643,6 +649,7 @@ async def test_close_all_positions(mock_broker, config):
                 quantity=10,
                 order_type=OrderType.MARKET,
                 order_id="1",
+                created_at=datetime.now(UTC),
             ),
             Order(
                 asset="MSFT",
@@ -650,6 +657,7 @@ async def test_close_all_positions(mock_broker, config):
                 quantity=5,
                 order_type=OrderType.MARKET,
                 order_id="2",
+                created_at=datetime.now(UTC),
             ),
         ]
     )
@@ -803,6 +811,7 @@ async def test_submit_order_live_mode(mock_broker, config):
         order_type=OrderType.MARKET,
         order_id="1",
         status=OrderStatus.PENDING,
+        created_at=datetime.now(UTC),
     )
     mock_broker.submit_order_async = AsyncMock(return_value=expected_order)
 
@@ -831,6 +840,7 @@ async def test_submit_order_live_mode_passes_moc_through(mock_broker, config):
         order_type=OrderType.MOC,
         order_id="1",
         status=OrderStatus.PENDING,
+        created_at=datetime.now(UTC),
     )
     mock_broker.submit_order_async = AsyncMock(return_value=expected_order)
 
@@ -1023,7 +1033,7 @@ async def test_replace_order_async_cancels_and_resubmits(mock_broker, config):
         limit_price=150.0,
         order_id="ML4T-1",
         status=OrderStatus.PENDING,
-        created_at=datetime.now(),
+        created_at=datetime.now(UTC),
     )
     replacement = Order(
         asset="AAPL",
@@ -1033,7 +1043,7 @@ async def test_replace_order_async_cancels_and_resubmits(mock_broker, config):
         limit_price=149.5,
         order_id="ML4T-2",
         status=OrderStatus.PENDING,
-        created_at=datetime.now(),
+        created_at=datetime.now(UTC),
     )
     mock_broker.pending_orders = [original]
     mock_broker.submit_order_async = AsyncMock(return_value=replacement)

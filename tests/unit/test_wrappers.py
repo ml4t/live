@@ -13,11 +13,12 @@ IMPORTANT: Tests must call wrapper methods from worker thread
 """
 
 import asyncio
-from datetime import datetime
+from datetime import UTC, datetime
 
 import pytest
 from ml4t.backtest.types import Order, OrderSide, OrderStatus, OrderType, Position
 
+from ml4t.live.orders import CanonicalOrderRequest, OrderValidationError
 from ml4t.live.wrappers import ThreadSafeBrokerWrapper
 
 # === Mock Async Broker ===
@@ -84,7 +85,7 @@ class MockAsyncBroker:
     async def submit_order_async(
         self,
         asset: str,
-        quantity: int,
+        quantity: float,
         side: OrderSide | None = None,
         order_type: OrderType = OrderType.MARKET,
         limit_price: float | None = None,
@@ -94,18 +95,19 @@ class MockAsyncBroker:
         if self._delay > 0:
             await asyncio.sleep(self._delay)
 
-        if side is None:
-            side = OrderSide.BUY if quantity > 0 else OrderSide.SELL
-
+        request = CanonicalOrderRequest.from_input(
+            asset, quantity, side, order_type, limit_price, stop_price
+        )
         order = Order(
-            asset=asset,
-            side=side,
-            quantity=abs(quantity),
-            order_type=order_type,
-            limit_price=limit_price,
-            stop_price=stop_price,
+            asset=request.asset,
+            side=request.side,
+            quantity=request.quantity,
+            order_type=request.order_type,
+            limit_price=request.limit_price,
+            stop_price=request.stop_price,
             order_id=f"order-{asset}-{len(self._pending_orders)}",
             status=OrderStatus.PENDING,
+            created_at=datetime.now(UTC),
         )
         self._pending_orders.append(order)
         return order
@@ -136,7 +138,7 @@ class MockAsyncBroker:
                 self._pending_orders.remove(order)
                 return await self.submit_order_async(
                     asset=order.asset,
-                    quantity=int(order.quantity if quantity is None else quantity),
+                    quantity=order.quantity if quantity is None else quantity,
                     side=order.side,
                     order_type=order.order_type,
                     limit_price=order.limit_price if limit_price is None else limit_price,
@@ -153,7 +155,7 @@ class MockAsyncBroker:
             return None
 
         quantity = -pos.quantity if pos.quantity > 0 else abs(pos.quantity)
-        return await self.submit_order_async(asset, int(quantity))
+        return await self.submit_order_async(asset, quantity)
 
 
 # === Tests ===
@@ -314,6 +316,21 @@ async def test_submit_order_auto_side_detection():
     buy_order, sell_order = await asyncio.to_thread(worker)
     assert buy_order.side == OrderSide.BUY
     assert sell_order.side == OrderSide.SELL
+
+
+@pytest.mark.asyncio
+async def test_submit_order_rejects_conflicting_signed_quantity_before_async_broker():
+    broker = MockAsyncBroker()
+    loop = asyncio.get_running_loop()
+    wrapper = ThreadSafeBrokerWrapper(broker, loop)
+
+    def worker():
+        return wrapper.submit_order("AAPL", -50, side=OrderSide.BUY)
+
+    with pytest.raises(OrderValidationError, match="positive and unsigned"):
+        await asyncio.to_thread(worker)
+
+    assert broker.pending_orders == []
 
 
 @pytest.mark.asyncio

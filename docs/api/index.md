@@ -13,6 +13,8 @@ from ml4t.live import (
     BarAggregator,
     BarBuffer,
     BrokerProtocol,
+    BrokerOrderContractError,
+    CanonicalOrderRequest,
     CryptoFeed,
     DataBentoFeed,
     DataFeedProtocol,
@@ -21,6 +23,8 @@ from ml4t.live import (
     LiveEngine,
     LiveRiskConfig,
     OKXFundingFeed,
+    OrderReplacementGapError,
+    OrderValidationError,
     ReconciliationMismatchError,
     RiskLimitError,
     RiskState,
@@ -38,7 +42,8 @@ from ml4t.live import (
 | Brokers | `IBBroker`, `AlpacaBroker` |
 | Feeds | `IBDataFeed`, `AlpacaDataFeed`, `DataBentoFeed`, `CryptoFeed`, `OKXFundingFeed` |
 | Feed helpers | `BarAggregator`, `BarBuffer` |
-| Safety | `LiveRiskConfig`, `SafeBroker`, `RiskState`, `RiskLimitError`, `ReconciliationMismatchError`, `VirtualPortfolio` |
+| Orders | `CanonicalOrderRequest`, `OrderValidationError`, `BrokerOrderContractError` |
+| Safety | `LiveRiskConfig`, `SafeBroker`, `RiskState`, `RiskLimitError`, `OrderReplacementGapError`, `ReconciliationMismatchError`, `VirtualPortfolio` |
 | Sync/async bridge | `ThreadSafeBrokerWrapper` |
 | Protocols | `BrokerProtocol`, `AsyncBrokerProtocol`, `DataFeedProtocol` |
 
@@ -49,6 +54,10 @@ from ml4t.live import (
       show_root_heading: true
 
 ## Safety And Rollout
+
+::: ml4t.live.orders.CanonicalOrderRequest
+    options:
+      show_root_heading: true
 
 ::: ml4t.live.safety.LiveRiskConfig
     options:

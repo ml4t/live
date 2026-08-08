@@ -181,6 +181,9 @@ config = LiveRiskConfig(
 safe_broker = SafeBroker(broker, config)
 ```
 
+Use `None` to disable an individual numeric limit. NaN and infinity are invalid. Order quantities
+are signed only when `side` is omitted; an explicit side requires a positive unsigned quantity.
+
 ## Safety System
 
 ### Kill Switch

@@ -5,13 +5,14 @@ satisfy the protocol interfaces.
 """
 
 from collections.abc import AsyncIterator
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest
 from ml4t.backtest.types import Order, OrderSide, OrderStatus, OrderType, Position
 from ml4t.specs import CanonicalTargetIntent
 
+from ml4t.live.orders import CanonicalOrderRequest, OrderValidationError
 from ml4t.live.protocols import (
     AsyncBrokerProtocol,
     BrokerProtocol,
@@ -68,18 +69,19 @@ class MockBroker:
         stop_price: float | None = None,
         **kwargs: Any,
     ) -> Order:
-        if side is None:
-            side = OrderSide.BUY if quantity > 0 else OrderSide.SELL
-
+        request = CanonicalOrderRequest.from_input(
+            asset, quantity, side, order_type, limit_price, stop_price
+        )
         order = Order(
-            asset=asset,
-            side=side,
-            quantity=abs(quantity),
-            order_type=order_type,
-            limit_price=limit_price,
-            stop_price=stop_price,
+            asset=request.asset,
+            side=request.side,
+            quantity=request.quantity,
+            order_type=request.order_type,
+            limit_price=request.limit_price,
+            stop_price=request.stop_price,
             order_id="order-1",
             status=OrderStatus.PENDING,
+            created_at=datetime.now(UTC),
         )
         self._pending_orders.append(order)
         return order
@@ -200,18 +202,19 @@ class MockAsyncBroker:
         stop_price: float | None = None,
         **kwargs: Any,
     ) -> Order:
-        if side is None:
-            side = OrderSide.BUY if quantity > 0 else OrderSide.SELL
-
+        request = CanonicalOrderRequest.from_input(
+            asset, quantity, side, order_type, limit_price, stop_price
+        )
         order = Order(
-            asset=asset,
-            side=side,
-            quantity=abs(quantity),
-            order_type=order_type,
-            limit_price=limit_price,
-            stop_price=stop_price,
+            asset=request.asset,
+            side=request.side,
+            quantity=request.quantity,
+            order_type=request.order_type,
+            limit_price=request.limit_price,
+            stop_price=request.stop_price,
             order_id="order-1",
             status=OrderStatus.PENDING,
+            created_at=datetime.now(UTC),
         )
         self._pending_orders.append(order)
         return order
@@ -379,9 +382,8 @@ def test_mock_broker_order_side_detection():
     assert sell_order.side == OrderSide.SELL
     assert sell_order.quantity == 50
 
-    # Explicit side overrides
-    explicit_buy = broker.submit_order("AAPL", -100, side=OrderSide.BUY)
-    assert explicit_buy.side == OrderSide.BUY
+    with pytest.raises(OrderValidationError, match="positive and unsigned"):
+        broker.submit_order("AAPL", -100, side=OrderSide.BUY)
 
 
 @pytest.mark.asyncio

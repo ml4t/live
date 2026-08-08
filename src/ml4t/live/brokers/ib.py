@@ -34,6 +34,9 @@ from ib_async import (
     Trade as IBTrade,
 )
 from ml4t.backtest.types import Order, OrderSide, OrderStatus, OrderType, Position
+from ml4t.specs import ExecutionCapability
+
+from ml4t.live.orders import CanonicalOrderRequest
 
 logger = logging.getLogger(__name__)
 
@@ -106,6 +109,19 @@ class IBBroker:
 
         # Contract cache
         self._contracts: dict[str, Contract] = {}
+
+    @property
+    def execution_capabilities(self) -> frozenset[ExecutionCapability]:
+        """Return order behaviors implemented by this adapter."""
+        return frozenset(
+            {
+                ExecutionCapability.LIMIT,
+                ExecutionCapability.STOP,
+                ExecutionCapability.STOP_LIMIT,
+                ExecutionCapability.CLOSE_AUCTION,
+                ExecutionCapability.PARTIAL_FILL,
+            }
+        )
 
     async def connect(self) -> None:
         """Connect to IB Gateway/TWS.
@@ -325,8 +341,9 @@ class IBBroker:
 
         Args:
             asset: Asset symbol
-            quantity: Number of shares
-            side: BUY or SELL (auto-detected if None)
+            quantity: Signed shares/contracts when side is omitted; positive unsigned
+                shares/contracts when side is provided
+            side: BUY or SELL, inferred from signed quantity if omitted
             order_type: Market, limit, stop, or stop-limit
             limit_price: Limit price for limit orders
             stop_price: Stop price for stop orders
@@ -341,16 +358,21 @@ class IBBroker:
         if not self.is_connected:
             raise RuntimeError("Not connected to IB")
 
-        # Auto-detect side if not provided
-        asset = asset.upper()
-        if side is None:
-            pos = self.get_position(asset)
-            if pos and pos.quantity < 0:
-                # Short position, assume closing (buy)
-                side = OrderSide.BUY
-            else:
-                # Long or no position, assume opening/adding (buy)
-                side = OrderSide.BUY
+        request = CanonicalOrderRequest.from_input(
+            asset,
+            quantity,
+            side,
+            order_type,
+            limit_price,
+            stop_price,
+            capabilities=self.execution_capabilities,
+        )
+        asset = request.asset
+        quantity = request.quantity
+        side = request.side
+        order_type = request.order_type
+        limit_price = request.limit_price
+        stop_price = request.stop_price
 
         # Get contract
         contract = self._get_contract(asset)

@@ -52,6 +52,10 @@ config = LiveRiskConfig(
 )
 ```
 
+Set an individual numeric limit to `None` to disable only that check. Numeric limits reject NaN and
+infinity. Position and order share limits accept positive fractional values; position counts and
+orders-per-minute remain positive integers.
+
 ## Control Groups
 
 ### Position Limits
@@ -92,6 +96,7 @@ The risk state file persists more than just the kill switch. It now captures:
 - current trading date and daily counters
 - daily-loss baseline through `session_start_equity`
 - persisted position and pending-order snapshots from the last clean disconnect
+- unresolved cancel-and-resubmit replacement gaps
 - kill-switch state and reason
 
 That persisted snapshot is used again on the next `SafeBroker.connect()` to generate the startup reconciliation report.

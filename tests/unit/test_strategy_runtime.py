@@ -21,6 +21,7 @@ from ml4t.specs import (
 )
 
 from ml4t.live import (
+    CanonicalOrderRequest,
     LiveEngine,
     LiveRiskConfig,
     ReducingRiskExecutionError,
@@ -95,14 +96,16 @@ class RuntimeBroker:
         **kwargs: Any,
     ) -> Order:
         self.submit_calls += 1
-        resolved_side = side or (OrderSide.BUY if quantity > 0 else OrderSide.SELL)
+        request = CanonicalOrderRequest.from_input(
+            asset, quantity, side, order_type, limit_price, stop_price
+        )
         order = Order(
-            asset=asset,
-            quantity=abs(quantity),
-            side=resolved_side,
-            order_type=order_type,
-            limit_price=limit_price,
-            stop_price=stop_price,
+            asset=request.asset,
+            quantity=request.quantity,
+            side=request.side,
+            order_type=request.order_type,
+            limit_price=request.limit_price,
+            stop_price=request.stop_price,
             order_id=f"runtime-{self.submit_calls}",
             status=OrderStatus.PENDING,
             created_at=datetime.now(UTC),

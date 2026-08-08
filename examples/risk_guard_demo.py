@@ -32,9 +32,9 @@ SRC = ROOT / "src"
 if SRC.exists():
     sys.path.insert(0, str(SRC))
 
-from ml4t.backtest.types import Order, OrderSide, OrderType, Position
+from ml4t.backtest.types import Order, OrderSide, OrderStatus, OrderType, Position
 
-from ml4t.live import LiveRiskConfig, RiskLimitError, SafeBroker
+from ml4t.live import CanonicalOrderRequest, LiveRiskConfig, RiskLimitError, SafeBroker
 
 
 class DemoBroker:
@@ -81,16 +81,18 @@ class DemoBroker:
         stop_price: float | None = None,
         **kwargs: Any,
     ) -> Order:
-        if side is None:
-            side = OrderSide.BUY if quantity > 0 else OrderSide.SELL
-            quantity = abs(quantity)
+        request = CanonicalOrderRequest.from_input(
+            asset, quantity, side, order_type, limit_price, stop_price
+        )
         order = Order(
-            asset=asset,
-            side=side,
-            quantity=quantity,
-            order_type=order_type,
-            limit_price=limit_price,
-            stop_price=stop_price,
+            asset=request.asset,
+            side=request.side,
+            quantity=request.quantity,
+            order_type=request.order_type,
+            limit_price=request.limit_price,
+            stop_price=request.stop_price,
+            order_id=f"demo-{len(self.pending_orders) + 1}",
+            status=OrderStatus.PENDING,
             created_at=datetime.now(UTC),
         )
         self.pending_orders.append(order)

@@ -30,6 +30,9 @@ from alpaca.trading.requests import (
 )
 from alpaca.trading.stream import TradingStream
 from ml4t.backtest.types import Order, OrderSide, OrderStatus, OrderType, Position
+from ml4t.specs import ExecutionCapability
+
+from ml4t.live.orders import CanonicalOrderRequest
 
 logger = logging.getLogger(__name__)
 
@@ -95,6 +98,19 @@ class AlpacaBroker:
         self._alpaca_order_map: dict[str, tuple[str, float]] = {}
         self._account_id: str | None = None
         self._snapshot_error: RuntimeError | None = None
+
+    @property
+    def execution_capabilities(self) -> frozenset[ExecutionCapability]:
+        """Return order behaviors implemented by this adapter."""
+        return frozenset(
+            {
+                ExecutionCapability.LIMIT,
+                ExecutionCapability.STOP,
+                ExecutionCapability.STOP_LIMIT,
+                ExecutionCapability.CLOSE_AUCTION,
+                ExecutionCapability.PARTIAL_FILL,
+            }
+        )
 
     async def connect(self) -> None:
         """Connect to Alpaca and sync initial state.
@@ -327,8 +343,9 @@ class AlpacaBroker:
 
         Args:
             asset: Asset symbol (e.g., 'AAPL' or 'BTC/USD')
-            quantity: Number of shares/units
-            side: BUY or SELL (auto-detected from quantity sign if None)
+            quantity: Signed shares/units when side is omitted; positive unsigned
+                shares/units when side is provided
+            side: BUY or SELL, inferred from signed quantity if omitted
             order_type: Market, limit, stop, or stop-limit
             limit_price: Limit price for limit orders
             stop_price: Stop price for stop orders
@@ -344,13 +361,21 @@ class AlpacaBroker:
         if not self.is_connected or not self._trading_client:
             raise RuntimeError("Not connected to Alpaca")
 
-        # Normalize asset symbol
-        asset = asset.upper()
-
-        # Auto-detect side from quantity sign if not provided
-        if side is None:
-            side = OrderSide.BUY if quantity > 0 else OrderSide.SELL
-        qty = float(abs(quantity))
+        request = CanonicalOrderRequest.from_input(
+            asset,
+            quantity,
+            side,
+            order_type,
+            limit_price,
+            stop_price,
+            capabilities=self.execution_capabilities,
+        )
+        asset = request.asset
+        qty = request.quantity
+        side = request.side
+        order_type = request.order_type
+        limit_price = request.limit_price
+        stop_price = request.stop_price
         if order_type == OrderType.MOC:
             if kwargs.get("extended_hours"):
                 raise ValueError("Alpaca MOC orders do not support extended_hours=True")
@@ -385,9 +410,17 @@ class AlpacaBroker:
                 created_at=alpaca_order.created_at or datetime.now(UTC),
             )
 
+            if order.status is OrderStatus.FILLED:
+                if alpaca_order.filled_qty is None or alpaca_order.filled_avg_price is None:
+                    raise RuntimeError("Alpaca filled order is missing fill evidence")
+                order.filled_quantity = float(alpaca_order.filled_qty)
+                order.filled_price = float(alpaca_order.filled_avg_price)
+                order.filled_at = getattr(alpaca_order, "filled_at", None) or datetime.now(UTC)
+
             # Track order
-            self._pending_orders[order_id] = order
-            self._alpaca_order_map[str(alpaca_order.id)] = (order_id, time.time())
+            if order.status is OrderStatus.PENDING:
+                self._pending_orders[order_id] = order
+                self._alpaca_order_map[str(alpaca_order.id)] = (order_id, time.time())
 
         logger.info(f"AlpacaBroker: Order {order_id} submitted: {side.value} {qty} {asset}")
         return order

@@ -16,6 +16,7 @@ from ml4t.specs import (
 )
 
 from ml4t.live.engine import LiveEngine
+from ml4t.live.orders import CanonicalOrderRequest
 from ml4t.live.protocols import AsyncBrokerProtocol, DataFeedProtocol
 from ml4t.live.safety import LiveRiskConfig, SafeBroker
 
@@ -90,7 +91,7 @@ class MockAsyncBroker:
     async def submit_order_async(
         self,
         asset: str,
-        quantity: int,
+        quantity: float,
         side: OrderSide | None = None,
         order_type: OrderType = OrderType.MARKET,
         limit_price: float | None = None,
@@ -101,20 +102,19 @@ class MockAsyncBroker:
         await asyncio.sleep(0.01)  # Simulate network I/O
         self.submit_calls += 1
 
-        # Auto-detect side
-        if side is None:
-            side = OrderSide.BUY if quantity > 0 else OrderSide.SELL
-            quantity = abs(quantity)
-
+        request = CanonicalOrderRequest.from_input(
+            asset, quantity, side, order_type, limit_price, stop_price
+        )
         order = Order(
             order_id=f"order_{len(self._pending_orders) + 1}",
-            asset=asset,
-            quantity=quantity,
-            side=side,
-            order_type=order_type,
-            limit_price=limit_price,
-            stop_price=stop_price,
+            asset=request.asset,
+            quantity=request.quantity,
+            side=request.side,
+            order_type=request.order_type,
+            limit_price=request.limit_price,
+            stop_price=request.stop_price,
             status=OrderStatus.PENDING,
+            created_at=datetime.now(UTC),
         )
         self._pending_orders.append(order)
         return order
@@ -143,7 +143,7 @@ class MockAsyncBroker:
                 self._pending_orders.remove(order)
                 return await self.submit_order_async(
                     asset=order.asset,
-                    quantity=int(order.quantity if quantity is None else quantity),
+                    quantity=order.quantity if quantity is None else quantity,
                     side=order.side,
                     order_type=order.order_type,
                     limit_price=order.limit_price if limit_price is None else limit_price,

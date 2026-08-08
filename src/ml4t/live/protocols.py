@@ -117,8 +117,9 @@ class BrokerProtocol(Protocol):
 
         Args:
             asset: Asset symbol (e.g., "AAPL")
-            quantity: Number of shares/contracts (positive for buy, negative for sell)
-            side: Order side (BUY/SELL), auto-detected from quantity if None
+            quantity: Signed shares/contracts when side is omitted; positive unsigned
+                shares/contracts when side is provided
+            side: Order side (BUY/SELL), inferred from signed quantity if omitted
             order_type: Type of order (MARKET, LIMIT, STOP, etc.)
             limit_price: Limit price for LIMIT/STOP_LIMIT orders
             stop_price: Stop price for STOP/STOP_LIMIT orders
@@ -288,7 +289,7 @@ class AsyncBrokerProtocol(Protocol):
         stop_price: float | None = None,
         **kwargs: Any,
     ) -> Order:
-        """Submit order (async version)."""
+        """Submit an order using the same quantity contract as ``submit_order``."""
         ...
 
     async def cancel_order_async(self, order_id: str) -> bool:

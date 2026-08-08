@@ -31,7 +31,7 @@ SRC = ROOT / "src"
 if SRC.exists():
     sys.path.insert(0, str(SRC))
 
-from ml4t.backtest.types import Order, OrderSide, OrderType, Position
+from ml4t.backtest.types import Order, OrderSide, OrderStatus, OrderType, Position
 
 from ml4t.live import LiveRiskConfig, RiskState, SafeBroker
 
@@ -54,6 +54,8 @@ class DemoBroker:
                 quantity=2,
                 order_type=OrderType.LIMIT,
                 limit_price=900.0,
+                order_id="venue-pending-1",
+                status=OrderStatus.PENDING,
                 created_at=datetime.now(UTC),
             )
         ]

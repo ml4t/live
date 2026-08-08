@@ -18,6 +18,12 @@ from .feeds.databento_feed import DataBentoFeed
 from .feeds.ib_feed import IBDataFeed
 from .feeds.okx_feed import OKXFundingFeed
 from .lifecycle import LifecycleInvocation, LiveLifecycleDispatcher, callback_trace
+from .orders import (
+    BrokerOrderContractError,
+    CanonicalOrderRequest,
+    OrderValidationError,
+    UnsupportedOrderCapabilityError,
+)
 from .protocols import AsyncBrokerProtocol, BrokerProtocol, DataFeedProtocol
 from .runtime import (
     LiveIntentError,
@@ -30,6 +36,7 @@ from .runtime import (
 from .safety import (
     BrokerSnapshotError,
     LiveRiskConfig,
+    OrderReplacementGapError,
     ReconciliationMismatchError,
     RiskLimitError,
     RiskState,
@@ -53,6 +60,10 @@ __all__ = [
     # Engine
     "LifecycleInvocation",
     "LiveEngine",
+    "BrokerOrderContractError",
+    "CanonicalOrderRequest",
+    "OrderValidationError",
+    "UnsupportedOrderCapabilityError",
     "LiveLifecycleDispatcher",
     "callback_trace",
     "LiveIntentError",
@@ -68,6 +79,7 @@ __all__ = [
     # Safety
     "BrokerSnapshotError",
     "LiveRiskConfig",
+    "OrderReplacementGapError",
     "ReconciliationMismatchError",
     "RiskLimitError",
     "RiskState",

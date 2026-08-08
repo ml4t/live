@@ -18,6 +18,7 @@ from typing import Any
 from ml4t.backtest.types import Order, OrderSide, OrderType, Position
 from ml4t.specs import CanonicalTargetIntent
 
+from ml4t.live.orders import CanonicalOrderRequest
 from ml4t.live.protocols import AsyncBrokerProtocol
 
 logger = logging.getLogger(__name__)
@@ -166,8 +167,9 @@ class ThreadSafeBrokerWrapper:
 
         Args:
             asset: Asset symbol (e.g., "AAPL")
-            quantity: Number of shares/contracts (positive for buy, negative for sell)
-            side: Order side (BUY/SELL), auto-detected from quantity if None
+            quantity: Signed shares/contracts when side is omitted; positive unsigned
+                shares/contracts when side is provided
+            side: Order side (BUY/SELL), inferred from signed quantity if omitted
             order_type: Type of order (MARKET, LIMIT, STOP, etc.)
             limit_price: Limit price for LIMIT/STOP_LIMIT orders
             stop_price: Stop price for STOP/STOP_LIMIT orders
@@ -181,12 +183,28 @@ class ThreadSafeBrokerWrapper:
             ValueError: If order parameters are invalid
             RuntimeError: If broker is not connected or error occurs
         """
+        request = CanonicalOrderRequest.from_input(
+            asset,
+            quantity,
+            side,
+            order_type,
+            limit_price,
+            stop_price,
+            capabilities=getattr(self._broker, "execution_capabilities", ()),
+        )
         order = self._run_sync(
             self._broker.submit_order_async(
-                asset, quantity, side, order_type, limit_price, stop_price, **kwargs
+                request.asset,
+                request.quantity,
+                request.side,
+                request.order_type,
+                request.limit_price,
+                request.stop_price,
+                **kwargs,
             ),
             timeout=30.0,  # Orders need longer timeout
         )
+        request.validate_result(order)
         if self._strategy_runtime is not None:
             self._strategy_runtime.observe_strategy_order(order)
         return order

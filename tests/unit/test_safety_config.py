@@ -69,6 +69,13 @@ def test_live_risk_config_custom_values():
     assert config.allowed_assets == {"AAPL", "TSLA"}
 
 
+def test_live_risk_config_accepts_fractional_share_limits():
+    config = LiveRiskConfig(max_position_shares=2.5, max_order_shares=0.25)
+
+    assert config.max_position_shares == 2.5
+    assert config.max_order_shares == 0.25
+
+
 def test_live_risk_config_validation_position_limits():
     """Test validation of position limit parameters."""
     # Negative max_position_value
@@ -163,17 +170,64 @@ def test_live_risk_config_validation_state_file():
         LiveRiskConfig(state_file="")
 
 
-def test_live_risk_config_inf_values_allowed():
-    """Test that infinity values are allowed (to disable limits)."""
+def test_live_risk_config_none_disables_limits_explicitly():
+    """Test that None is the only non-finite limit representation."""
     config = LiveRiskConfig(
-        max_position_value=float("inf"),
-        max_total_exposure=float("inf"),
-        max_order_value=float("inf"),
+        max_position_value=None,
+        max_position_shares=None,
+        max_total_exposure=None,
+        max_positions=None,
+        max_order_value=None,
+        max_order_shares=None,
+        max_orders_per_minute=None,
+        max_daily_loss=None,
+        max_drawdown_pct=None,
+        max_price_deviation_pct=None,
+        max_data_staleness_seconds=None,
+        dedup_window_seconds=None,
     )
 
-    assert config.max_position_value == float("inf")
-    assert config.max_total_exposure == float("inf")
-    assert config.max_order_value == float("inf")
+    assert all(
+        value is None
+        for value in (
+            config.max_position_value,
+            config.max_position_shares,
+            config.max_total_exposure,
+            config.max_positions,
+            config.max_order_value,
+            config.max_order_shares,
+            config.max_orders_per_minute,
+            config.max_daily_loss,
+            config.max_drawdown_pct,
+            config.max_price_deviation_pct,
+            config.max_data_staleness_seconds,
+            config.dedup_window_seconds,
+        )
+    )
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "max_position_value",
+        "max_position_shares",
+        "max_total_exposure",
+        "max_positions",
+        "max_order_value",
+        "max_order_shares",
+        "max_orders_per_minute",
+        "max_daily_loss",
+        "max_drawdown_pct",
+        "max_price_deviation_pct",
+        "max_data_staleness_seconds",
+        "dedup_window_seconds",
+    ],
+)
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
+def test_live_risk_config_rejects_every_non_finite_numeric_field(name, value):
+    """Test that no non-finite value can disable a safety check implicitly."""
+    with pytest.raises(ValueError, match=name):
+        LiveRiskConfig(**{name: value})
 
 
 # === RiskState Tests ===

@@ -87,6 +87,11 @@ equity = await broker.get_account_value_async()
 order = await broker.submit_order_async("AAPL", 10)
 ```
 
+When `side` is omitted, quantity is signed: positive means buy and negative means sell. When
+`side` is provided, quantity must be positive and unsigned. Zero, non-finite quantities, conflicting
+signed quantities, invalid price combinations, and unsupported order types are rejected before the
+broker SDK is called.
+
 ## Strategy-Side Calls
 
 Inside `Strategy.on_data(...)`, the broker object is synchronous:

@@ -18,6 +18,7 @@ import logging
 import math
 import os
 import time
+from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -25,6 +26,7 @@ from typing import Any
 
 from ml4t.backtest.types import Order, OrderSide, OrderStatus, OrderType, Position
 
+from .orders import CanonicalOrderRequest
 from .protocols import AsyncBrokerProtocol
 
 logger = logging.getLogger(__name__)
@@ -34,8 +36,8 @@ logger = logging.getLogger(__name__)
 class LiveRiskConfig:
     """Risk configuration for live trading.
 
-    Multiple layers of protection - all limits are optional.
-    Set to inf/large values to disable specific checks.
+    Multiple layers of protection. Set a limit to ``None`` to disable that
+    specific check. NaN and infinity are always invalid.
 
     Example:
         # Conservative configuration
@@ -45,9 +47,9 @@ class LiveRiskConfig:
             shadow_mode=True,  # Always start with shadow mode!
         )
 
-        # Disable specific checks
+        # Disable a specific check explicitly
         config = LiveRiskConfig(
-            max_position_value=float('inf'),  # No position limit
+            max_position_value=None,
             max_daily_loss=10_000.0,          # Only daily loss limit
         )
 
@@ -59,24 +61,24 @@ class LiveRiskConfig:
     """
 
     # Position limits
-    max_position_value: float = 50_000.0  # Max $ per position
-    max_position_shares: int = 1000  # Max shares per position
-    max_total_exposure: float = 200_000.0  # Max total $ across all positions
-    max_positions: int = 20  # Max number of positions
+    max_position_value: float | None = 50_000.0  # Max $ per position
+    max_position_shares: float | None = 1000.0  # Max shares/units per position
+    max_total_exposure: float | None = 200_000.0  # Max total $ across all positions
+    max_positions: int | None = 20  # Max number of positions
 
     # Order limits
-    max_order_value: float = 10_000.0  # Max $ per order
-    max_order_shares: int = 500  # Max shares per order
-    max_orders_per_minute: int = 10  # Rate limit
+    max_order_value: float | None = 10_000.0  # Max $ per order
+    max_order_shares: float | None = 500.0  # Max shares/units per order
+    max_orders_per_minute: int | None = 10  # Rate limit
 
     # Loss limits
-    max_daily_loss: float = 5_000.0  # Stop if exceeded
-    max_drawdown_pct: float = 0.05  # Stop if 5% drawdown
+    max_daily_loss: float | None = 5_000.0  # Stop if exceeded
+    max_drawdown_pct: float | None = 0.05  # Stop if 5% drawdown
 
     # Price protection
-    max_price_deviation_pct: float = 0.05  # Fat finger: reject if limit >5% from market
-    max_data_staleness_seconds: float = 60.0  # Reject if data older than 60s
-    dedup_window_seconds: float = 1.0  # Block duplicate orders within 1s
+    max_price_deviation_pct: float | None = 0.05  # Reject distant limit prices
+    max_data_staleness_seconds: float | None = 60.0  # Reject stale market data
+    dedup_window_seconds: float | None = 1.0  # Block duplicate orders within a window
 
     # Asset restrictions
     allowed_assets: set[str] = field(default_factory=set)
@@ -97,61 +99,29 @@ class LiveRiskConfig:
     state_file: str = ".ml4t_risk_state.json"
     journal_file: str | None = None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validate configuration parameters."""
-        # Validate position limits
-        if self.max_position_value <= 0:
-            raise ValueError(f"max_position_value must be positive, got {self.max_position_value}")
-
-        if self.max_position_shares <= 0:
-            raise ValueError(
-                f"max_position_shares must be positive, got {self.max_position_shares}"
-            )
-
-        if self.max_total_exposure <= 0:
-            raise ValueError(f"max_total_exposure must be positive, got {self.max_total_exposure}")
-
-        if self.max_positions <= 0:
-            raise ValueError(f"max_positions must be positive, got {self.max_positions}")
-
-        # Validate order limits
-        if self.max_order_value <= 0:
-            raise ValueError(f"max_order_value must be positive, got {self.max_order_value}")
-
-        if self.max_order_shares <= 0:
-            raise ValueError(f"max_order_shares must be positive, got {self.max_order_shares}")
-
-        if self.max_orders_per_minute <= 0:
-            raise ValueError(
-                f"max_orders_per_minute must be positive, got {self.max_orders_per_minute}"
-            )
-
-        # Validate loss limits
-        if self.max_daily_loss <= 0:
-            raise ValueError(f"max_daily_loss must be positive, got {self.max_daily_loss}")
-
-        if not 0 < self.max_drawdown_pct <= 1:
-            raise ValueError(
-                f"max_drawdown_pct must be between 0 and 1, got {self.max_drawdown_pct}"
-            )
-
-        # Validate price protection
-        if not 0 < self.max_price_deviation_pct <= 1:
-            raise ValueError(
-                f"max_price_deviation_pct must be between 0 and 1, "
-                f"got {self.max_price_deviation_pct}"
-            )
-
-        if self.max_data_staleness_seconds <= 0:
-            raise ValueError(
-                f"max_data_staleness_seconds must be positive, "
-                f"got {self.max_data_staleness_seconds}"
-            )
-
-        if self.dedup_window_seconds < 0:
-            raise ValueError(
-                f"dedup_window_seconds must be non-negative, got {self.dedup_window_seconds}"
-            )
+        positive_numbers = (
+            "max_position_value",
+            "max_position_shares",
+            "max_total_exposure",
+            "max_order_value",
+            "max_order_shares",
+            "max_daily_loss",
+            "max_data_staleness_seconds",
+        )
+        positive_counts = (
+            "max_positions",
+            "max_orders_per_minute",
+        )
+        percentages = ("max_drawdown_pct", "max_price_deviation_pct")
+        for name in positive_numbers:
+            self._validate_optional_number(name, minimum=0.0, inclusive=False)
+        for name in positive_counts:
+            self._validate_optional_count(name)
+        for name in percentages:
+            self._validate_optional_number(name, minimum=0.0, maximum=1.0, inclusive=False)
+        self._validate_optional_number("dedup_window_seconds", minimum=0.0, inclusive=True)
 
         # Validate asset restrictions
         if self.allowed_assets and self.blocked_assets:
@@ -164,6 +134,37 @@ class LiveRiskConfig:
             raise ValueError("state_file cannot be empty")
         if self.journal_file is not None and not self.journal_file:
             raise ValueError("journal_file cannot be empty when provided")
+
+    def _validate_optional_number(
+        self,
+        name: str,
+        *,
+        minimum: float,
+        maximum: float | None = None,
+        inclusive: bool,
+    ) -> None:
+        value = getattr(self, name)
+        if value is None:
+            return
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise ValueError(f"{name} must be a number or None")
+        number = float(value)
+        if not math.isfinite(number):
+            raise ValueError(f"{name} must be finite or None")
+        if (number < minimum if inclusive else number <= minimum) or (
+            maximum is not None and number > maximum
+        ):
+            if maximum is None:
+                qualifier = "non-negative" if inclusive else "positive"
+                raise ValueError(f"{name} must be {qualifier} or None, got {value}")
+            raise ValueError(f"{name} must be between 0 and {maximum:g} or None, got {value}")
+
+    def _validate_optional_count(self, name: str) -> None:
+        value = getattr(self, name)
+        if value is None:
+            return
+        if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+            raise ValueError(f"{name} must be positive integer or None, got {value}")
 
 
 @dataclass
@@ -191,6 +192,7 @@ class RiskState:
     persisted_positions: dict[str, float] = field(default_factory=dict)
     persisted_pending_orders: list[dict[str, Any]] = field(default_factory=list)
     portable_strategy_state: dict[str, Any] = field(default_factory=dict)
+    replacement_gaps: dict[str, dict[str, Any]] = field(default_factory=dict)
     shadow_portfolio: dict[str, Any] = field(default_factory=dict)
     kill_switch_activated: bool = False  # Was kill switch triggered?
     kill_switch_reason: str = ""  # Why?
@@ -229,6 +231,8 @@ class RiskState:
             data["persisted_pending_orders"] = self.persisted_pending_orders
         if self.portable_strategy_state:
             data["portable_strategy_state"] = self.portable_strategy_state
+        if self.replacement_gaps:
+            data["replacement_gaps"] = self.replacement_gaps
         if self.shadow_portfolio:
             data["shadow_portfolio"] = self.shadow_portfolio
         return data
@@ -524,6 +528,10 @@ class BrokerSnapshotError(RuntimeError):
     pass
 
 
+class OrderReplacementGapError(RiskLimitError):
+    """Raised after cancellation was requested but replacement was not accepted."""
+
+
 class ReconciliationMismatchError(RuntimeError):
     """Raised when startup reconciliation is configured to fail closed."""
 
@@ -635,6 +643,11 @@ class SafeBroker:
         return self._last_reconciliation_report
 
     @property
+    def replacement_gaps(self) -> dict[str, dict[str, Any]]:
+        """Return unresolved cancel-and-resubmit operations."""
+        return deepcopy(self._state.replacement_gaps)
+
+    @property
     def is_connected(self) -> bool:
         """Check if broker is connected."""
         # Simplified check - actual implementation might need async
@@ -741,14 +754,23 @@ class SafeBroker:
         fill_price: float | None = None,
     ) -> Order:
         """Submit an explicitly reducing order under the configured kill-switch policy."""
-        position = self.get_position(asset)
-        if position is None or quantity <= 0 or quantity > abs(position.quantity):
+        position = self.get_position(asset.upper())
+        if position is None:
+            raise RiskLimitError(f"Reducing order for {asset} has no open position")
+        side = OrderSide.SELL if position.quantity > 0 else OrderSide.BUY
+        request = CanonicalOrderRequest.from_input(
+            asset,
+            quantity,
+            side,
+            OrderType.MARKET,
+            capabilities=self.execution_capabilities,
+        )
+        if request.quantity > abs(position.quantity):
             raise RiskLimitError(f"Reducing order for {asset} exceeds the open position")
         if (
             self.config.kill_switch_enabled or self._state.kill_switch_activated
         ) and not self.config.allow_reducing_risk_when_killed:
             raise RiskLimitError("Kill switch policy blocks reducing-risk orders")
-        side = OrderSide.SELL if position.quantity > 0 else OrderSide.BUY
         price = fill_price
         if price is None and self.config.shadow_mode:
             snapshot = self._get_market_snapshot(asset)
@@ -760,38 +782,40 @@ class SafeBroker:
         try:
             if self.config.shadow_mode:
                 order = Order(
-                    asset=asset,
-                    side=side,
-                    quantity=quantity,
+                    asset=request.asset,
+                    side=request.side,
+                    quantity=request.quantity,
                     order_type=OrderType.MARKET,
                     order_id=f"SHADOW-REDUCE-{int(time.time() * 1_000_000)}",
                     status=OrderStatus.FILLED,
-                    filled_quantity=quantity,
+                    filled_quantity=request.quantity,
                     filled_price=price,
+                    created_at=datetime.now(UTC),
                     filled_at=datetime.now(UTC),
                     intent_idempotency_key=idempotency_key,
                 )
                 self._virtual_portfolio.process_fill(order)
             else:
-                if reason == "close_position" and quantity == abs(position.quantity):
-                    order = await self._broker.close_position_async(asset)
+                if reason == "close_position" and request.quantity == abs(position.quantity):
+                    order = await self._broker.close_position_async(request.asset)
                     if order is None:
                         raise RiskLimitError(f"Venue did not create a closing order for {asset}")
                 else:
                     order = await self._broker.submit_order_async(
-                        asset,
-                        quantity,
-                        side,
+                        request.asset,
+                        request.quantity,
+                        request.side,
                         OrderType.MARKET,
                         reducing_risk=True,
                         reason=reason,
                         intent_idempotency_key=idempotency_key,
                     )
+                request.validate_result(order)
         except Exception as error:
             self.record_event(
                 "reducing_risk_failed",
                 asset=asset,
-                quantity=quantity,
+                quantity=request.quantity,
                 reason=reason,
                 idempotency_key=idempotency_key,
                 error_type=type(error).__name__,
@@ -800,14 +824,24 @@ class SafeBroker:
             if self.config.halt_on_reducing_risk_failure:
                 raise
             raise RiskLimitError(f"Reducing-risk order failed for {asset}: {error}") from error
+        if order.status in {OrderStatus.REJECTED, OrderStatus.CANCELLED}:
+            self.record_event(
+                "reducing_risk_rejected",
+                asset=request.asset,
+                order_id=self._order_identifier(order),
+                quantity=request.quantity,
+                reason=reason,
+                idempotency_key=idempotency_key,
+            )
+            return order
         self._state.orders_placed += 1
         self._refresh_state_snapshot_from_cache()
         self._save_state()
         self.record_event(
             "reducing_risk_submitted",
-            asset=asset,
+            asset=request.asset,
             order_id=self._order_identifier(order),
-            quantity=quantity,
+            quantity=request.quantity,
             reason=reason,
             idempotency_key=idempotency_key,
         )
@@ -826,36 +860,79 @@ class SafeBroker:
         if original is None:
             raise RiskLimitError(f"Pending order {order_id} not found")
 
-        replacement_quantity = float(original.quantity if quantity is None else quantity)
+        replacement_quantity = original.quantity if quantity is None else quantity
         replacement_limit = original.limit_price if limit_price is None else limit_price
         replacement_stop = original.stop_price if stop_price is None else stop_price
-
-        asset = original.asset.upper()
-        self._recent_orders = [
-            entry
-            for entry in self._recent_orders
-            if not (entry[1] == asset and abs(entry[2] - float(original.quantity)) < 0.01)
-        ]
+        request = CanonicalOrderRequest.from_input(
+            original.asset,
+            replacement_quantity,
+            original.side,
+            original.order_type,
+            replacement_limit,
+            replacement_stop,
+            capabilities=self.execution_capabilities,
+        )
 
         cancelled = await self.cancel_order_async(order_id)
         if not cancelled:
             raise RiskLimitError(f"Could not cancel order {order_id} before replacement")
 
-        replacement = await self.submit_order_async(
-            asset=original.asset,
-            quantity=int(replacement_quantity),
-            side=original.side,
-            order_type=original.order_type,
-            limit_price=replacement_limit,
-            stop_price=replacement_stop,
-        )
+        gap = {
+            "original_order_id": order_id,
+            "replacement_order_id": None,
+            "original": self._serialize_pending_orders([original])[0],
+            "asset": request.asset,
+            "side": request.side.value,
+            "quantity": request.quantity,
+            "order_type": request.order_type.value,
+            "limit_price": request.limit_price,
+            "stop_price": request.stop_price,
+            "status": "cancellation_requested",
+            "opened_at": datetime.now(UTC).isoformat(),
+        }
+        self._state.replacement_gaps[order_id] = gap
+        self._save_state()
+        self.record_event("order_replacement_gap_opened", **gap)
+        try:
+            replacement = await self.submit_order_async(
+                asset=request.asset,
+                quantity=request.quantity,
+                side=request.side,
+                order_type=request.order_type,
+                limit_price=request.limit_price,
+                stop_price=request.stop_price,
+                _replacement_for=order_id,
+            )
+            if replacement.status in {OrderStatus.REJECTED, OrderStatus.CANCELLED}:
+                detail = replacement.rejection_reason or replacement.status.value
+                raise RiskLimitError(f"replacement was not accepted: {detail}")
+        except Exception as error:
+            gap["status"] = "replacement_failed"
+            gap["error_type"] = type(error).__name__
+            self._state.replacement_gaps[order_id] = gap
+            self._save_state()
+            self.record_event("order_replacement_gap_unresolved", **gap)
+            raise OrderReplacementGapError(
+                f"Order {order_id} cancellation was requested but replacement failed: {error}"
+            ) from error
+        gap["replacement_order_id"] = self._order_identifier(replacement)
+        gap["replacement_status"] = replacement.status.value
+        gap["status"] = "replacement_submitted"
+        pending_ids = {self._order_identifier(order) for order in self.pending_orders}
+        if order_id not in pending_ids:
+            self._state.replacement_gaps.pop(order_id, None)
+            gap["status"] = "resolved"
+        else:
+            self._state.replacement_gaps[order_id] = gap
+        self._save_state()
         self.record_event(
             "order_replaced",
             original_order_id=order_id,
             replacement_order_id=self._order_identifier(replacement),
             asset=original.asset,
-            quantity=replacement_quantity,
-            order_type=original.order_type.value,
+            quantity=request.quantity,
+            order_type=request.order_type.value,
+            cancellation_gap_status=gap["status"],
         )
         return replacement
 
@@ -875,8 +952,9 @@ class SafeBroker:
 
         Args:
             asset: Asset symbol
-            quantity: Number of shares/contracts
-            side: Order side (BUY/SELL), auto-detected from quantity if None
+            quantity: Signed shares/contracts when side is omitted; positive unsigned
+                shares/contracts when side is provided
+            side: Order side (BUY/SELL), inferred from signed quantity if omitted
             order_type: Type of order
             limit_price: Limit price for LIMIT/STOP_LIMIT orders
             stop_price: Stop price for STOP/STOP_LIMIT orders
@@ -888,48 +966,52 @@ class SafeBroker:
         Raises:
             RiskLimitError: If order violates any risk limit
         """
-        # Infer side
-        if side is None:
-            side = OrderSide.BUY if quantity > 0 else OrderSide.SELL
-            quantity = abs(quantity)
+        replacement_for = kwargs.pop("_replacement_for", None)
+        request = CanonicalOrderRequest.from_input(
+            asset,
+            quantity,
+            side,
+            order_type,
+            limit_price,
+            stop_price,
+            capabilities=self.execution_capabilities,
+        )
+        asset = request.asset
+        quantity = request.quantity
+        side = request.side
+        order_type = request.order_type
+        limit_price = request.limit_price
+        stop_price = request.stop_price
+        state_before = deepcopy(self._state)
+        config_kill_before = self.config.kill_switch_enabled
 
         # === Risk Checks ===
-
-        # 1. Kill switch
-        if self.config.kill_switch_enabled or self._state.kill_switch_activated:
-            raise RiskLimitError(
-                f"Kill switch active: {self._state.kill_switch_reason or 'Manual activation'}"
-            )
-
-        # 2. Asset check
-        self._check_asset(asset)
-
-        # 3. Fresh market data required for live risk checks
-        self._check_data_staleness(asset)
-
-        # 4. Daily loss check
-        await self._check_daily_loss()
-
-        # 5. Duplicate check
-        self._check_duplicate(asset, float(quantity))
-
-        # 6. Rate limit
-        self._check_rate_limit()
-
-        # 7. Order size limits
-        price = await self._estimate_price(asset, limit_price)
-        order_value = abs(quantity) * price
-        self._check_order_limits(quantity, order_value)
-
-        # 8. Position limits
-        await self._check_position_limits(asset, quantity, order_value, side)
-
-        # 9. Fat finger check (limit orders)
-        if limit_price and order_type in (OrderType.LIMIT, OrderType.STOP_LIMIT):
-            await self._check_price_deviation(asset, limit_price)
-
-        # 10. Drawdown check (may activate kill switch)
-        await self._check_drawdown()
+        try:
+            if self.config.kill_switch_enabled or self._state.kill_switch_activated:
+                raise RiskLimitError(
+                    f"Kill switch active: {self._state.kill_switch_reason or 'Manual activation'}"
+                )
+            self._check_asset(asset)
+            self._check_data_staleness(asset)
+            await self._check_daily_loss()
+            if replacement_for is None:
+                self._check_duplicate(asset, quantity)
+            self._check_rate_limit()
+            price = await self._estimate_price(asset, limit_price)
+            order_value = quantity * price
+            self._check_order_limits(quantity, order_value)
+            await self._check_position_limits(asset, quantity, order_value, side)
+            if limit_price is not None and order_type in (
+                OrderType.LIMIT,
+                OrderType.STOP_LIMIT,
+            ):
+                await self._check_price_deviation(asset, limit_price)
+            await self._check_drawdown()
+        except BaseException:
+            if not self._state.kill_switch_activated or state_before.kill_switch_activated:
+                self._state = state_before
+                self.config.kill_switch_enabled = config_kill_before
+            raise
 
         # === Shadow Mode (Gemini v2 fix: use VirtualPortfolio) ===
         if self.config.shadow_mode:
@@ -945,6 +1027,7 @@ class SafeBroker:
                 status=OrderStatus.FILLED,
                 filled_quantity=quantity,
                 filled_price=price,
+                created_at=datetime.now(UTC),
                 filled_at=datetime.now(UTC),
                 target_intent_id=kwargs.get("target_intent_id"),
                 child_intent_id=kwargs.get("child_intent_id"),
@@ -959,11 +1042,7 @@ class SafeBroker:
                 f"(value: ${order_value:,.0f})"
             )
 
-            # Update state
-            self._state.orders_placed += 1
-            self._refresh_state_snapshot_from_cache()
-            self._prune_history()  # Memory leak fix
-            self._save_state()
+            self._commit_accepted_order(request)
             self.record_event(
                 "shadow_order_filled",
                 **self._order_event_payload(order),
@@ -974,16 +1053,26 @@ class SafeBroker:
 
         # === Execute ===
         logger.info(f"SafeBroker: Submitting {side.value} {quantity} {asset}")
-        order = await self._broker.submit_order_async(
-            asset, quantity, side, order_type, limit_price, stop_price, **kwargs
-        )
+        try:
+            order = await self._broker.submit_order_async(
+                asset, quantity, side, order_type, limit_price, stop_price, **kwargs
+            )
+            request.validate_result(order)
+        except BaseException:
+            self._state = state_before
+            self.config.kill_switch_enabled = config_kill_before
+            raise
+        if order.status in {OrderStatus.REJECTED, OrderStatus.CANCELLED}:
+            self._state = state_before
+            self.config.kill_switch_enabled = config_kill_before
+            self.record_event(
+                "order_rejected",
+                **self._order_event_payload(order),
+                order_value=order_value,
+            )
+            return order
 
-        # Update state
-        self._state.orders_placed += 1
-        self._recent_orders.append((time.time(), asset, float(quantity)))
-        self._refresh_state_snapshot_from_cache()
-        self._prune_history()  # Memory leak fix
-        self._save_state()
+        self._commit_accepted_order(request)
         self.record_event(
             "order_submitted",
             **self._order_event_payload(order),
@@ -991,6 +1080,25 @@ class SafeBroker:
         )
 
         return order
+
+    def _commit_accepted_order(self, request: CanonicalOrderRequest) -> None:
+        """Commit counters and histories only after an order is accepted."""
+        now = time.time()
+        self._state.orders_placed += 1
+        if self.config.max_orders_per_minute is not None:
+            self._order_timestamps = [
+                timestamp for timestamp in self._order_timestamps if now - timestamp < 60
+            ]
+            self._order_timestamps.append(now)
+        window = self.config.dedup_window_seconds
+        if window is not None and window > 0:
+            self._recent_orders = [
+                entry for entry in self._recent_orders if now - entry[0] < window
+            ]
+            self._recent_orders.append((now, request.asset, request.quantity))
+        self._refresh_state_snapshot_from_cache()
+        self._prune_history()
+        self._save_state()
 
     # === Risk Check Methods ===
 
@@ -1142,6 +1250,9 @@ class SafeBroker:
 
     def _check_data_staleness(self, asset: str) -> None:
         """Reject orders when the latest known market data is missing or stale."""
+        limit = self.config.max_data_staleness_seconds
+        if limit is None:
+            return
         snapshot = self._get_market_snapshot(asset)
         if snapshot is None:
             raise RiskLimitError(f"No market data available for {asset}")
@@ -1149,18 +1260,22 @@ class SafeBroker:
         now = datetime.now(UTC)
         age_seconds = max(0.0, (now - snapshot.observed_at).total_seconds())
 
-        if age_seconds > self.config.max_data_staleness_seconds:
+        if age_seconds > limit:
             raise RiskLimitError(
-                f"Stale market data for {asset}: {age_seconds:.1f}s old exceeds "
-                f"max {self.config.max_data_staleness_seconds:.1f}s"
+                f"Stale market data for {asset}: {age_seconds:.1f}s old exceeds max {limit:.1f}s"
             )
 
     async def _check_daily_loss(self) -> None:
         """Reject new orders when the daily-loss limit has been breached."""
+        limit = self.config.max_daily_loss
+        if limit is None:
+            return
         try:
             current_equity = await self.get_account_value_async()
-        except Exception:
-            return
+        except Exception as error:
+            raise BrokerSnapshotError(f"account value unavailable: {error}") from error
+        if not math.isfinite(current_equity) or current_equity < 0:
+            raise BrokerSnapshotError("account value must be finite and non-negative")
 
         if self._state.session_start_equity is None:
             self._state.session_start_equity = current_equity
@@ -1168,8 +1283,8 @@ class SafeBroker:
         daily_loss = max(0.0, self._state.session_start_equity - current_equity)
         self._state.daily_loss = daily_loss
 
-        if daily_loss > self.config.max_daily_loss:
-            reason = f"Daily loss ${daily_loss:,.2f} exceeds max ${self.config.max_daily_loss:,.2f}"
+        if daily_loss > limit:
+            reason = f"Daily loss ${daily_loss:,.2f} exceeds max ${limit:,.2f}"
             self._activate_kill_switch(reason)
             raise RiskLimitError(reason)
 
@@ -1199,13 +1314,12 @@ class SafeBroker:
         """
         now = time.time()
         window = self.config.dedup_window_seconds
-
-        # Clean old entries
-        self._recent_orders = [(t, a, q) for t, a, q in self._recent_orders if now - t < window]
+        if window is None or window == 0:
+            return
 
         # Check for duplicate
         for t, a, q in self._recent_orders:
-            if a == asset and abs(q - quantity) < 0.01:
+            if now - t < window and a == asset and abs(q - quantity) < 0.01:
                 raise RiskLimitError(
                     f"Duplicate order blocked: {asset} {quantity} (same order {now - t:.1f}s ago)"
                 )
@@ -1217,10 +1331,12 @@ class SafeBroker:
             RiskLimitError: If rate limit exceeded
         """
         now = time.time()
-        self._order_timestamps = [ts for ts in self._order_timestamps if now - ts < 60]
-        if len(self._order_timestamps) >= self.config.max_orders_per_minute:
-            raise RiskLimitError(f"Rate limit: {self.config.max_orders_per_minute}/min exceeded")
-        self._order_timestamps.append(now)
+        limit = self.config.max_orders_per_minute
+        if limit is None:
+            return
+        active = [ts for ts in self._order_timestamps if now - ts < 60]
+        if len(active) >= limit:
+            raise RiskLimitError(f"Rate limit: {limit}/min exceeded")
 
     def _check_order_limits(self, quantity: float, value: float) -> None:
         """Check order size limits.
@@ -1232,11 +1348,14 @@ class SafeBroker:
         Raises:
             RiskLimitError: If order limits exceeded
         """
-        if abs(quantity) > self.config.max_order_shares:
+        if (
+            self.config.max_order_shares is not None
+            and abs(quantity) > self.config.max_order_shares
+        ):
             raise RiskLimitError(
                 f"Order quantity {quantity} exceeds max {self.config.max_order_shares}"
             )
-        if value > self.config.max_order_value:
+        if self.config.max_order_value is not None and value > self.config.max_order_value:
             raise RiskLimitError(
                 f"Order value ${value:,.0f} exceeds max ${self.config.max_order_value:,.0f}"
             )
@@ -1269,27 +1388,40 @@ class SafeBroker:
         projected_value = abs(projected_qty) * order_unit_price
         total = sum(abs(p.market_value) for p in self.positions.values()) - current_value
 
-        if projected_value > self.config.max_position_value:
+        if (
+            self.config.max_position_value is not None
+            and projected_value > self.config.max_position_value
+        ):
             raise RiskLimitError(
                 f"Position value ${projected_value:,.0f} would exceed "
                 f"max ${self.config.max_position_value:,.0f}"
             )
 
-        if abs(projected_qty) > self.config.max_position_shares:
+        if (
+            self.config.max_position_shares is not None
+            and abs(projected_qty) > self.config.max_position_shares
+        ):
             raise RiskLimitError(
                 f"Position quantity {projected_qty} would exceed "
                 f"max {self.config.max_position_shares}"
             )
 
         # Total exposure
-        if total + projected_value > self.config.max_total_exposure:
+        if (
+            self.config.max_total_exposure is not None
+            and total + projected_value > self.config.max_total_exposure
+        ):
             raise RiskLimitError(
                 f"Total exposure ${total + projected_value:,.0f} would exceed "
                 f"max ${self.config.max_total_exposure:,.0f}"
             )
 
         # Max positions
-        if pos is None and len(self.positions) >= self.config.max_positions:
+        if (
+            self.config.max_positions is not None
+            and pos is None
+            and len(self.positions) >= self.config.max_positions
+        ):
             raise RiskLimitError(f"Max positions ({self.config.max_positions}) reached")
 
     async def _check_price_deviation(self, asset: str, limit_price: float) -> None:
@@ -1302,6 +1434,9 @@ class SafeBroker:
         Raises:
             RiskLimitError: If price deviation exceeds limit
         """
+        maximum = self.config.max_price_deviation_pct
+        if maximum is None:
+            return
         snapshot = self._get_market_snapshot(asset)
         market_price = snapshot.price if snapshot is not None else None
 
@@ -1315,10 +1450,10 @@ class SafeBroker:
 
         deviation = abs(limit_price - market_price) / market_price
 
-        if deviation > self.config.max_price_deviation_pct:
+        if deviation > maximum:
             raise RiskLimitError(
                 f"Price deviation {deviation:.1%} exceeds max "
-                f"{self.config.max_price_deviation_pct:.1%}. "
+                f"{maximum:.1%}. "
                 f"Limit: ${limit_price:.2f}, Market: ${market_price:.2f}"
             )
 
@@ -1328,10 +1463,15 @@ class SafeBroker:
         Raises:
             RiskLimitError: If drawdown exceeds limit
         """
+        limit = self.config.max_drawdown_pct
+        if limit is None:
+            return
         try:
             current = await self.get_account_value_async()
-        except Exception:
-            return  # Can't check, skip
+        except Exception as error:
+            raise BrokerSnapshotError(f"account value unavailable: {error}") from error
+        if not math.isfinite(current) or current < 0:
+            raise BrokerSnapshotError("account value must be finite and non-negative")
 
         # Update high water mark
         if current > self._state.high_water_mark:
@@ -1341,8 +1481,8 @@ class SafeBroker:
         if self._state.high_water_mark > 0:
             drawdown = (self._state.high_water_mark - current) / self._state.high_water_mark
 
-            if drawdown > self.config.max_drawdown_pct:
-                reason = f"Drawdown {drawdown:.1%} exceeds max {self.config.max_drawdown_pct:.1%}"
+            if drawdown > limit:
+                reason = f"Drawdown {drawdown:.1%} exceeds max {limit:.1%}"
                 self._activate_kill_switch(reason)
                 raise RiskLimitError(reason)
 
@@ -1560,7 +1700,7 @@ class SafeBroker:
         self._order_timestamps = [ts for ts in self._order_timestamps if now - ts < 60]
 
         # Prune recent orders (older than dedup window, max 1 hour)
-        max_age = max(self.config.dedup_window_seconds, 3600)
+        max_age = max(self.config.dedup_window_seconds or 0.0, 3600)
         self._recent_orders = [(t, a, q) for t, a, q in self._recent_orders if now - t < max_age]
 
     def _serialize_positions(self, positions: dict[str, Position]) -> dict[str, float]:
@@ -1744,11 +1884,45 @@ class SafeBroker:
             if abs(persisted_positions[asset] - live_position_snapshot[asset]) > 1e-9
         }
 
+        pending_ids = {order.order_id for order in live_pending_orders}
+        resolved_replacement_gaps: dict[str, dict[str, Any]] = {}
+        unresolved_replacement_gaps: dict[str, dict[str, Any]] = {}
+        for original_id, gap in self._state.replacement_gaps.items():
+            replacement_id = gap.get("replacement_order_id")
+            replacement_observed = (
+                replacement_id in pending_ids
+                or gap.get("replacement_status") == OrderStatus.FILLED.value
+            )
+            target = (
+                resolved_replacement_gaps
+                if original_id not in pending_ids and replacement_observed
+                else unresolved_replacement_gaps
+            )
+            target[original_id] = deepcopy(gap)
+
+        effective_persisted_pending = list(persisted_pending_orders)
+        for gap in resolved_replacement_gaps.values():
+            original = gap.get("original")
+            if isinstance(original, dict):
+                original_fingerprint = self._pending_order_fingerprint(original)
+                effective_persisted_pending = [
+                    order
+                    for order in effective_persisted_pending
+                    if self._pending_order_fingerprint(order) != original_fingerprint
+                ]
+            if gap.get("replacement_status") == OrderStatus.FILLED.value:
+                replacement_fingerprint = self._pending_order_fingerprint(gap)
+                effective_persisted_pending = [
+                    order
+                    for order in effective_persisted_pending
+                    if self._pending_order_fingerprint(order) != replacement_fingerprint
+                ]
+
         live_pending_lookup = {
             self._pending_order_fingerprint(order): order for order in live_pending_snapshot
         }
         persisted_pending_lookup = {
-            self._pending_order_fingerprint(order): order for order in persisted_pending_orders
+            self._pending_order_fingerprint(order): order for order in effective_persisted_pending
         }
         missing_pending_orders = [
             persisted_pending_lookup[key]
@@ -1766,6 +1940,7 @@ class SafeBroker:
                 quantity_mismatches,
                 missing_pending_orders,
                 unexpected_pending_orders,
+                unresolved_replacement_gaps,
             )
         )
         return {
@@ -1780,6 +1955,8 @@ class SafeBroker:
             "live_pending_orders": live_pending_snapshot,
             "missing_pending_orders": missing_pending_orders,
             "unexpected_pending_orders": unexpected_pending_orders,
+            "resolved_replacement_gaps": resolved_replacement_gaps,
+            "unresolved_replacement_gaps": unresolved_replacement_gaps,
         }
 
     def _log_reconciliation_report(self, report: dict[str, Any]) -> None:
@@ -1799,6 +1976,10 @@ class SafeBroker:
             issues.append(f"missing_pending_orders={len(report['missing_pending_orders'])}")
         if report["unexpected_pending_orders"]:
             issues.append(f"unexpected_pending_orders={len(report['unexpected_pending_orders'])}")
+        if report["unresolved_replacement_gaps"]:
+            issues.append(
+                f"unresolved_replacement_gaps={len(report['unresolved_replacement_gaps'])}"
+            )
         logger.warning("SafeBroker reconciliation mismatch: %s", ", ".join(issues))
 
     async def preview_reconciliation_async(self) -> dict[str, Any]:
@@ -1853,6 +2034,8 @@ class SafeBroker:
             await self._broker.disconnect()
             raise
         self._last_reconciliation_report = report
+        for original_id in report["resolved_replacement_gaps"]:
+            self._state.replacement_gaps.pop(original_id, None)
         self._log_reconciliation_report(report)
         if report["clean"]:
             self.record_event("reconciliation_clean")
@@ -1870,6 +2053,7 @@ class SafeBroker:
 
         live_positions, live_pending_orders = await self._capture_runtime_snapshot_async()
         self._set_state_snapshot(live_positions, live_pending_orders)
+        self._save_state()
         self.record_event("broker_connected")
 
     async def disconnect(self) -> None:
