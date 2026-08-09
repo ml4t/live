@@ -8,6 +8,7 @@ import importlib
 import inspect
 import json
 import pkgutil
+import textwrap
 from dataclasses import MISSING, fields, is_dataclass
 from enum import Enum
 from importlib import metadata
@@ -15,9 +16,6 @@ from pathlib import Path
 from typing import Any
 
 import ml4t.live as live
-from ml4t.live.cli.main import build_parser
-from ml4t.live.persistence import STATE_SCHEMA_VERSION
-from ml4t.live.safety import RiskState
 
 EXPERIMENTAL_EXPORTS = {
     "CryptoFeed",
@@ -25,18 +23,6 @@ EXPERIMENTAL_EXPORTS = {
     "ExperimentalFeedError",
     "ExperimentalFeedWarning",
 }
-PORTABLE_STATE_FIELDS = (
-    "targets",
-    "children",
-    "order_by_child",
-    "processed_targets",
-    "reconciliations",
-    "position_rule_states",
-    "exit_idempotency",
-    "rule_exit_orders",
-    "rule_exit_filled",
-    "target_rule_filled",
-)
 
 
 def source_modules(source_root: Path) -> dict[str, Path]:
@@ -181,7 +167,11 @@ def symbol_record(
 
 
 def cli_surface() -> dict[str, Any]:
-    parser = build_parser()
+    try:
+        cli = importlib.import_module("ml4t.live.cli.main")
+    except ModuleNotFoundError:
+        return {}
+    parser = cli.build_parser()
     commands: dict[str, Any] = {}
     for action in parser._actions:
         choices = getattr(action, "choices", None)
@@ -213,6 +203,72 @@ def entry_point_surface() -> dict[str, str]:
         for entry in distribution.entry_points
         if entry.group == "console_scripts"
     }
+
+
+def returned_mapping_keys(value: Any) -> list[str]:
+    try:
+        tree = ast.parse(textwrap.dedent(inspect.getsource(value)))
+    except (OSError, TypeError):
+        return []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Return) and isinstance(node.value, ast.Dict):
+            keys = [key.value for key in node.value.keys if isinstance(key, ast.Constant)]
+            if keys:
+                return [str(key) for key in keys]
+    return []
+
+
+def persisted_schema_surface() -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    try:
+        safety = importlib.import_module("ml4t.live.safety")
+    except ModuleNotFoundError:
+        safety = None
+    try:
+        persistence = importlib.import_module("ml4t.live.persistence")
+    except ModuleNotFoundError:
+        persistence = None
+    try:
+        runtime = importlib.import_module("ml4t.live.runtime")
+    except ModuleNotFoundError:
+        runtime = None
+
+    risk_state = getattr(safety, "RiskState", None)
+    if risk_state is not None and is_dataclass(risk_state):
+        result["risk_state"] = {
+            "version": getattr(persistence, "STATE_SCHEMA_VERSION", "unversioned"),
+            "envelope_fields": (
+                ["schema_version", "generation", "payload", "checksum"]
+                if persistence is not None
+                else []
+            ),
+            "fields": [field.name for field in fields(risk_state)],
+        }
+
+    journal = getattr(persistence, "SecureAuditJournal", None)
+    if journal is not None:
+        result["audit_journal"] = {
+            "version": 1,
+            "record_fields": [
+                "schema_version",
+                "sequence",
+                "timestamp",
+                "event",
+                "payload",
+                "previous_hash",
+                "entry_hash",
+            ],
+            "head_fields": ["schema_version", "sequence", "head_hash", "checksum"],
+        }
+
+    runtime_owner = getattr(runtime, "LiveStrategyRuntime", None)
+    to_state = getattr(runtime_owner, "to_state", None)
+    if to_state is not None:
+        result["portable_strategy_state"] = {
+            "version": 1,
+            "fields": returned_mapping_keys(to_state),
+        }
+    return result
 
 
 def capture_surface(source_root: Path) -> dict[str, Any]:
@@ -251,7 +307,6 @@ def capture_surface(source_root: Path) -> dict[str, Any]:
     if missing_source_modules:
         mismatches.append({"runtime_modules_without_source": missing_source_modules})
 
-    risk_fields = [field.name for field in fields(RiskState)]
     return {
         "schema_version": 1,
         "distribution": {
@@ -263,27 +318,7 @@ def capture_surface(source_root: Path) -> dict[str, Any]:
         "symbols": [symbols[key] for key in sorted(symbols)],
         "cli": cli_surface(),
         "entry_points": entry_point_surface(),
-        "persisted_schemas": {
-            "risk_state": {
-                "version": STATE_SCHEMA_VERSION,
-                "envelope_fields": ["schema_version", "generation", "payload", "checksum"],
-                "fields": risk_fields,
-            },
-            "audit_journal": {
-                "version": 1,
-                "record_fields": [
-                    "schema_version",
-                    "sequence",
-                    "timestamp",
-                    "event",
-                    "payload",
-                    "previous_hash",
-                    "entry_hash",
-                ],
-                "head_fields": ["schema_version", "sequence", "head_hash", "checksum"],
-            },
-            "portable_strategy_state": {"version": 1, "fields": list(PORTABLE_STATE_FIELDS)},
-        },
+        "persisted_schemas": persisted_schema_surface(),
         "classification_rules": {
             "root_exports": "stable unless named in experimental_exports",
             "module_exports": "same classification as the root object when root-exported",
