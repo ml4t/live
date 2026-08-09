@@ -54,7 +54,12 @@ def qualify(artifacts_directory: Path, output_directory: Path) -> dict[str, Any]
     dependency_report["passed"] = not dependency_failures
     write_json(output_directory / "dependency-audit.json", dependency_report)
 
-    secret_result = scan_release(REPOSITORY_ROOT, artifacts_directory.iterdir(), output_directory)
+    artifacts = tuple(
+        path
+        for path in artifacts_directory.iterdir()
+        if path.suffix == ".whl" or path.name.endswith(".tar.gz")
+    )
+    secret_result = scan_release(REPOSITORY_ROOT, artifacts, output_directory)
     secret_report = {
         "schema_version": 1,
         "sources": secret_result.sources,
