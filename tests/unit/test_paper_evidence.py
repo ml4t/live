@@ -2,10 +2,15 @@ from __future__ import annotations
 
 import io
 import json
+import urllib.request
 import zipfile
 from datetime import UTC, datetime, timedelta
 
-from scripts.qualification.check_paper_evidence import find_fresh_paper_run
+from scripts.qualification.check_paper_evidence import (
+    _ArtifactRedirectHandler,
+    fetch_bytes,
+    find_fresh_paper_run,
+)
 from scripts.qualification.qualify_paper import EXERCISE_STEPS, RESTART_STEPS
 
 NOW = datetime(2026, 8, 8, 20, tzinfo=UTC)
@@ -109,6 +114,57 @@ def _downloader(payload: bytes = _archive()):
         return payload
 
     return download
+
+
+def test_artifact_download_uses_github_json_media_type(monkeypatch) -> None:
+    class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args) -> None:
+            return None
+
+        def read(self) -> bytes:
+            return b"artifact"
+
+    class Opener:
+        def open(self, request, *, timeout: int):
+            assert request.get_header("Accept") == "application/vnd.github+json"
+            assert timeout == 30
+            return Response()
+
+    def build_opener(handler):
+        assert isinstance(handler, _ArtifactRedirectHandler)
+        return Opener()
+
+    monkeypatch.setattr("urllib.request.build_opener", build_opener)
+
+    assert fetch_bytes("https://api.github.test/artifact.zip", "token") == b"artifact"
+
+
+def test_artifact_redirect_drops_github_credentials_on_host_change() -> None:
+    request = urllib.request.Request(
+        "https://api.github.com/repos/ml4t/live/actions/artifacts/42/zip",
+        headers={
+            "Accept": "application/vnd.github+json",
+            "Authorization": "Bearer token",
+            "X-GitHub-Api-Version": "2022-11-28",
+        },
+    )
+
+    redirected = _ArtifactRedirectHandler().redirect_request(
+        request,
+        None,
+        302,
+        "Found",
+        {},
+        "https://signed-results-receiver.example/artifact.zip",
+    )
+
+    assert redirected is not None
+    assert redirected.get_header("Authorization") is None
+    assert redirected.get_header("X-GitHub-Api-Version") is None
+    assert redirected.get_header("Accept") is None
 
 
 def test_exact_fresh_successful_paper_evidence_passes() -> None:

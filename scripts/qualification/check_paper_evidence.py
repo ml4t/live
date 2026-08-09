@@ -11,8 +11,9 @@ import urllib.request
 import zipfile
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
+from http.client import HTTPMessage
 from pathlib import Path
-from typing import Any
+from typing import IO, Any
 
 try:
     from scripts.qualification.qualify_paper import PaperQualificationError, validate_bundle
@@ -20,6 +21,25 @@ except ModuleNotFoundError:
     from qualify_paper import PaperQualificationError, validate_bundle
 
 GITHUB_API = "https://api.github.com"
+
+
+class _ArtifactRedirectHandler(urllib.request.HTTPRedirectHandler):
+    def redirect_request(
+        self,
+        req: urllib.request.Request,
+        fp: IO[bytes],
+        code: int,
+        msg: str,
+        headers: HTTPMessage,
+        newurl: str,
+    ) -> urllib.request.Request | None:
+        redirected = super().redirect_request(req, fp, code, msg, headers, newurl)
+        if redirected is not None and (
+            urllib.parse.urlsplit(req.full_url).netloc != urllib.parse.urlsplit(newurl).netloc
+        ):
+            for header in ("Authorization", "X-GitHub-Api-Version", "Accept"):
+                redirected.remove_header(header)
+        return redirected
 
 
 def _parse_time(value: str) -> datetime:
@@ -43,12 +63,13 @@ def fetch_bytes(url: str, token: str) -> bytes:
     request = urllib.request.Request(
         url,
         headers={
-            "Accept": "application/octet-stream",
+            "Accept": "application/vnd.github+json",
             "Authorization": f"Bearer {token}",
             "X-GitHub-Api-Version": "2022-11-28",
         },
     )
-    with urllib.request.urlopen(request, timeout=30) as response:
+    opener = urllib.request.build_opener(_ArtifactRedirectHandler())
+    with opener.open(request, timeout=30) as response:
         return response.read()
 
 
