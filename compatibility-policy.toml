@@ -1,0 +1,32 @@
+schema-version = 1
+package = "ml4t-live"
+baseline = "stable-api-baseline.json"
+versioning = "Semantic Versioning 2.0.0"
+supported-python = ["3.12", "3.13", "3.14"]
+stable-surface = "Every inventory symbol classified stable, stable CLI command and argument, console entry point, and persisted schema"
+
+[change-control]
+compatible-additions-require-baseline-review = true
+installed-artifact-required = true
+source-checkout-result-accepted = false
+migration-record = "docs/user-guide/migration.md"
+
+[deprecation]
+minimum-prior-minor-releases = 1
+warning-category = "DeprecationWarning"
+migration-required = true
+removal-requires-major-release = true
+
+[urgent-safety-exception]
+allowed = true
+conditions = [
+    "The existing behavior presents a security or financial-safety risk",
+    "Release notes identify the incompatible behavior",
+    "Migration instructions identify a safe replacement",
+    "The compatibility review records why the normal interval was unsafe",
+]
+
+[first-stable-release]
+published-beta-baseline = "0.1.0b3"
+qualified-beta-candidate = "0.1.0b4"
+all-beta-incompatibilities-require-migration = true
