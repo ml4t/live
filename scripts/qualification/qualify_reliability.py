@@ -27,6 +27,7 @@ RELIABILITY_TESTS = (
     Path("tests/unit/test_order_contract.py"),
     Path("tests/unit/test_strategy_runtime.py"),
     Path("tests/unit/test_broker_contract.py"),
+    Path("tests/unit/test_safe_broker.py"),
     Path("tests/integration/test_execution_modes.py"),
 )
 PROFILES = (
