@@ -4,7 +4,7 @@
 [![PyPI](https://img.shields.io/pypi/v/ml4t-live)](https://pypi.org/project/ml4t-live/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-Live trading platform with zero-code migration from backtest to production.
+Live trading runtime for causal ML4T strategies.
 
 ## Part of the ML4T Library Ecosystem
 
@@ -18,7 +18,7 @@ Together they cover data infrastructure, feature engineering, modeling, signal e
 
 Deploying a backtested strategy to live markets requires careful handling of async broker connections, risk limits, and testing infrastructure. ml4t-live provides:
 
-- The same Strategy class used in ml4t-backtest works unchanged in production
+- Strategy portability under the shared lifecycle version 1 contract
 - Two broker integrations: Interactive Brokers (TWS/Gateway) and Alpaca (stocks + crypto)
 - Three beta-supported feed adapters for Alpaca, IB, and OKX, plus bar aggregation
 - Explicit opt-in experimental adapters for generic CCXT and DataBento workflows
@@ -53,7 +53,7 @@ from ml4t.live.brokers.alpaca import AlpacaBroker
 from ml4t.live.feeds.alpaca_feed import AlpacaDataFeed
 import asyncio
 
-# Same strategy class from backtesting
+# A lifecycle-v1 strategy that uses only portable callbacks and broker operations
 class MyStrategy(Strategy):
     def on_data(self, timestamp, data, context, broker):
         if not broker.get_position('SPY'):
@@ -276,16 +276,18 @@ The default implementation uses a safe cancel-and-resubmit flow across supported
 3. **Live Micro** (1-2 weeks): Small positions ($100-500)
 4. **Live Small** (ongoing): Gradual size increase
 
-## Strategy Compatibility
+## Strategy Portability
 
-The same Strategy class works in both environments:
+A `Strategy` subclass can run in both environments when it satisfies lifecycle version 1 and uses
+only the portable broker surface. Portability covers callback order and canonical strategy intent.
+It does not make venue fills, latency, data subscriptions, risk decisions, or account state equal.
 
 ```python
 from ml4t.backtest import Strategy
 
 class MyStrategy(Strategy):
     def on_data(self, timestamp, data, context, broker):
-        # This code runs identically in backtest and live
+        # Portable decision logic; execution outcomes remain runtime-specific.
         pass
 
 # Backtest
@@ -297,6 +299,9 @@ from ml4t.live import LiveEngine
 await LiveEngine(MyStrategy(), safe_broker, live_feed).run()
 ```
 
+See the [portability contract](docs/user-guide/backtest-to-live.md) and
+[migration guide](docs/user-guide/migration.md) before moving an existing strategy.
+
 ## Documentation
 
 - [Installation](docs/getting-started/installation.md) - setup instructions
@@ -304,6 +309,15 @@ await LiveEngine(MyStrategy(), safe_broker, live_feed).run()
 - [Brokers](docs/user-guide/brokers.md) - IB and Alpaca setup
 - [Data Feeds](docs/user-guide/feeds.md) - supported and experimental feed contracts
 - [Risk Management](docs/user-guide/risk.md) - LiveRiskConfig and SafeBroker
+- [Candidate Qualification](docs/qualification.md) - validate an exact candidate without release
+
+## Beta Support Boundary
+
+The beta package supports Linux with Python 3.12, 3.13, and 3.14. CI, wheel, and source
+distribution qualification cover those interpreter versions. Windows, macOS, and Python 3.15 are
+not part of this beta contract. IB and Alpaca broker adapters and the Alpaca, IB, and OKX feeds are
+supported only within the documented capabilities, reconciliation, causal-event, overload, and
+paper-account boundaries. DataBento and generic CCXT remain experimental.
 
 ## Technical Characteristics
 

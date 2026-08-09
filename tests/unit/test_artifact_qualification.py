@@ -19,6 +19,7 @@ from scripts.qualification.qualify_artifacts import (
     normalized_sdist_manifest,
     normalized_wheel_manifest,
     qualify_install_profiles,
+    run_installed_examples,
     validate_metadata,
 )
 from scripts.qualification.scan_release_secrets import scan_payloads
@@ -129,3 +130,34 @@ def test_install_matrix_continues_after_profile_failure(
     assert len(results) == 6
     assert not results[0].passed
     assert all(result.passed for result in results[1:])
+
+
+def test_installed_example_runner_requires_each_expected_output(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    python = tmp_path / "python"
+    python.touch()
+    seen: list[str] = []
+
+    def fake_run(command, *, cwd, environment=None, expected_returncode=0):
+        name = Path(command[-1]).name
+        seen.append(name)
+        output = {
+            "risk_guard_demo.py": (
+                "fresh_data_order: accepted\nstale_data_block: rejected\nkill_switch_active: True\n"
+            ),
+            "shadow_mode_demo.py": "Starting shadow mode demo\nFinished shadow mode demo\n",
+            "startup_reconciliation_demo.py": (
+                'Startup reconciliation report:\n{"clean": false}\n'
+            ),
+        }[name]
+        return type("Result", (), {"stdout": output})()
+
+    monkeypatch.setattr(qualify_artifacts, "_run", fake_run)
+    run_installed_examples(python, tmp_path / "profile")
+
+    assert seen == [
+        "risk_guard_demo.py",
+        "shadow_mode_demo.py",
+        "startup_reconciliation_demo.py",
+    ]

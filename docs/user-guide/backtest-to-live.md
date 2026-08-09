@@ -1,13 +1,14 @@
 # Backtest to Live
 
-The central promise of `ml4t-live` is that you do not rewrite strategy logic for deployment. You keep
-the same `Strategy` class and move it into a live runtime with broker, feed, and safety layers around it.
+`ml4t-backtest` and `ml4t-live` implement lifecycle version 1 from `ml4t-specs`. A strategy is
+portable when its callback trace, information boundary, canonical intent, execution policy, and
+position-rule state satisfy that contract in both runtimes.
 
 ## What Stays The Same
 
-- your `Strategy` subclass
-- the synchronous `on_data(timestamp, data, context, broker)` interface
-- your signal logic, sizing logic, and state handling inside the strategy
+- the `Strategy` subclass when it uses only portable callbacks and broker operations
+- `on_start`, causal `on_prepare`, `on_data`, and `on_end` callback semantics
+- `CanonicalTargetIntent` decisions and versioned position-rule definitions
 
 ## What Changes
 
@@ -17,16 +18,17 @@ the same `Strategy` class and move it into a live runtime with broker, feed, and
 | historical data feed | broker-connected or replay `DataFeedProtocol` |
 | simulated broker/execution | async broker wrapped by `SafeBroker` |
 | backtest risk assumptions | explicit `LiveRiskConfig` limits |
+| recorded execution policy | venue capabilities and live execution policy |
 | offline validation | shadow mode, paper trading, staged live rollout |
 
 ## Migration Pattern
 
-1. Validate the strategy in `ml4t-backtest`.
-2. Pick the broker and feed combination that matches your market.
-3. Wrap the broker in `SafeBroker`.
-4. Start in `shadow_mode=True`.
-5. Promote to paper trading only after signal, inventory, and order-flow checks pass.
-6. Go live with conservative limits and an explicit rollback plan.
+1. Validate the strategy in `ml4t-backtest` against lifecycle version 1.
+2. Compare callback and canonical-intent traces on one causal tape.
+3. Pick the broker and feed combination that matches the required capabilities.
+4. Wrap the broker in `SafeBroker` and start in `shadow_mode=True`.
+5. Promote to paper trading only after signal, intent, inventory, and order-flow checks pass.
+6. Go live only after separate operational qualification with conservative limits.
 
 ## Minimal Port
 
@@ -39,31 +41,45 @@ await engine.connect()
 await engine.run()
 ```
 
-The important part is that `strategy` remains the same object you already validated in research.
+The strategy class may remain the same. Verify callback traces and canonical intents on a shared
+causal tape. Equal signals alone are insufficient because two runtimes can observe different phases,
+construct different orders, or apply different position rules after producing the same signal label.
 
-## Where Most Divergence Comes From
+## Portability And Outcome Parity
 
-Technical divergence usually comes from infrastructure, not from the strategy itself:
+Lifecycle portability means both engines invoke the same versioned callbacks with the information
+allowed in each phase. Canonical-intent parity means `decision_time`, `information_cutoff`, effective
+session and phase, target units, rounding, residual policy, reason, and position-rule policy match.
 
-- different bar construction between backtest and live
+Outcome parity is narrower. Compare outcomes only when execution policy, fees, spread, slippage,
+liquidity, bar-path policy, venue capabilities, and starting positions are also equivalent. Live
+safety may reduce or reject a portable intent. It must not silently change its meaning.
+
+## Where Divergence Comes From
+
+Technical divergence can arise from:
+
+- different bar completion or event timing
 - stale or mismatched data fields
-- broker inventory that does not match the simulated portfolio
-- order semantics that differ between the simulator and the venue
-- safety rules applied in one mode but not the other
+- broker inventory that differs from the simulated portfolio
+- order semantics or venue capabilities that differ from the execution policy
+- safety rules applied in one runtime but not represented in the comparison
+- different lifecycle, dependency, or position-rule versions
 
-That is why `ml4t-live` separates the strategy from the runtime layers and makes the rollout policy
-explicit in `LiveRiskConfig`.
+`ml4t-live` separates portable decisions from feed, execution, safety, and operator state. A parity
+failure can therefore identify the first boundary whose trace differs.
 
 ## Practical Rollout Pattern
 
-| Stage | Goal | Typical checks |
+| Stage | Goal | Required checks |
 | --- | --- | --- |
-| Shadow mode | Verify parity without market risk | signals, positions, kill switch, restart behavior |
-| Paper trading | Verify integration with broker APIs | order lifecycle, reconciliation, timestamps |
-| Small live size | Verify operational readiness | slippage, latency, monitoring, manual overrides |
+| Shadow mode | Verify the live runtime without venue orders | callbacks, intents, positions, restart behavior |
+| Paper trading | Verify broker and feed integration | capabilities, order lifecycle, reconciliation, timestamps |
+| Small live size | Verify operational controls | slippage, latency, monitoring, manual overrides |
 
 ## Related Pages
 
+- [Lifecycle Migration](migration.md)
 - [Quickstart](../getting-started/quickstart.md)
 - [Brokers](brokers.md)
 - [Data Feeds](feeds.md)
@@ -72,11 +88,11 @@ explicit in `LiveRiskConfig`.
 
 ## See It In The Book
 
-The most relevant book materials for this workflow are:
+The maintained chapter material uses both engine dispatch paths and compares lifecycle plus
+canonical intent:
 
-- Chapter 16 parity notebooks, especially `code/16_strategy_simulation/06_framework_parity.py`
-- Chapter 25.1 and `code/25_live_trading/unified_framework_demo.py`
-- Chapter 25.6 and `code/25_live_trading/pipeline_verification.py`
-- Chapter 25.7 and `code/25_live_trading/safety_risk_demo.py`
+- Chapter 25.1 and `code/25_live_trading/01_unified_framework_demo.py`
+- Chapter 25.6 and `code/25_live_trading/08_pipeline_verification.py`
+- Chapter 25.7 and `code/25_live_trading/10_safety_risk_demo.py`
 
 Use the [Book Guide](../book-guide/index.md) for the broader chapter map.

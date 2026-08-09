@@ -5,6 +5,10 @@
 - `IBBroker` for Interactive Brokers
 - `AlpacaBroker` for Alpaca stocks and crypto
 
+Both are beta-supported for the documented paper workflows and adapter contract. Support does not
+mean that every order type or account feature is portable. A requested behavior must appear in the
+adapter's declared execution capabilities before the runtime can use it.
+
 ## Choosing A Broker
 
 | Broker | Best for | Notes |
@@ -92,6 +96,21 @@ When `side` is omitted, quantity is signed: positive means buy and negative mean
 signed quantities, invalid price combinations, and unsupported order types are rejected before the
 broker SDK is called.
 
+`CanonicalOrderRequest` performs that normalization once. The accepted side and magnitude then
+remain unchanged through safety checks and adapter translation. Requests that fail validation do
+not mutate rate history, counters, journals, virtual positions, or venue state.
+
+## Capabilities And Reducing-Risk Orders
+
+IB and Alpaca declare the order behaviors their adapters implement. Unsupported opening-auction,
+stop, trailing, contingent, or other behavior fails before submission. `SafeBroker` treats an order
+as reducing-risk only when the signed effect reduces an existing position without crossing through
+zero. A sell from a flat account or a reversal is not exempt from normal exposure controls.
+
+Cancel-and-resubmit replacement may leave an accepted cancellation without a replacement. That
+condition is retained as a replacement gap and must be resolved through reconciliation. The runtime
+does not report the original order as safely replaced.
+
 ## Strategy-Side Calls
 
 Inside `Strategy.on_data(...)`, the broker object is synchronous:
@@ -110,7 +129,10 @@ await broker.disconnect()
 
 ## Error Handling
 
-Broker connection and order failures surface as standard Python exceptions, broker-SDK exceptions, or `RiskLimitError` when wrapped by `SafeBroker`.
+Broker connection and order failures surface as standard Python exceptions, broker-SDK exceptions,
+or `RiskLimitError` when wrapped by `SafeBroker`. An invalid broker snapshot blocks reconciliation
+and startup. An accepted order followed by a persistence failure raises
+`AcceptedOrderPersistenceError`; do not retry it until venue reconciliation establishes its state.
 
 ```python
 from ml4t.live import RiskLimitError

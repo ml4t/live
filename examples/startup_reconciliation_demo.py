@@ -20,16 +20,10 @@ from __future__ import annotations
 
 import asyncio
 import json
-import sys
 import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
-
-ROOT = Path(__file__).resolve().parents[1]
-SRC = ROOT / "src"
-if SRC.exists():
-    sys.path.insert(0, str(SRC))
 
 from ml4t.backtest.types import Order, OrderSide, OrderStatus, OrderType, Position
 

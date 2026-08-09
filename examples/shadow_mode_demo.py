@@ -22,17 +22,12 @@ from __future__ import annotations
 
 import asyncio
 import math
-import sys
+import os
 import tempfile
 import time
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-
-ROOT = Path(__file__).resolve().parents[1]
-SRC = ROOT / "src"
-if SRC.exists():
-    sys.path.insert(0, str(SRC))
 
 from ml4t.backtest import Strategy
 from ml4t.backtest.types import OrderSide, Position
@@ -40,7 +35,8 @@ from ml4t.backtest.types import OrderSide, Position
 from ml4t.live import LiveEngine, LiveRiskConfig, SafeBroker
 
 SYMBOL = "DEMO"
-DURATION_SECONDS = 65
+DURATION_SECONDS = int(os.environ.get("ML4T_EXAMPLE_DURATION_SECONDS", "65"))
+TICK_SECONDS = float(os.environ.get("ML4T_EXAMPLE_TICK_SECONDS", "1"))
 
 
 class DemoBroker:
@@ -119,7 +115,7 @@ class SyntheticBarFeed:
         low = close - 0.40
         volume = 1_000 + (self._index * 25)
         self._index += 1
-        await asyncio.sleep(1)
+        await asyncio.sleep(TICK_SECONDS)
         return (
             timestamp,
             {
@@ -198,38 +194,41 @@ async def heartbeat(safe_broker: SafeBroker) -> None:
 
 
 async def main() -> int:
-    state_file = Path(tempfile.gettempdir()) / "ml4t-live-shadow-demo-state.json"
-    safe_broker = SafeBroker(
-        DemoBroker(),
-        LiveRiskConfig(
-            shadow_mode=True,
-            max_position_value=5_000.0,
-            max_order_value=2_000.0,
-            max_positions=1,
-            state_file=str(state_file),
-        ),
-    )
-    engine = LiveEngine(ShadowMomentumStrategy(), safe_broker, SyntheticBarFeed(DURATION_SECONDS))
-
-    print("Starting shadow mode demo with a synthetic feed.")
-    await engine.connect()
-    heartbeat_task = asyncio.create_task(heartbeat(safe_broker))
-
-    try:
-        await engine.run()
-    finally:
-        heartbeat_task.cancel()
-        await asyncio.gather(heartbeat_task, return_exceptions=True)
-        await engine.stop()
-
-    positions = safe_broker.positions
-    if positions:
-        summary = ", ".join(
-            f"{asset}:{position.quantity:g}" for asset, position in sorted(positions.items())
+    with tempfile.TemporaryDirectory(prefix="ml4t-live-shadow-demo-") as directory:
+        state_file = Path(directory) / "state.json"
+        safe_broker = SafeBroker(
+            DemoBroker(),
+            LiveRiskConfig(
+                shadow_mode=True,
+                max_position_value=5_000.0,
+                max_order_value=2_000.0,
+                max_positions=1,
+                state_file=str(state_file),
+            ),
         )
-    else:
-        summary = "flat"
-    print(f"Finished shadow mode demo. final_positions={summary}")
+        engine = LiveEngine(
+            ShadowMomentumStrategy(), safe_broker, SyntheticBarFeed(DURATION_SECONDS)
+        )
+
+        print("Starting shadow mode demo with a synthetic feed.")
+        await engine.connect()
+        heartbeat_task = asyncio.create_task(heartbeat(safe_broker))
+
+        try:
+            await engine.run()
+        finally:
+            heartbeat_task.cancel()
+            await asyncio.gather(heartbeat_task, return_exceptions=True)
+            await engine.stop()
+
+        positions = safe_broker.positions
+        if positions:
+            summary = ", ".join(
+                f"{asset}:{position.quantity:g}" for asset, position in sorted(positions.items())
+            )
+        else:
+            summary = "flat"
+        print(f"Finished shadow mode demo. final_positions={summary}")
     return 0
 
 

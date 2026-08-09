@@ -8,6 +8,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import subprocess
 import tarfile
 import tempfile
@@ -23,8 +24,10 @@ from packaging.specifiers import SpecifierSet
 from packaging.version import Version
 
 try:
+    from scripts.qualification.check_public_claims import DETERMINISTIC_EXAMPLES
     from scripts.qualification.scan_release_secrets import scan_release
 except ModuleNotFoundError:
+    from check_public_claims import DETERMINISTIC_EXAMPLES
     from scan_release_secrets import scan_release
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
@@ -280,6 +283,33 @@ def _profile_cli(venv: Path) -> Path:
     return venv / ("Scripts/ml4t-live.exe" if os.name == "nt" else "bin/ml4t-live")
 
 
+def run_installed_examples(python: Path, root: Path) -> None:
+    """Run every credential-free maintained example against an installed wheel."""
+    example_root = root / "examples"
+    example_root.mkdir(parents=True)
+    expected_output = {
+        "risk_guard_demo.py": (
+            "fresh_data_order: accepted",
+            "stale_data_block:",
+            "kill_switch_active: True",
+        ),
+        "shadow_mode_demo.py": ("Starting shadow mode demo", "Finished shadow mode demo"),
+        "startup_reconciliation_demo.py": ("Startup reconciliation report:", '"clean": false'),
+    }
+    environment = {
+        "ML4T_EXAMPLE_DURATION_SECONDS": "8",
+        "ML4T_EXAMPLE_TICK_SECONDS": "0.001",
+    }
+    for name in sorted(DETERMINISTIC_EXAMPLES):
+        source = REPOSITORY_ROOT / "examples" / name
+        destination = example_root / name
+        shutil.copy2(source, destination)
+        result = _run((str(python), "-I", str(destination)), cwd=root, environment=environment)
+        missing = [marker for marker in expected_output[name] if marker not in result.stdout]
+        if missing:
+            raise QualificationError(f"installed example {name} omitted output markers: {missing}")
+
+
 def install_profile(artifact: Path, python_version: str, expected_version: str, root: Path) -> None:
     venv = root / "venv"
     _run(("uv", "venv", "--python", python_version, str(venv)), cwd=root)
@@ -312,6 +342,8 @@ def install_profile(artifact: Path, python_version: str, expected_version: str, 
     )
     _run((str(_profile_cli(venv)), "--version"), cwd=root)
     _run((str(python), "-I", str(INSTALLED_SMOKE)), cwd=root)
+    if artifact.suffix == ".whl" and python_version == SUPPORTED_PYTHONS[0]:
+        run_installed_examples(python, root)
 
     consumer = root / "consumer.py"
     consumer.write_text(
@@ -474,6 +506,7 @@ def main() -> int:
             "supported_python": list(SUPPORTED_PYTHONS),
             "rejected_python": REJECTED_PYTHON,
             "profiles": [asdict(profile) for profile in profiles],
+            "installed_wheel_examples": sorted(DETERMINISTIC_EXAMPLES),
             "secret_scan": {
                 "sources": secret_result.sources,
                 "bytes_scanned": secret_result.bytes_scanned,

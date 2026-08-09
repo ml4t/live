@@ -114,6 +114,22 @@ and cancellation paths.
 
 These states do not replace external process monitoring or deployment supervision.
 
+## Failure Boundaries
+
+Startup rollback releases each acquired resource in reverse order. If broker connection succeeds
+and feed startup fails, the engine stops the attempted feed and disconnects the broker before it
+returns the error. A strategy startup error also runs finalization once and releases both resources.
+
+A recovery gap, conflicting replay, older sequence, or event-time reversal raises
+`FeedContinuityError` before another strategy callback. Queue overload raises `FeedOverflowError`,
+discards pending work, and records the rejected event and queue state. Neither condition permits
+silent data loss or automatic continuation.
+
+An audit failure blocks the broker call when `fail_on_journal_error=True`. An accepted order that
+cannot be persisted raises `AcceptedOrderPersistenceError` and requires reconciliation instead of
+automatic retry. A cleanup failure raises `RuntimeCleanupError` and leaves the runtime failed until
+the operator corrects the provider error and retries cleanup.
+
 ## Execution Journal
 
 `SafeBroker` now writes a JSONL execution journal next to the risk-state file by default. It records:

@@ -104,12 +104,15 @@ nav:
     - Quickstart: getting-started/quickstart.md
   - User Guide:
     - Backtest to Live: user-guide/backtest-to-live.md
+    - Lifecycle Migration: user-guide/migration.md
     - Risk Controls: user-guide/risk.md
     - Brokers: user-guide/brokers.md
     - Data Feeds: user-guide/feeds.md
     - CLI: user-guide/cli.md
     - Examples: user-guide/examples.md
     - Operator Guide: user-guide/operator-guide.md
+  - Candidate Qualification: qualification.md
+  - Claim Evidence: claim-evidence.md
   - API Reference:
     - api/index.md
   - Book Guide: book-guide/index.md

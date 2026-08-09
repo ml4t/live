@@ -1,16 +1,16 @@
 # ML4T Live
 
-Run the same `Strategy` class you validated in `ml4t-backtest` against real brokers and live market
-data, with `SafeBroker` risk controls layered on top.
+Run a lifecycle-v1 `Strategy` against real brokers and live market data, with `SafeBroker` risk
+controls layered on top.
 
 `ml4t-live` is the deployment layer in the ML4T stack. It sits after research and backtesting, where
 the main problem is no longer "does this idea work?" but "can I run it safely against a broker without
-rewriting the strategy or losing track of operational risk?" The library is built for staged rollout:
+preserving its portable decisions and controlling operational risk?" The library is built for staged rollout:
 shadow mode first, then paper trading, then small live size under explicit limits.
 
 <div class="grid cards" markdown>
 
--   :material-swap-horizontal:{ .lg .middle } __Same Strategy, Live Execution__
+-   :material-swap-horizontal:{ .lg .middle } __Versioned Strategy Portability__
 
     ---
 
@@ -39,7 +39,7 @@ shadow mode first, then paper trading, then small live size under explicit limit
     ---
 
     The book develops strategies in research and backtest form.
-    This library runs them live with the same surface and explicit deployment controls.
+    This library runs portable lifecycle and intent logic with explicit deployment controls.
     [:octicons-arrow-right-24: Book Guide](book-guide/index.md)
 
 </div>
@@ -71,10 +71,11 @@ next layer.
 
 ## Strategy Portability
 
-The headline feature is strategy portability. The strategy class stays the same. The engine and
-infrastructure change.
+Strategy portability is a versioned contract. The strategy class can stay the same when it uses
+only the shared lifecycle, information, intent, and broker boundaries. The engine and infrastructure
+still change.
 
-### The Strategy Code Stays The Same
+### Portable Strategy Logic
 
 ```python
 from ml4t.backtest import Strategy
@@ -114,9 +115,9 @@ await engine.connect()
 await engine.run()
 ```
 
-The point is not that backtest and live are identical systems. They are not. The point is that your
-decision logic survives the engine swap intact, so any later mismatch is easier to attribute to data,
-execution, or operations instead of to a second implementation of the strategy.
+Backtest and live are different systems. A portable strategy uses the same versioned callback and
+canonical-intent contract in both. Outcome comparisons must still account for market data,
+execution policy, venue capabilities, safety decisions, latency, and account state.
 
 ## Staged Rollout
 

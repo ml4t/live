@@ -21,16 +21,10 @@ Runtime:
 from __future__ import annotations
 
 import asyncio
-import sys
 import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
-
-ROOT = Path(__file__).resolve().parents[1]
-SRC = ROOT / "src"
-if SRC.exists():
-    sys.path.insert(0, str(SRC))
 
 from ml4t.backtest.types import Order, OrderSide, OrderStatus, OrderType, Position
 
@@ -121,23 +115,23 @@ async def main() -> int:
         )
         await safe_broker.connect()
 
-        safe_broker._record_market_data(datetime.now(UTC), {"DEMO": {"close": 100.0}}, {})
+        safe_broker.record_market_snapshot("DEMO", 100.0)
         order = await safe_broker.submit_order_async("DEMO", 10)
         print(f"fresh_data_order: accepted order_type={order.order_type.value}")
 
-        await asyncio.sleep(1.5)
+        await asyncio.sleep(1.1)
         try:
             await safe_broker.submit_order_async("DEMO", 1)
         except RiskLimitError as exc:
             print(f"stale_data_block: {exc}")
 
-        safe_broker._record_market_data(datetime.now(UTC), {"DEMO": {"close": 101.0}}, {})
+        safe_broker.record_market_snapshot("DEMO", 101.0)
         raw_broker.account_value = 99_000.0
         try:
             await safe_broker.submit_order_async("DEMO", 1)
         except RiskLimitError as exc:
             print(f"daily_loss_block: {exc}")
-            print(f"kill_switch_active: {safe_broker._state.kill_switch_activated}")
+            print(f"kill_switch_active: {safe_broker.config.kill_switch_enabled}")
 
         await safe_broker.disconnect()
     return 0

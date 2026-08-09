@@ -2,6 +2,10 @@
 
 The examples are meant to answer practical operator and integration questions quickly. They are short, bounded runs, not full applications.
 
+The credential-free examples are deterministic release inputs. Artifact qualification copies them
+outside the checkout and runs them with the installed wheel. The remaining examples require a
+network service, credentials, or both and run only under explicit external qualification.
+
 ## Fastest Start
 
 If you want one example that works without credentials, start here:

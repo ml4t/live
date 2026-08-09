@@ -20,7 +20,7 @@ STAGE_GROUPS = {
     "artifact": frozenset({"artifact-qualification"}),
     "deterministic": frozenset({"deterministic-tests-and-branch-coverage"}),
     "stress": frozenset({"stress"}),
-    "documentation": frozenset({"documentation"}),
+    "documentation": frozenset({"public-claims", "documentation"}),
     "distribution": frozenset({"build", "distribution-metadata"}),
 }
 
@@ -134,6 +134,10 @@ def qualification_stages(temporary_directory: Path, repetitions: int = 5) -> lis
         )
     stages.extend(
         (
+            Stage(
+                "public-claims",
+                ("uv", "run", "python", "scripts/qualification/check_public_claims.py"),
+            ),
             Stage(
                 "documentation",
                 (
