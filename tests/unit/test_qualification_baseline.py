@@ -74,6 +74,24 @@ def test_repository_record_is_clean_remote_comparable_and_redacted(tmp_path: Pat
     assert record["input_sha256"]["pyproject.toml"]
 
 
+def test_repository_record_uses_explicit_worktree_for_bare_config(tmp_path: Path) -> None:
+    repository_record = cast(Callable[[str, Path], dict[str, Any]], NAMESPACE["repository_record"])
+    git(tmp_path, "init", "-b", "main")
+    git(tmp_path, "config", "user.name", "Qualification Test")
+    git(tmp_path, "config", "user.email", "qualification@example.test")
+    tracked = tmp_path / "pyproject.toml"
+    tracked.write_text("[project]\nname = 'fixture'\n")
+    git(tmp_path, "add", "pyproject.toml")
+    git(tmp_path, "commit", "-m", "fixture")
+    git(tmp_path, "config", "core.bare", "true")
+
+    record = repository_record("fixture", tmp_path)
+
+    assert record["branch"] == "main"
+    assert record["status"] == []
+    assert record["head"] == git(tmp_path, "--work-tree", str(tmp_path), "rev-parse", "HEAD")
+
+
 def test_stable_identity_ignores_capture_timestamp() -> None:
     stable_identity = cast(Callable[[dict[str, Any]], dict[str, Any]], NAMESPACE["stable_identity"])
     identity = {

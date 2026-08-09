@@ -48,34 +48,54 @@ def redact_remote(remote: str) -> str:
     return re.sub(r"(https?://)[^/@]+@", r"\1[redacted]@", remote)
 
 
+def run_git(path: Path, *arguments: str, allow_failure: bool = False) -> str:
+    git_directory = path / ".git"
+    if git_directory.is_dir():
+        command = [
+            "git",
+            f"--git-dir={git_directory.resolve()}",
+            f"--work-tree={path.resolve()}",
+            *arguments,
+        ]
+        return run(command, allow_failure=allow_failure)
+    return run(["git", *arguments], path, allow_failure=allow_failure)
+
+
 def repository_record(name: str, path: Path) -> dict[str, Any]:
-    if not run(["git", "rev-parse", "--git-dir"], path, allow_failure=True):
+    if not run_git(path, "rev-parse", "--git-dir", allow_failure=True):
         raise ValueError(f"Repository {name!r} has no .git directory: {path}")
-    upstream = run(
-        ["git", "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"],
+    upstream = run_git(
         path,
+        "rev-parse",
+        "--abbrev-ref",
+        "--symbolic-full-name",
+        "@{upstream}",
         allow_failure=True,
     )
-    remote_default = run(
-        ["git", "symbolic-ref", "--short", "refs/remotes/origin/HEAD"],
+    remote_default = run_git(
         path,
+        "symbolic-ref",
+        "--short",
+        "refs/remotes/origin/HEAD",
         allow_failure=True,
     )
-    if not remote_default and run(
-        ["git", "show-ref", "--verify", "refs/remotes/origin/main"],
+    if not remote_default and run_git(
         path,
+        "show-ref",
+        "--verify",
+        "refs/remotes/origin/main",
         allow_failure=True,
     ):
         remote_default = "origin/main"
     comparison_ref = upstream or remote_default
     divergence = None
     if comparison_ref:
-        divergence = run(
-            ["git", "rev-list", "--left-right", "--count", f"HEAD...{comparison_ref}"], path
+        divergence = run_git(
+            path, "rev-list", "--left-right", "--count", f"HEAD...{comparison_ref}"
         )
     remotes = {
-        remote: redact_remote(run(["git", "remote", "get-url", remote], path))
-        for remote in run(["git", "remote"], path).splitlines()
+        remote: redact_remote(run_git(path, "remote", "get-url", remote))
+        for remote in run_git(path, "remote").splitlines()
     }
     tracked_inputs = {}
     for filename in ("pyproject.toml", "uv.lock", ".pre-commit-config.yaml"):
@@ -85,12 +105,12 @@ def repository_record(name: str, path: Path) -> dict[str, Any]:
     return {
         "name": name,
         "path": str(path.resolve()),
-        "branch": run(["git", "branch", "--show-current"], path),
-        "head": run(["git", "rev-parse", "HEAD"], path),
-        "describe": run(["git", "describe", "--tags", "--always", "--dirty"], path),
-        "tags": run(["git", "tag", "--list"], path).splitlines(),
-        "head_tags": run(["git", "tag", "--points-at", "HEAD"], path).splitlines(),
-        "status": run(["git", "status", "--porcelain=v1"], path).splitlines(),
+        "branch": run_git(path, "branch", "--show-current"),
+        "head": run_git(path, "rev-parse", "HEAD"),
+        "describe": run_git(path, "describe", "--tags", "--always", "--dirty"),
+        "tags": run_git(path, "tag", "--list").splitlines(),
+        "head_tags": run_git(path, "tag", "--points-at", "HEAD").splitlines(),
+        "status": run_git(path, "status", "--porcelain=v1").splitlines(),
         "remotes": remotes,
         "upstream": upstream or None,
         "comparison_ref": comparison_ref or None,
