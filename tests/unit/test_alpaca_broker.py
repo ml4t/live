@@ -195,16 +195,17 @@ class TestAlpacaBrokerSetup:
         assert broker._positions["GOOGL"].quantity == 50.0
 
     @pytest.mark.asyncio
-    async def test_sync_positions_accepts_zero_current_price(self):
+    async def test_sync_positions_accepts_zero_cost_basis_and_current_price(self):
         client = MagicMock()
         client.get_all_positions.return_value = [
-            MockAlpacaPosition("AAPL", "1", "10.00", current_price="0"),
+            MockAlpacaPosition("AAPL", "1", "0", current_price="0"),
         ]
         broker = AlpacaBroker(api_key="PKTEST", secret_key="SECRET")
         broker._trading_client = client
 
         await broker._sync_positions()
 
+        assert broker.positions["AAPL"].entry_price == 0.0
         assert broker.positions["AAPL"].current_price == 0.0
 
     @pytest.mark.asyncio

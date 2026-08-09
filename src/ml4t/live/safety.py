@@ -2051,9 +2051,9 @@ class SafeBroker:
                 raise BrokerSnapshotError("positions snapshot asset key does not match position")
             if not math.isfinite(position.quantity) or position.quantity == 0:
                 raise BrokerSnapshotError("positions snapshot quantity must be finite and non-zero")
-            if not math.isfinite(position.entry_price) or position.entry_price <= 0:
+            if not math.isfinite(position.entry_price) or position.entry_price < 0:
                 raise BrokerSnapshotError(
-                    "positions snapshot entry price must be finite and positive"
+                    "positions snapshot entry price must be finite and non-negative"
                 )
             if (
                 not isinstance(position.entry_time, datetime)
@@ -2061,10 +2061,10 @@ class SafeBroker:
             ):
                 raise BrokerSnapshotError("positions snapshot entry time must be timezone-aware")
             if position.current_price is not None and (
-                not math.isfinite(position.current_price) or position.current_price <= 0
+                not math.isfinite(position.current_price) or position.current_price < 0
             ):
                 raise BrokerSnapshotError(
-                    "positions snapshot current price must be finite and positive"
+                    "positions snapshot current price must be finite and non-negative"
                 )
 
     @staticmethod

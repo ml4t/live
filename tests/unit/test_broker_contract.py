@@ -242,8 +242,9 @@ async def test_invalid_pending_order_snapshot_is_unavailable(tmp_path, order) ->
     [
         object(),
         Position("SPY", float("nan"), 500, datetime.now(UTC)),
-        Position("SPY", 1, 0, datetime.now(UTC)),
+        Position("SPY", 1, -1, datetime.now(UTC)),
         Position("SPY", 1, 500, datetime.now()),
+        Position("SPY", 1, 500, datetime.now(UTC), current_price=-1),
         Position("SPY", 1, 500, datetime.now(UTC), current_price=float("inf")),
     ],
 )
@@ -258,6 +259,22 @@ async def test_invalid_position_snapshot_is_unavailable(tmp_path, position) -> N
 
     with pytest.raises(BrokerSnapshotError, match="positions snapshot"):
         await safe.preview_reconciliation_async()
+
+
+@pytest.mark.asyncio
+async def test_zero_valued_position_snapshot_is_available(tmp_path) -> None:
+    position = Position("SPY", 1, 0, datetime.now(UTC), current_price=0)
+    safe = SafeBroker(
+        cast(
+            AsyncBrokerProtocol,
+            InvalidSnapshotBroker(positions={"SPY": position}, pending=[]),
+        ),
+        LiveRiskConfig(state_file=str(tmp_path / "state.json")),
+    )
+
+    report = await safe.preview_reconciliation_async()
+
+    assert report["live_positions"] == {"SPY": 1.0}
 
 
 @pytest.mark.asyncio

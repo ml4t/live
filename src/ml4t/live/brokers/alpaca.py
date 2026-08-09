@@ -845,7 +845,7 @@ class AlpacaBroker:
                 raise RuntimeError("Alpaca positions snapshot contains an empty symbol")
             if not math.isfinite(quantity) or quantity == 0:
                 raise RuntimeError("Alpaca positions snapshot contains an invalid quantity")
-            if not math.isfinite(entry_price) or entry_price <= 0:
+            if not math.isfinite(entry_price) or entry_price < 0:
                 raise RuntimeError("Alpaca positions snapshot contains an invalid entry price")
             if not math.isfinite(current_price) or current_price < 0:
                 raise RuntimeError("Alpaca positions snapshot contains an invalid current price")
