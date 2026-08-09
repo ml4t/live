@@ -257,7 +257,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--feed",
         choices=("okx", "alpaca"),
         default="okx",
-        help="data feed to use during the shadow run",
+        help="data feed to use; alpaca is an explicit experimental selection",
     )
     shadow.add_argument(
         "--duration",
@@ -360,6 +360,7 @@ async def _make_feed(feed_name: str, module: ModuleType) -> Any:
             symbols=symbols,
             data_type=data_type,
             feed=feed,
+            experimental=True,
         )
 
     timeframe = getattr(module, "TIMEFRAME", "1m")

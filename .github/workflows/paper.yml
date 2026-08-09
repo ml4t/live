@@ -145,6 +145,22 @@ jobs:
           --report paper-evidence/ib-exercise.json
           --report paper-evidence/ib-restart.json
           --output paper-evidence/paper-qualification.json
+      - name: Qualify the supported OKX feed against the public service
+        run: >-
+          cd "${{ runner.temp }}/paper-run" &&
+          "${{ runner.temp }}/paper-venv/bin/python"
+          "${{ github.workspace }}/scripts/qualification/qualify_feeds.py" okx
+          --candidate "${{ github.workspace }}/paper-evidence/candidate.json"
+          --checkout-root "${{ github.workspace }}"
+          --output "${{ github.workspace }}/feed-evidence/okx.json"
+      - name: Require the installed feed support contract and external evidence
+        run: >-
+          cd "${{ runner.temp }}/paper-run" &&
+          "${{ runner.temp }}/paper-venv/bin/python"
+          "${{ github.workspace }}/scripts/qualification/qualify_feeds.py" assemble
+          --candidate "${{ github.workspace }}/paper-evidence/candidate.json"
+          --report "${{ github.workspace }}/feed-evidence/okx.json"
+          --output "${{ github.workspace }}/feed-evidence/feed-qualification.json"
       - name: Scan retained paper evidence for identifiers and credentials
         id: evidence-scan
         if: ${{ always() }}
@@ -153,10 +169,20 @@ jobs:
           scripts/qualification/scan_release_secrets.py
           --evidence-root paper-evidence
           --output paper-evidence/secret-scan.json
+      - name: Scan retained feed evidence for identifiers and credentials
+        id: feed-evidence-scan
+        if: ${{ always() }}
+        run: >-
+          "${{ runner.temp }}/paper-venv/bin/python"
+          scripts/qualification/scan_release_secrets.py
+          --evidence-root feed-evidence
+          --output feed-evidence/secret-scan.json
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        if: ${{ always() && steps.evidence-scan.outcome == 'success' }}
+        if: ${{ always() && steps.evidence-scan.outcome == 'success' && steps.feed-evidence-scan.outcome == 'success' }}
         with:
           name: paper-${{ inputs.candidate-sha }}-${{ github.run_id }}
-          path: paper-evidence/
+          path: |
+            paper-evidence/
+            feed-evidence/
           if-no-files-found: error
           retention-days: 30

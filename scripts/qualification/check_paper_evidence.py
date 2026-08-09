@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import argparse
+import importlib
 import io
 import json
 import os
+import sys
 import urllib.parse
 import urllib.request
 import zipfile
@@ -15,10 +17,16 @@ from http.client import HTTPMessage
 from pathlib import Path
 from typing import IO, Any
 
-try:
-    from scripts.qualification.qualify_paper import PaperQualificationError, validate_bundle
-except ModuleNotFoundError:
-    from qualify_paper import PaperQualificationError, validate_bundle
+REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
+if str(REPOSITORY_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPOSITORY_ROOT))
+
+_feeds = importlib.import_module("scripts.qualification.qualify_feeds")
+_paper = importlib.import_module("scripts.qualification.qualify_paper")
+FeedQualificationError = _feeds.FeedQualificationError
+validate_feed_bundle = _feeds.validate_feed_bundle
+PaperQualificationError = _paper.PaperQualificationError
+validate_bundle = _paper.validate_bundle
 
 GITHUB_API = "https://api.github.com"
 
@@ -76,13 +84,26 @@ def fetch_bytes(url: str, token: str) -> bytes:
 def validate_evidence_archive(payload: bytes, expected_commit: str) -> dict[str, Any]:
     """Validate the retained bundle rather than trusting workflow metadata alone."""
     with zipfile.ZipFile(io.BytesIO(payload)) as archive:
-        matches = [name for name in archive.namelist() if name.endswith("paper-qualification.json")]
-        if len(matches) != 1:
+        paper_matches = [
+            name for name in archive.namelist() if name.endswith("paper-qualification.json")
+        ]
+        feed_matches = [
+            name for name in archive.namelist() if name.endswith("feed-qualification.json")
+        ]
+        if len(paper_matches) != 1:
             raise PaperQualificationError("paper artifact has no unique qualification bundle")
-        loaded = json.loads(archive.read(matches[0]))
+        if len(feed_matches) != 1:
+            raise FeedQualificationError("paper artifact has no unique feed qualification bundle")
+        loaded = json.loads(archive.read(paper_matches[0]))
+        feed_loaded = json.loads(archive.read(feed_matches[0]))
     if not isinstance(loaded, dict):
         raise PaperQualificationError("paper qualification bundle is not a JSON object")
+    if not isinstance(feed_loaded, dict):
+        raise FeedQualificationError("feed qualification bundle is not a JSON object")
     validate_bundle(loaded, expected_commit=expected_commit)
+    validate_feed_bundle(feed_loaded, expected_commit=expected_commit)
+    if feed_loaded["candidate"] != loaded["candidate"]:
+        raise FeedQualificationError("paper and feed bundles target different candidates")
     return loaded
 
 
@@ -130,6 +151,7 @@ def find_fresh_paper_run(
             )
         except (
             PaperQualificationError,
+            FeedQualificationError,
             ValueError,
             KeyError,
             json.JSONDecodeError,

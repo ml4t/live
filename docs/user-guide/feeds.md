@@ -2,8 +2,8 @@
 
 `AlpacaDataFeed`, `IBDataFeed`, `OKXFundingFeed`, and `BarAggregator` emit the shared
 `ml4t.specs.MarketEvent` contract. `LiveEngine` validates event timing and adapts each event to the
-existing `on_data(timestamp, data, context, broker)` strategy callback. `CryptoFeed` and
-`DataBentoFeed` emit typed UTC events but remain experimental and require explicit opt-in.
+existing `on_data(timestamp, data, context, broker)` strategy callback. Alpaca, IB, generic CCXT,
+and DataBento feeds remain experimental and require explicit opt-in.
 
 | Feed | Event kinds | Event time | Completion | Sequence capability | Maximum age | Queue |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -39,10 +39,10 @@ evidence that no records were missed. Treat the halt as an operator reconciliati
 
 | Feed | Status | Best for | Typical pairing |
 | --- | --- | --- | --- |
-| `AlpacaDataFeed` | beta-supported | Alpaca-native equities and crypto | `AlpacaBroker` |
-| `IBDataFeed` | beta-supported | direct market data from TWS or IB Gateway | `IBBroker` |
+| `AlpacaDataFeed` | experimental | Alpaca-native equities and crypto | custom evaluation |
+| `IBDataFeed` | experimental | direct market data from TWS or IB Gateway | custom evaluation |
 | `OKXFundingFeed` | beta-supported | perpetual-swap strategies that depend on funding context | funding-rate and perp strategies |
-| `BarAggregator` | beta-supported | converting tick or sub-minute feeds into strategy bars | `IBDataFeed`, custom typed feeds |
+| `BarAggregator` | beta-supported | converting tick or sub-minute feeds into strategy bars | custom typed feeds |
 | `DataBentoFeed` | experimental | schema-limited replay and live evaluation | deliberate custom validation |
 | `CryptoFeed` | experimental | generic CCXT evaluation | deliberate custom validation |
 
@@ -58,10 +58,13 @@ feed = AlpacaDataFeed(
     data_type="bars",  # "bars", "quotes", or "trades"
     feed="iex",        # "iex" or "sip"
     queue_capacity=1024,
+    experimental=True,
 )
 ```
 
 Use this feed for Alpaca-native stocks and crypto. Stock symbols and `.../USD` crypto symbols can be mixed in one feed. The feed itself does not implement a standalone reconnect loop; use `LiveEngine(auto_recover=True)` if you want watchdog-driven restart behavior.
+It remains experimental because bars and quotes do not consistently provide a provider sequence,
+so continuity across reconnect cannot be established.
 
 ## IBDataFeed
 
@@ -78,6 +81,7 @@ feed = IBDataFeed(
     currency="USD",
     tick_throttle_ms=1000,
     queue_capacity=1024,
+    experimental=True,
 )
 ```
 
@@ -85,14 +89,15 @@ feed = IBDataFeed(
 `{symbol: {"price", "size"}}` and a quote to bid/ask fields plus a midpoint `price`. Wrap the feed in
 `BarAggregator` if your strategy expects OHLCV bars. The feed does not own a reconnect loop;
 watchdog-driven stop/restart belongs in `LiveEngine` when enabled.
+Pending-ticker snapshots can lack provider event time and sequence. The adapter then uses receipt
+time and reports sequence unavailability, which is insufficient for stable continuity guarantees.
 
 ## Experimental Feeds
 
-`DataBentoFeed` and `CryptoFeed` are not part of the beta support contract. Construction fails
-unless `experimental=True` is passed, then emits `ExperimentalFeedWarning` with the missing
-guarantees. They have typed UTC event boundaries and deterministic provider-failure propagation,
-but do not promise bounded overload behavior, reconnect continuity, performance targets, or
-credentialed service qualification. Do not treat their public imports as support claims.
+`AlpacaDataFeed`, `IBDataFeed`, `DataBentoFeed`, and `CryptoFeed` are not part of the beta support
+contract. Construction fails unless `experimental=True` is passed, then emits
+`ExperimentalFeedWarning` with that adapter's missing guarantees. Do not treat their public imports
+as support claims.
 
 ### DataBentoFeed
 
@@ -206,9 +211,8 @@ the engine watchdog can stop and restart the broker/feed pair after `feed_silent
 
 ## Choosing a Feed
 
-- Use `AlpacaDataFeed` for Alpaca-native stocks and crypto.
-- Use `IBDataFeed` for direct market data from TWS or IB Gateway.
+- Use `AlpacaDataFeed` for experimental evaluation of Alpaca-native stocks and crypto.
+- Use `IBDataFeed` for experimental evaluation of direct TWS or IB Gateway market data.
 - Use `OKXFundingFeed` for perpetual-swap strategies that depend on funding-rate context.
 - Use `BarAggregator` when your upstream feed is tick-oriented but your strategy expects bars.
-- Opt in to `DataBentoFeed` or `CryptoFeed` only for experimental evaluation under the limitations
-  above.
+- Pass `experimental=True` only after accepting the limitations reported by an experimental feed.

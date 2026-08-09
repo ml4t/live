@@ -30,6 +30,7 @@ async def main():
         secret_key="...",
         symbols=["SPY"],
         data_type="bars",
+        experimental=True,
     )
     safe_broker = SafeBroker(
         broker,
@@ -78,21 +79,21 @@ Before you move past this example, confirm that:
 
 ## Common Variations
 
-### Interactive Brokers Feed
+### Experimental Interactive Brokers Feed
 
-`IBDataFeed` needs a connected IB session object:
+`IBDataFeed` needs a connected IB session object and explicit experimental opt-in:
 
 ```python
 broker = IBBroker(port=7497)
 await broker.connect()
 
-feed = IBDataFeed(broker.ib, symbols=["SPY", "QQQ"])
+feed = IBDataFeed(broker.ib, symbols=["SPY", "QQQ"], experimental=True)
 ```
 
 ### Aggregate Ticks Into Bars
 
 ```python
-raw_feed = IBDataFeed(broker.ib, symbols=["SPY"])
+raw_feed = IBDataFeed(broker.ib, symbols=["SPY"], experimental=True)
 feed = BarAggregator(raw_feed, bar_size_minutes=1, flush_timeout_seconds=2.0)
 ```
 

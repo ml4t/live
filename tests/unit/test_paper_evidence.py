@@ -104,6 +104,39 @@ def _archive(commit: str = COMMIT) -> bytes:
     payload = io.BytesIO()
     with zipfile.ZipFile(payload, "w") as archive:
         archive.writestr("paper-qualification.json", json.dumps(bundle))
+        archive.writestr(
+            "feed-qualification.json",
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "candidate": bundle["candidate"],
+                    "generated_at": "2026-08-07T20:02:00+00:00",
+                    "stable_feeds": [
+                        {
+                            "feed": "OKXFundingFeed",
+                            "provider": "okx",
+                            "external_evidence": True,
+                            "passed": True,
+                        }
+                    ],
+                    "experimental_feeds": [
+                        {
+                            "feed": name,
+                            "status": "experimental",
+                            "explicit_opt_in_required": True,
+                            "missing_guarantees": ["not qualified"],
+                        }
+                        for name in (
+                            "AlpacaDataFeed",
+                            "IBDataFeed",
+                            "DataBentoFeed",
+                            "CryptoFeed",
+                        )
+                    ],
+                    "passed": True,
+                }
+            ),
+        )
     return payload.getvalue()
 
 
@@ -239,6 +272,24 @@ def test_malformed_retained_artifact_fails() -> None:
         now=NOW,
         fetcher=_fetcher("2026-08-07T20:00:00Z"),
         downloader=_downloader(b"not a zip"),
+    )
+
+    assert evidence is None
+
+
+def test_missing_feed_qualification_fails() -> None:
+    payload = io.BytesIO()
+    with zipfile.ZipFile(payload, "w") as archive:
+        archive.writestr("paper-qualification.json", "{}")
+
+    evidence = find_fresh_paper_run(
+        repository="ml4t/live",
+        commit=COMMIT,
+        token="token",
+        max_age=timedelta(days=7),
+        now=NOW,
+        fetcher=_fetcher("2026-08-07T20:00:00Z"),
+        downloader=_downloader(payload.getvalue()),
     )
 
     assert evidence is None

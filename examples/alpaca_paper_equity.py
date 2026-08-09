@@ -121,6 +121,7 @@ async def main() -> int:
         symbols=SYMBOLS,
         data_type="bars",
         feed="iex",
+        experimental=True,
     )
     safe_broker = SafeBroker(
         broker,

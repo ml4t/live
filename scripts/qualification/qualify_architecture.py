@@ -64,8 +64,10 @@ def sync_broker(
 
 def feeds() -> tuple[DataFeedProtocol, DataFeedProtocol, DataFeedProtocol]:
     okx: DataFeedProtocol = OKXFundingFeed(["BTC-USDT-SWAP"])
-    alpaca: DataFeedProtocol = AlpacaDataFeed("key", "secret", ["SPY"])
-    ib: DataFeedProtocol = IBDataFeed(IB(), ["SPY"])
+    alpaca: DataFeedProtocol = AlpacaDataFeed(
+        "key", "secret", ["SPY"], experimental=True
+    )
+    ib: DataFeedProtocol = IBDataFeed(IB(), ["SPY"], experimental=True)
     aggregated: DataFeedProtocol = BarAggregator(okx)
     return alpaca, ib, aggregated
 
@@ -98,8 +100,8 @@ alpaca = AlpacaBroker("key", "secret")
 ib = IBBroker()
 okx_feed = OKXFundingFeed(["BTC-USDT-SWAP"])
 feeds = (
-    AlpacaDataFeed("key", "secret", ["SPY"]),
-    IBDataFeed(IB(), ["SPY"]),
+    AlpacaDataFeed("key", "secret", ["SPY"], experimental=True),
+    IBDataFeed(IB(), ["SPY"], experimental=True),
     okx_feed,
     BarAggregator(okx_feed),
 )

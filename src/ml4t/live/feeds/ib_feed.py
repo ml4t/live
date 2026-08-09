@@ -1,4 +1,4 @@
-"""Interactive Brokers market data feed.
+"""Experimental Interactive Brokers market data feed.
 
 Provides real-time tick data from IB TWS/Gateway.
 
@@ -12,7 +12,7 @@ Example:
     ib = IB()
     await ib.connectAsync(...)
 
-    feed = IBDataFeed(ib, symbols=['SPY', 'QQQ'])
+    feed = IBDataFeed(ib, symbols=['SPY', 'QQQ'], experimental=True)
     await feed.start()
 
     async for event in feed:
@@ -24,7 +24,7 @@ import logging
 import math
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, ClassVar
 
 from ib_async import IB, Stock, Ticker
 from ml4t.specs import (
@@ -37,15 +37,22 @@ from ml4t.specs import (
 )
 
 from ml4t.live.feeds.events import sequence_unavailable, utc_datetime
+from ml4t.live.feeds.experimental import require_experimental_opt_in
 from ml4t.live.feeds.queue import BoundedEventQueue, FeedOverflowError
 from ml4t.live.persistence import redact_sensitive
 from ml4t.live.protocols import DataFeedProtocol
 
 logger = logging.getLogger(__name__)
 
+IB_MISSING_GUARANTEES = (
+    "provider event timestamps for every pending-ticker snapshot",
+    "provider sequence continuity",
+    "six-hour external feed qualification",
+)
+
 
 class IBDataFeed(DataFeedProtocol):
-    """Real-time market data feed from Interactive Brokers.
+    """Experimental real-time market data feed from Interactive Brokers.
 
     Subscribes to tick-by-tick market data for specified symbols.
     Emits validated trade and quote events.
@@ -62,12 +69,14 @@ class IBDataFeed(DataFeedProtocol):
         ib = IB()
         await ib.connectAsync('127.0.0.1', 7497, clientId=1)
 
-        feed = IBDataFeed(ib, symbols=['SPY', 'QQQ', 'IWM'])
+        feed = IBDataFeed(ib, symbols=['SPY', 'QQQ', 'IWM'], experimental=True)
         await feed.start()
 
         # Use directly or wrap with BarAggregator
         aggregator = BarAggregator(feed, bar_size_minutes=1)
     """
+
+    support_status: ClassVar[str] = "experimental"
 
     def __init__(
         self,
@@ -78,6 +87,7 @@ class IBDataFeed(DataFeedProtocol):
         currency: str = "USD",
         tick_throttle_ms: int = 100,  # Min time between emits
         queue_capacity: int = 1_024,
+        experimental: bool = False,
     ) -> None:
         """Initialize IB data feed.
 
@@ -89,7 +99,13 @@ class IBDataFeed(DataFeedProtocol):
             tick_throttle_ms: Minimum milliseconds between tick emissions
                 (prevents overwhelming strategy with rapid ticks)
             queue_capacity: Maximum pending events before a fail-closed overflow.
+            experimental: Must be true to acknowledge the unsupported feed contract.
         """
+        require_experimental_opt_in(
+            "IBDataFeed",
+            experimental=experimental,
+            missing_guarantees=IB_MISSING_GUARANTEES,
+        )
         if not symbols or any(
             not isinstance(symbol, str) or not symbol.strip() for symbol in symbols
         ):
@@ -332,5 +348,6 @@ class IBDataFeed(DataFeedProtocol):
             "throttled_count": self._throttled_count,
             "rejected_count": self._rejected_count,
             "symbols": self.symbols,
+            "experimental": True,
             "queue": self._queue.snapshot().to_dict(),
         }

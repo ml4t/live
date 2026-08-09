@@ -20,8 +20,8 @@ Deploying a backtested strategy to live markets requires careful handling of asy
 
 - Strategy portability under the shared lifecycle version 1 contract
 - Two broker integrations: Interactive Brokers (TWS/Gateway) and Alpaca (stocks + crypto)
-- Three beta-supported feed adapters for Alpaca, IB, and OKX, plus bar aggregation
-- Explicit opt-in experimental adapters for generic CCXT and DataBento workflows
+- A beta-supported OKX feed plus typed bar aggregation
+- Explicit opt-in experimental adapters for Alpaca, IB, generic CCXT, and DataBento workflows
 - Shadow mode for testing without placing real orders (VirtualPortfolio tracking)
 - 16-parameter risk configuration: position limits, order limits, loss limits, price protection
 - Kill switch with crash-safe state persistence (atomic JSON writes)
@@ -61,7 +61,9 @@ class MyStrategy(Strategy):
 
 async def main():
     broker = AlpacaBroker(api_key="...", secret_key="...", paper=True)
-    feed = AlpacaDataFeed(api_key="...", secret_key="...", symbols=["SPY"])
+    feed = AlpacaDataFeed(
+        api_key="...", secret_key="...", symbols=["SPY"], experimental=True
+    )
 
     config = LiveRiskConfig(
         shadow_mode=True,           # No real orders
@@ -120,8 +122,8 @@ Requirements:
 
 | Feed | Source | Status | Coverage |
 |------|--------|--------|----------|
-| `AlpacaDataFeed` | Alpaca | beta-supported | US stocks + crypto, real-time bars/quotes/trades |
-| `IBDataFeed` | Interactive Brokers | beta-supported | Multi-asset tick-by-tick data |
+| `AlpacaDataFeed` | Alpaca | experimental | US stocks + crypto, real-time bars/quotes/trades |
+| `IBDataFeed` | Interactive Brokers | experimental | Multi-asset tick-by-tick data |
 | `OKXFundingFeed` | OKX | beta-supported | Perpetual swaps with funding rates |
 | `BarAggregator` | Any typed feed | beta-supported | Multi-feed aggregation + bar assembly |
 | `DataBentoFeed` | DataBento | experimental | Historical replay + real-time streaming |
@@ -131,11 +133,12 @@ Requirements:
 from ml4t.live.feeds.alpaca_feed import AlpacaDataFeed
 from ml4t.live.feeds.crypto_feed import CryptoFeed
 
-# Stock + crypto via Alpaca
+# Experimental stock + crypto feed via Alpaca
 feed = AlpacaDataFeed(
     api_key="...", secret_key="...",
     symbols=["AAPL", "BTC/USD"],
     feed="iex",          # "iex" (free) or "sip" (premium)
+    experimental=True,
 )
 
 # Experimental generic crypto adapter; not part of the beta support contract
@@ -147,10 +150,9 @@ feed = CryptoFeed(
 )
 ```
 
-The experimental adapters require explicit opt-in and report their missing guarantees on first
-use. They do not currently promise bounded overload behavior, reconnect continuity, performance,
-or credentialed service qualification. The `experimental` package extra installs the DataBento
-SDK; generic CCXT support is already present in the default environment.
+The experimental adapters require explicit opt-in and report their adapter-specific missing
+guarantees on first use. The `experimental` package extra installs the DataBento SDK; the other
+adapters are present in the default environment.
 
 ## Risk Configuration
 
@@ -315,9 +317,9 @@ See the [portability contract](docs/user-guide/backtest-to-live.md) and
 
 The beta package supports Linux with Python 3.12, 3.13, and 3.14. CI, wheel, and source
 distribution qualification cover those interpreter versions. Windows, macOS, and Python 3.15 are
-not part of this beta contract. IB and Alpaca broker adapters and the Alpaca, IB, and OKX feeds are
-supported only within the documented capabilities, reconciliation, causal-event, overload, and
-paper-account boundaries. DataBento and generic CCXT remain experimental.
+not part of this beta contract. IB and Alpaca broker adapters and the OKX feed are supported only
+within the documented capabilities, reconciliation, causal-event, overload, and paper-account
+boundaries. Alpaca, IB, DataBento, and generic CCXT feeds require explicit experimental opt-in.
 
 ## Technical Characteristics
 

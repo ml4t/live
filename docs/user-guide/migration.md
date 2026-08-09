@@ -81,8 +81,8 @@ candidate removes no root export from that release, but the following changes re
   connection state, positions, pending orders, cancellation, replacement, and paper-identity
   checks. Strategy-facing brokers also expose canonical target and position-rule operations.
 - `AlpacaDataFeed`, `IBDataFeed`, `BarAggregator`, and `OKXFundingFeed` accept an optional bounded
-  `queue_capacity`. Existing calls remain valid. Configure the capacity when overload policy must
-  be explicit.
+  `queue_capacity`. Configure the capacity when overload policy must be explicit. Alpaca and IB
+  feed construction now also requires `experimental=True`; their public imports remain available.
 - `BarBuffer.volume` is a float and `update()` accepts fractional volume. Code that serializes or
   validates volume as an integer must accept a finite float.
 - Risk limits in `LiveRiskConfig` accept `None` only as an explicit disable value. The beta defaults
@@ -103,8 +103,9 @@ candidate removes no root export from that release, but the following changes re
   reads the instance attribute should treat it as configuration owned by the engine.
 - Crossed quote events now include `crossed` and `crossed_policy` metadata. Consumers that validate
   exact feed metadata objects must accept these documented keys.
-- Generic CCXT and DataBento feeds require an explicit experimental opt-in. They are not part of the
-  stable feed contract.
+- Alpaca, IB, generic CCXT, and DataBento feeds require an explicit experimental opt-in. Alpaca
+  bars and quotes lack complete provider sequences, while IB pending-ticker snapshots can lack both
+  provider event time and sequence. These adapters are not part of the stable feed contract.
 
 ### Upgrade Persisted Beta State
 

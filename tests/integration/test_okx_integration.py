@@ -1,34 +1,42 @@
 """Integration tests for the public OKX funding feed."""
 
+import asyncio
 from datetime import UTC
 
-import httpx
 import pytest
+from ml4t.specs import EventCompletion, MarketEventKind
 
-from ml4t.live.feeds.okx_feed import OKXFundingFeed
+from ml4t.live import OKXFundingFeed
 
 pytestmark = [pytest.mark.integration, pytest.mark.external]
 
 
 @pytest.mark.asyncio
-async def test_okx_public_minute_bar_and_funding_context():
-    feed = OKXFundingFeed(symbols=["BTC-USDT-SWAP"], timeframe="1m", poll_interval_seconds=5.0)
-    feed._client = httpx.AsyncClient(timeout=30.0)
-
+async def test_okx_public_iterator_emits_validated_bar_and_funding_events() -> None:
+    feed = OKXFundingFeed(
+        symbols=["BTC-USDT-SWAP"],
+        timeframe="1m",
+        poll_interval_seconds=1,
+    )
+    events = []
+    await feed.start()
     try:
-        ohlcv = await feed._fetch_latest_ohlcv("BTC-USDT-SWAP")
-        funding = await feed._fetch_funding_rate("BTC-USDT-SWAP")
+        async with asyncio.timeout(60):
+            while {event.kind for event in events} != {
+                MarketEventKind.BAR,
+                MarketEventKind.FUNDING,
+            }:
+                events.append(await anext(feed))
     finally:
+        feed.stop()
         await feed.close()
 
-    assert ohlcv is not None
-    assert funding is not None
-
-    timestamp, bar = ohlcv
-    assert timestamp.tzinfo == UTC
-    assert timestamp.second == 0
-    assert timestamp.microsecond == 0
-    assert bar["volume"] >= 0.0
-    assert isinstance(funding["funding_rate"], float)
-    if funding["next_funding_time"] is not None:
-        assert funding["next_funding_time"].tzinfo == UTC
+    assert all(event.source == "okx" for event in events)
+    assert all(event.asset == "BTC-USDT-SWAP" for event in events)
+    assert all(event.event_time.utcoffset() == UTC.utcoffset(event.event_time) for event in events)
+    assert all(
+        event.receipt_time.utcoffset() == UTC.utcoffset(event.receipt_time) for event in events
+    )
+    assert all(event.provider_sequence is not None for event in events)
+    funding = next(event for event in events if event.kind is MarketEventKind.FUNDING)
+    assert funding.completion is EventCompletion.COMPLETE

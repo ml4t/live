@@ -18,10 +18,12 @@ from typing import Any
 import ml4t.live as live
 
 EXPERIMENTAL_EXPORTS = {
+    "AlpacaDataFeed",
     "CryptoFeed",
     "DataBentoFeed",
     "ExperimentalFeedError",
     "ExperimentalFeedWarning",
+    "IBDataFeed",
 }
 
 

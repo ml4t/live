@@ -1,4 +1,4 @@
-"""Alpaca Markets data feed.
+"""Experimental Alpaca Markets data feed.
 
 Provides real-time market data from Alpaca for stocks and crypto.
 
@@ -13,6 +13,7 @@ Example:
         api_key='PKXXXXXXXX',
         secret_key='XXXXXXXXXX',
         symbols=['AAPL', 'GOOGL', 'BTC/USD'],
+        experimental=True,
     )
     await feed.start()
 
@@ -24,7 +25,7 @@ import asyncio
 import logging
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, ClassVar
 
 from alpaca.data.enums import DataFeed
 from alpaca.data.live import CryptoDataStream, StockDataStream
@@ -39,15 +40,22 @@ from ml4t.specs import (
 )
 
 from ml4t.live.feeds.events import sequence_unavailable, utc_datetime
+from ml4t.live.feeds.experimental import require_experimental_opt_in
 from ml4t.live.feeds.queue import BoundedEventQueue, FeedOverflowError
 from ml4t.live.persistence import redact_sensitive
 from ml4t.live.protocols import DataFeedProtocol
 
 logger = logging.getLogger(__name__)
 
+ALPACA_MISSING_GUARANTEES = (
+    "provider sequence continuity for bars and quotes",
+    "feed-owned reconnect continuity",
+    "six-hour external feed qualification",
+)
+
 
 class AlpacaDataFeed(DataFeedProtocol):
-    """Real-time market data feed from Alpaca Markets.
+    """Experimental real-time market data feed from Alpaca Markets.
 
     Subscribes to real-time data for specified symbols.
     Supports both stocks and crypto.
@@ -70,6 +78,7 @@ class AlpacaDataFeed(DataFeedProtocol):
             api_key='PKXXXXXXXX',
             secret_key='XXXXXXXXXX',
             symbols=['AAPL', 'MSFT'],
+            experimental=True,
         )
 
         # Mixed stocks and crypto
@@ -77,6 +86,7 @@ class AlpacaDataFeed(DataFeedProtocol):
             api_key='PKXXXXXXXX',
             secret_key='XXXXXXXXXX',
             symbols=['AAPL', 'BTC/USD', 'ETH/USD'],
+            experimental=True,
         )
 
         await feed.start()
@@ -84,6 +94,8 @@ class AlpacaDataFeed(DataFeedProtocol):
         async for event in feed:
             consume(event)
     """
+
+    support_status: ClassVar[str] = "experimental"
 
     def __init__(
         self,
@@ -94,6 +106,7 @@ class AlpacaDataFeed(DataFeedProtocol):
         data_type: str = "bars",  # 'bars', 'quotes', 'trades'
         feed: str = "iex",  # 'iex' (free) or 'sip' (premium)
         queue_capacity: int = 1_024,
+        experimental: bool = False,
     ) -> None:
         """Initialize Alpaca data feed.
 
@@ -104,7 +117,13 @@ class AlpacaDataFeed(DataFeedProtocol):
             data_type: Type of data - 'bars' (default), 'quotes', or 'trades'
             feed: Data feed type - 'iex' (free) or 'sip' (premium)
             queue_capacity: Maximum pending events before a fail-closed overflow.
+            experimental: Must be true to acknowledge the unsupported feed contract.
         """
+        require_experimental_opt_in(
+            "AlpacaDataFeed",
+            experimental=experimental,
+            missing_guarantees=ALPACA_MISSING_GUARANTEES,
+        )
         if not symbols or any(
             not isinstance(symbol, str) or not symbol.strip() for symbol in symbols
         ):
@@ -597,5 +616,6 @@ class AlpacaDataFeed(DataFeedProtocol):
             "crypto_symbols": self._crypto_symbols,
             "data_type": self._data_type,
             "feed": self._feed,
+            "experimental": True,
             "queue": self._queue.snapshot().to_dict(),
         }

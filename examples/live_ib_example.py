@@ -142,6 +142,7 @@ async def main():
         ib=broker.ib,
         symbols=["SPY"],
         tick_throttle_ms=1000,  # Emit at most once per second
+        experimental=True,
     )
 
     # Wrap with bar aggregator for minute bars

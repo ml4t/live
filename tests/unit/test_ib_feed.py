@@ -11,6 +11,14 @@ from ml4t.live.feeds.ib_feed import IBDataFeed
 from ml4t.live.feeds.queue import FeedOverflowError
 
 
+@pytest.fixture(autouse=True)
+def _accept_experimental_feed(monkeypatch):
+    monkeypatch.setattr(
+        "ml4t.live.feeds.ib_feed.require_experimental_opt_in",
+        lambda *args, **kwargs: None,
+    )
+
+
 class MockIB:
     """Mock IB instance for testing."""
 

@@ -108,7 +108,13 @@ from ml4t.live import AlpacaBroker, AlpacaDataFeed, LiveEngine, LiveRiskConfig, 
 
 raw_broker = AlpacaBroker(api_key="...", secret_key="...", paper=True)
 safe_broker = SafeBroker(raw_broker, LiveRiskConfig(execution_mode="shadow"))
-feed = AlpacaDataFeed(api_key="...", secret_key="...", symbols=["SPY"], data_type="bars")
+feed = AlpacaDataFeed(
+    api_key="...",
+    secret_key="...",
+    symbols=["SPY"],
+    data_type="bars",
+    experimental=True,
+)
 
 engine = LiveEngine(BuyOnceStrategy(), safe_broker, feed)
 await engine.connect()
@@ -244,8 +250,8 @@ See [Brokers](user-guide/brokers.md) for connection details and usage patterns.
 
 | Data Feed | Status | Source | Market Shape | Best for |
 | --- | --- | --- | --- | --- |
-| **AlpacaDataFeed** | beta-supported | Alpaca API | bars, quotes, trades | US equities and Alpaca crypto |
-| **IBDataFeed** | beta-supported | TWS / IB Gateway | real-time ticks | IB-driven multi-asset execution |
+| **AlpacaDataFeed** | experimental opt-in | Alpaca API | bars, quotes, trades | custom evaluation only |
+| **IBDataFeed** | experimental opt-in | TWS / IB Gateway | real-time ticks | custom evaluation only |
 | **OKXFundingFeed** | beta-supported | OKX public APIs | OHLCV plus funding context | perpetual futures and funding-rate strategies |
 | **DataBentoFeed** | experimental opt-in | DataBento API or DBN replay | selected tick and bar schemas | custom evaluation only |
 | **CryptoFeed** | experimental opt-in | asynchronous CCXT | trades and candles | custom evaluation only |

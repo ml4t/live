@@ -60,6 +60,7 @@ async def alpaca_feed(alpaca_credentials):
         secret_key=secret_key,
         symbols=["AAPL"],
         data_type="bars",
+        experimental=True,
     )
 
     await feed.start()
@@ -211,6 +212,7 @@ class TestAlpacaCryptoIntegration:
             secret_key=secret_key,
             symbols=["BTC/USD"],
             data_type="bars",
+            experimental=True,
         )
 
         await feed.start()

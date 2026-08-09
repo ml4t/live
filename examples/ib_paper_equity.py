@@ -112,7 +112,12 @@ async def main() -> int:
         return 1
 
     broker = IBBroker(host=host, port=port, client_id=77)
-    feed = IBDataFeed(broker.ib, symbols=SYMBOLS, tick_throttle_ms=1_000)
+    feed = IBDataFeed(
+        broker.ib,
+        symbols=SYMBOLS,
+        tick_throttle_ms=1_000,
+        experimental=True,
+    )
     safe_broker = SafeBroker(
         broker,
         LiveRiskConfig(

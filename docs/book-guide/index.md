@@ -56,8 +56,8 @@ workflow:
 | pre-trade enforcement and kill switch | `SafeBroker` |
 | paper-like live validation without routing orders | `execution_mode="shadow"` with `VirtualPortfolio` |
 | broker-specific execution path | `IBBroker` or `AlpacaBroker` |
-| beta-supported live data source | `IBDataFeed`, `AlpacaDataFeed`, `OKXFundingFeed` |
-| experimental opt-in data source | `DataBentoFeed`, `CryptoFeed` |
+| beta-supported live data source | `OKXFundingFeed` |
+| experimental opt-in data source | `AlpacaDataFeed`, `IBDataFeed`, `DataBentoFeed`, `CryptoFeed` |
 
 ## What The Book Often Shows Manually
 

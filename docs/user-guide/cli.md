@@ -74,7 +74,7 @@ uv run ml4t-live shadow examples/shadow_mode_demo.py --feed okx --duration 60
 Supported flags:
 
 - `--feed okx` for the public OKX funding feed
-- `--feed alpaca` for Alpaca market data
+- `--feed alpaca` to explicitly select the experimental Alpaca market-data adapter
 - `--duration 60` to stop automatically after a fixed number of seconds
 - `--feed-silence-seconds ...` to override the runtime silence threshold used by shadow health reporting
 - `--state-file ...` to control where the risk state is persisted

@@ -32,7 +32,7 @@ host load, Python and dependency identity, latency distribution, throughput, RSS
 shutdown, recovery, and checksum evidence. These limits measure credential-free framework behavior
 on Linux; they do not state venue latency or capacity.
 
-## Qualify Paper Accounts Separately
+## Qualify Paper Accounts And External Feeds Separately
 
 Credentialed IB and Alpaca checks run only through the manually dispatched `Paper Qualification`
 workflow in the protected `paper` environment. Supply the exact candidate commit and the successful
@@ -53,6 +53,13 @@ the qualified wheel's SHA-256 digest. Before publication, the tag workflow compa
 the only wheel in its qualified distribution artifact. A successful workflow conclusion or artifact
 name is not sufficient by itself. The evidence must also remain within the release workflow's
 freshness interval.
+
+The same workflow qualifies `OKXFundingFeed` against the public OKX service. It compares adapter
+events with provider-native observations, observes consecutive complete candles across restart,
+rejects stale input, forces fail-closed overload, and requires shutdown within five seconds. The
+retained feed bundle also proves that Alpaca, IB, DataBento, and generic CCXT feed construction
+requires `experimental=True` and records each adapter's missing guarantees. The release gate
+requires the paper and feed bundles to identify the same commit and wheel.
 
 Do not expose broker credentials to pull-request code. Do not substitute a run from another commit,
 reuse an artifact after a source or workflow change, or point IB qualification at a live port.

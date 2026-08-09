@@ -20,6 +20,14 @@ from ml4t.live.feeds.events import FeedContractError
 from ml4t.live.feeds.queue import FeedOverflowError
 
 
+@pytest.fixture(autouse=True)
+def _accept_experimental_feed(monkeypatch):
+    monkeypatch.setattr(
+        "ml4t.live.feeds.alpaca_feed.require_experimental_opt_in",
+        lambda *args, **kwargs: None,
+    )
+
+
 def typed_bar(timestamp: datetime | None = None) -> MarketEvent:
     timestamp = timestamp or datetime.now(UTC)
     return MarketEvent(

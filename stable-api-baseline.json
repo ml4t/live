@@ -1,10 +1,12 @@
 {
   "classification_rules": {
     "experimental_exports": [
+      "AlpacaDataFeed",
       "CryptoFeed",
       "DataBentoFeed",
       "ExperimentalFeedError",
-      "ExperimentalFeedWarning"
+      "ExperimentalFeedWarning",
+      "IBDataFeed"
     ],
     "module_exports": "same classification as the root object when root-exported",
     "root_exports": "stable unless named in experimental_exports",
@@ -511,7 +513,7 @@
       "bases": [
         "ml4t.live.protocols.DataFeedProtocol"
       ],
-      "classification": "stable",
+      "classification": "experimental",
       "defined_in": "ml4t.live.feeds.alpaca_feed",
       "kind": "class",
       "methods": [
@@ -533,7 +535,7 @@
       ],
       "module": "ml4t.live",
       "name": "AlpacaDataFeed",
-      "signature": "(api_key: str, secret_key: str, symbols: list[str], *, data_type: str = 'bars', feed: str = 'iex', queue_capacity: int = 1024) -> None"
+      "signature": "(api_key: str, secret_key: str, symbols: list[str], *, data_type: str = 'bars', feed: str = 'iex', queue_capacity: int = 1024, experimental: bool = False) -> None"
     },
     {
       "bases": [
@@ -1330,7 +1332,7 @@
       "bases": [
         "ml4t.live.protocols.DataFeedProtocol"
       ],
-      "classification": "stable",
+      "classification": "experimental",
       "defined_in": "ml4t.live.feeds.ib_feed",
       "kind": "class",
       "methods": [
@@ -1352,7 +1354,7 @@
       ],
       "module": "ml4t.live",
       "name": "IBDataFeed",
-      "signature": "(ib: ib_async.ib.IB, symbols: list[str], *, exchange: str = 'SMART', currency: str = 'USD', tick_throttle_ms: int = 100, queue_capacity: int = 1024) -> None"
+      "signature": "(ib: ib_async.ib.IB, symbols: list[str], *, exchange: str = 'SMART', currency: str = 'USD', tick_throttle_ms: int = 100, queue_capacity: int = 1024, experimental: bool = False) -> None"
     },
     {
       "bases": [
@@ -3542,7 +3544,7 @@
       "bases": [
         "ml4t.live.protocols.DataFeedProtocol"
       ],
-      "classification": "stable",
+      "classification": "experimental",
       "defined_in": "ml4t.live.feeds.alpaca_feed",
       "kind": "class",
       "methods": [
@@ -3564,7 +3566,7 @@
       ],
       "module": "ml4t.live.feeds",
       "name": "AlpacaDataFeed",
-      "signature": "(api_key: str, secret_key: str, symbols: list[str], *, data_type: str = 'bars', feed: str = 'iex', queue_capacity: int = 1024) -> None"
+      "signature": "(api_key: str, secret_key: str, symbols: list[str], *, data_type: str = 'bars', feed: str = 'iex', queue_capacity: int = 1024, experimental: bool = False) -> None"
     },
     {
       "bases": [
@@ -3856,7 +3858,7 @@
       "bases": [
         "ml4t.live.protocols.DataFeedProtocol"
       ],
-      "classification": "stable",
+      "classification": "experimental",
       "defined_in": "ml4t.live.feeds.ib_feed",
       "kind": "class",
       "methods": [
@@ -3878,7 +3880,7 @@
       ],
       "module": "ml4t.live.feeds",
       "name": "IBDataFeed",
-      "signature": "(ib: ib_async.ib.IB, symbols: list[str], *, exchange: str = 'SMART', currency: str = 'USD', tick_throttle_ms: int = 100, queue_capacity: int = 1024) -> None"
+      "signature": "(ib: ib_async.ib.IB, symbols: list[str], *, exchange: str = 'SMART', currency: str = 'USD', tick_throttle_ms: int = 100, queue_capacity: int = 1024, experimental: bool = False) -> None"
     },
     {
       "bases": [
@@ -4002,10 +4004,17 @@
       "signature": "(open: float | None = None, high: float = -inf, low: float = inf, close: float = 0.0, volume: float = 0.0) -> None"
     },
     {
+      "classification": "internal",
+      "defined_in": "ml4t.live.feeds.alpaca_feed",
+      "kind": "constant",
+      "module": "ml4t.live.feeds.alpaca_feed",
+      "name": "ALPACA_MISSING_GUARANTEES"
+    },
+    {
       "bases": [
         "ml4t.live.protocols.DataFeedProtocol"
       ],
-      "classification": "stable",
+      "classification": "experimental",
       "defined_in": "ml4t.live.feeds.alpaca_feed",
       "kind": "class",
       "methods": [
@@ -4027,7 +4036,7 @@
       ],
       "module": "ml4t.live.feeds.alpaca_feed",
       "name": "AlpacaDataFeed",
-      "signature": "(api_key: str, secret_key: str, symbols: list[str], *, data_type: str = 'bars', feed: str = 'iex', queue_capacity: int = 1024) -> None"
+      "signature": "(api_key: str, secret_key: str, symbols: list[str], *, data_type: str = 'bars', feed: str = 'iex', queue_capacity: int = 1024, experimental: bool = False) -> None"
     },
     {
       "classification": "internal",
@@ -4269,7 +4278,7 @@
       "bases": [
         "ml4t.live.protocols.DataFeedProtocol"
       ],
-      "classification": "stable",
+      "classification": "experimental",
       "defined_in": "ml4t.live.feeds.ib_feed",
       "kind": "class",
       "methods": [
@@ -4291,7 +4300,14 @@
       ],
       "module": "ml4t.live.feeds.ib_feed",
       "name": "IBDataFeed",
-      "signature": "(ib: ib_async.ib.IB, symbols: list[str], *, exchange: str = 'SMART', currency: str = 'USD', tick_throttle_ms: int = 100, queue_capacity: int = 1024) -> None"
+      "signature": "(ib: ib_async.ib.IB, symbols: list[str], *, exchange: str = 'SMART', currency: str = 'USD', tick_throttle_ms: int = 100, queue_capacity: int = 1024, experimental: bool = False) -> None"
+    },
+    {
+      "classification": "internal",
+      "defined_in": "ml4t.live.feeds.ib_feed",
+      "kind": "constant",
+      "module": "ml4t.live.feeds.ib_feed",
+      "name": "IB_MISSING_GUARANTEES"
     },
     {
       "bases": [

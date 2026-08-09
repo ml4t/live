@@ -292,6 +292,10 @@ def validate_workflows(root: Path = WORKFLOW_ROOT) -> list[str]:
                 failures.append(f"paper qualification lacks {provider} {phase} evidence")
     if "qualify_paper.py assemble" not in paper_run_text:
         failures.append("paper qualification does not require a complete redacted evidence bundle")
+    if 'qualify_feeds.py" okx' not in paper_run_text:
+        failures.append("paper qualification does not run external OKX feed evidence")
+    if 'qualify_feeds.py" assemble' not in paper_run_text:
+        failures.append("paper qualification does not require the installed feed support contract")
     if "uv sync" in paper_run_text or "uv pip install" not in paper_run_text:
         failures.append("paper qualification does not install only the candidate wheel")
     checkouts = _action_steps(paper_job, "actions/checkout")
@@ -309,7 +313,12 @@ def validate_workflows(root: Path = WORKFLOW_ROOT) -> list[str]:
         if download_inputs.get("run-id") != "${{ inputs.qualification-run-id }}":
             failures.append("paper qualification is not tied to a successful qualification run")
     uploads = _action_steps(paper_job, "actions/upload-artifact")
-    if len(uploads) != 1 or uploads[0].get("with", {}).get("path") != "paper-evidence/":
+    retained_paths = (
+        set(str(uploads[0].get("with", {}).get("path", "")).splitlines())
+        if len(uploads) == 1
+        else set()
+    )
+    if retained_paths != {"paper-evidence/", "feed-evidence/"}:
         failures.append("paper qualification does not retain its evidence bundle")
 
     allowed_job_writes = {

@@ -54,8 +54,8 @@ from ml4t.live import (
 | --- | --- |
 | Engine | `LiveEngine`, `RuntimeState`, `RuntimeTransition`, `RuntimeErrorContext`, `runtime_error_context`, `RuntimeFailureError`, `RuntimeCleanupError` |
 | Brokers | `IBBroker`, `AlpacaBroker` |
-| Beta-supported feeds | `IBDataFeed`, `AlpacaDataFeed`, `OKXFundingFeed` |
-| Experimental feeds | `DataBentoFeed`, `CryptoFeed`, `ExperimentalFeedError`, `ExperimentalFeedWarning` |
+| Beta-supported feeds | `OKXFundingFeed` |
+| Experimental feeds | `AlpacaDataFeed`, `IBDataFeed`, `DataBentoFeed`, `CryptoFeed`, `ExperimentalFeedError`, `ExperimentalFeedWarning` |
 | Feed helpers | `BarAggregator`, `BarBuffer`, `FeedContractError`, `FeedContinuityError`, `FeedOverflowError`, `FeedQueueSnapshot` |
 | Orders | `CanonicalOrderRequest`, `OrderValidationError`, `BrokerOrderContractError` |
 | Safety | `LiveRiskConfig`, `SafeBroker`, `RiskState`, `RiskLimitError`, `PersistenceSafetyError`, `AuditJournalError`, `AcceptedOrderPersistenceError`, `VirtualPortfolio` |
@@ -165,10 +165,12 @@ contract and require `experimental=True`.
 
 ```python
 from ml4t.live import (
+    AlpacaDataFeed,
     CryptoFeed,
     DataBentoFeed,
     ExperimentalFeedError,
     ExperimentalFeedWarning,
+    IBDataFeed,
 )
 ```
 
