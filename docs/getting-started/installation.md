@@ -2,7 +2,7 @@
 
 ## Requirements
 
-- Python 3.12+
+- Python 3.12, 3.13, or 3.14
 - A supported broker or data source for live use
 - `ml4t-backtest` is installed automatically as a package dependency
 

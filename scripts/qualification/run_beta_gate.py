@@ -64,6 +64,10 @@ def qualification_stages(temporary_directory: Path, repetitions: int = 5) -> lis
             ("uv", "run", "python", "scripts/qualification/check_dependency_matrix.py"),
         ),
         Stage(
+            "artifact-qualification",
+            ("uv", "run", "python", "scripts/qualification/qualify_artifacts.py"),
+        ),
+        Stage(
             "deterministic-tests-and-branch-coverage",
             (
                 "uv",

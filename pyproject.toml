@@ -3,11 +3,17 @@ name = "ml4t-live"
 dynamic = ["version"]
 description = "Live trading platform for ML4T strategies"
 readme = "README.md"
-license = { text = "MIT" }
+license = "MIT"
+license-files = ["LICENSE"]
 classifiers = [
-    "License :: OSI Approved :: MIT License",
+    "Development Status :: 4 - Beta",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Typing :: Typed",
 ]
-requires-python = ">=3.12"
+requires-python = ">=3.12,<3.15"
 dependencies = [
     "ml4t-backtest @ git+https://github.com/ml4t/backtest.git@12bcbc5684112a6137b0778350d7f44588544164",
     "ml4t-specs @ git+https://github.com/ml4t/specs.git@85d3476683a70b4f17e5e8cb82dd23d05b373dc8",
@@ -58,6 +64,16 @@ version-file = "src/ml4t/live/_version.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/ml4t"]
+exclude = ["**/AGENTS.md"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/src/ml4t/live",
+    "/LICENSE",
+    "/README.md",
+    "/pyproject.toml",
+]
+exclude = ["**/AGENTS.md"]
 
 [tool.hatch.metadata]
 allow-direct-references = true
@@ -84,6 +100,7 @@ dev = [
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
+pythonpath = ["."]
 filterwarnings = [
     "error",
     "ignore:websockets\\.legacy is deprecated.*:DeprecationWarning",
