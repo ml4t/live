@@ -36,6 +36,7 @@ from ml4t.live import (
     RiskLimitError,
     RiskState,
     RuntimeCleanupError,
+    RuntimeErrorContext,
     RuntimeFailureError,
     RuntimeState,
     RuntimeTransition,
@@ -43,6 +44,7 @@ from ml4t.live import (
     ThreadSafeBrokerWrapper,
     UnsafePersistencePathError,
     VirtualPortfolio,
+    runtime_error_context,
 )
 ```
 
@@ -50,7 +52,7 @@ from ml4t.live import (
 
 | Group | Primary symbols |
 | --- | --- |
-| Engine | `LiveEngine`, `RuntimeState`, `RuntimeTransition`, `RuntimeFailureError`, `RuntimeCleanupError` |
+| Engine | `LiveEngine`, `RuntimeState`, `RuntimeTransition`, `RuntimeErrorContext`, `runtime_error_context`, `RuntimeFailureError`, `RuntimeCleanupError` |
 | Brokers | `IBBroker`, `AlpacaBroker` |
 | Beta-supported feeds | `IBDataFeed`, `AlpacaDataFeed`, `OKXFundingFeed` |
 | Experimental feeds | `DataBentoFeed`, `CryptoFeed`, `ExperimentalFeedError`, `ExperimentalFeedWarning` |
@@ -71,6 +73,14 @@ from ml4t.live import (
       show_root_heading: true
 
 ::: ml4t.live.engine.RuntimeTransition
+    options:
+      show_root_heading: true
+
+::: ml4t.live.engine.RuntimeErrorContext
+    options:
+      show_root_heading: true
+
+::: ml4t.live.engine.runtime_error_context
     options:
       show_root_heading: true
 

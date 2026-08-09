@@ -13,9 +13,11 @@ from .brokers.ib import IBBroker
 from .engine import (
     LiveEngine,
     RuntimeCleanupError,
+    RuntimeErrorContext,
     RuntimeFailureError,
     RuntimeState,
     RuntimeTransition,
+    runtime_error_context,
 )
 from .feeds.aggregator import BarAggregator, BarBuffer
 from .feeds.alpaca_feed import AlpacaDataFeed
@@ -92,9 +94,11 @@ __all__ = [
     "LifecycleInvocation",
     "LiveEngine",
     "RuntimeCleanupError",
+    "RuntimeErrorContext",
     "RuntimeFailureError",
     "RuntimeState",
     "RuntimeTransition",
+    "runtime_error_context",
     "BrokerOrderContractError",
     "CanonicalOrderRequest",
     "OrderValidationError",

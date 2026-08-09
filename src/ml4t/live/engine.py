@@ -29,7 +29,7 @@ import logging
 import math
 import signal
 from collections import deque
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from datetime import time as dt_time
@@ -56,6 +56,7 @@ from .feeds.events import (
     ContinuityDisposition,
     EventContinuityTracker,
     FeedContinuityError,
+    FeedContractError,
     strategy_input,
     utc_datetime,
     validate_event_timing,
@@ -94,6 +95,65 @@ class RuntimeState(StrEnum):
 
 
 @dataclass(frozen=True, slots=True)
+class RuntimeErrorContext:
+    """Redacted operator context attached to a runtime exception."""
+
+    component: str
+    operation: str
+    runtime_state: RuntimeState
+    recovery_action: str
+    root_cause_type: str
+
+    def to_dict(self) -> dict[str, str]:
+        """Return machine-readable context without exception text."""
+        return {
+            "component": self.component,
+            "operation": self.operation,
+            "runtime_state": self.runtime_state.value,
+            "recovery_action": self.recovery_action,
+            "root_cause_type": self.root_cause_type,
+        }
+
+
+def runtime_error_context(error: BaseException) -> RuntimeErrorContext | None:
+    """Return structured runtime context when the engine attached it."""
+    context = getattr(error, "runtime_context", None)
+    return context if isinstance(context, RuntimeErrorContext) else None
+
+
+def _attach_runtime_error_context(
+    error: BaseException,
+    *,
+    component: str,
+    operation: str,
+    runtime_state: RuntimeState,
+    recovery_action: str,
+) -> None:
+    message = str(error)
+    redacted_message = str(redact_sensitive(message))
+    if redacted_message != message:
+        try:
+            error.args = (redacted_message,)
+        except (AttributeError, TypeError):
+            pass
+    if runtime_error_context(error) is not None:
+        return
+    context = RuntimeErrorContext(
+        component=component,
+        operation=operation,
+        runtime_state=runtime_state,
+        recovery_action=recovery_action,
+        root_cause_type=type(error).__name__,
+    )
+    cast(Any, error).runtime_context = context
+    error.add_note(
+        "runtime context: "
+        f"component={component}; operation={operation}; state={runtime_state.value}; "
+        f"recovery={recovery_action}"
+    )
+
+
+@dataclass(frozen=True, slots=True)
 class RuntimeTransition:
     """Structured evidence for one runtime state change."""
 
@@ -111,10 +171,28 @@ class RuntimeCleanupError(RuntimeError):
     def __init__(self, cleanup_result: dict[str, str]) -> None:
         self.cleanup_result = dict(cleanup_result)
         super().__init__(f"runtime cleanup failed: {self.cleanup_result}")
+        _attach_runtime_error_context(
+            self,
+            component="runtime_resources",
+            operation="release",
+            runtime_state=RuntimeState.FAILED,
+            recovery_action="correct the reported release failure, then call stop() again",
+        )
 
 
 class RuntimeFailureError(RuntimeError):
     """Raised when an asynchronous runtime failure reaches a terminal state."""
+
+    def __init__(self, reason: str) -> None:
+        self.reason = reason
+        super().__init__(reason)
+        _attach_runtime_error_context(
+            self,
+            component="engine",
+            operation="recover",
+            runtime_state=RuntimeState.FAILED,
+            recovery_action="inspect recovery events and restore the failed dependency before restart",
+        )
 
 
 _ALLOWED_RUNTIME_TRANSITIONS: dict[RuntimeState, set[RuntimeState]] = {
@@ -333,6 +411,7 @@ class LiveEngine:
                     self._install_signal_handlers()
                     self._signals_installed = True
             except BaseException as error:
+                self._annotate_connect_failure(error)
                 self._terminal_failure_reason = f"startup:{type(error).__name__}"
                 cleanup = await self._finalize_runtime(
                     terminal_state=RuntimeState.FAILED,
@@ -407,7 +486,7 @@ class LiveEngine:
                 name="ml4t-live-watchdog",
             )
             while not self._shutdown_event.is_set():
-                async for item in self.feed:
+                async for item in self._feed_items():
                     if self._shutdown_event.is_set():
                         logger.info("LiveEngine: Shutdown requested")
                         break
@@ -460,11 +539,23 @@ class LiveEngine:
 
                     try:
                         if event_kind is MarketEventKind.BAR and complete_or_non_bar:
-                            await self.strategy_runtime.process_market_event(
-                                timestamp,
-                                data,
-                                context,
-                            )
+                            try:
+                                await self.strategy_runtime.process_market_event(
+                                    timestamp,
+                                    data,
+                                    context,
+                                )
+                            except BaseException as error:
+                                _attach_runtime_error_context(
+                                    error,
+                                    component="strategy_runtime",
+                                    operation="process_market_event",
+                                    runtime_state=self._runtime_state,
+                                    recovery_action=(
+                                        "reconcile portable strategy state before restarting"
+                                    ),
+                                )
+                                raise
                         await self._dispatch_strategy(
                             LifecyclePhase.MARKET_EVENT,
                             timestamp,
@@ -506,6 +597,22 @@ class LiveEngine:
                     break
         except BaseException as error:
             failure = error
+            if isinstance(error, FeedContractError | FeedOverflowError):
+                _attach_runtime_error_context(
+                    error,
+                    component="feed",
+                    operation="validate",
+                    runtime_state=self._runtime_state,
+                    recovery_action=("restore the feed and establish continuity before restarting"),
+                )
+            elif not isinstance(error, asyncio.CancelledError):
+                _attach_runtime_error_context(
+                    error,
+                    component="engine",
+                    operation="run",
+                    runtime_state=self._runtime_state,
+                    recovery_action="inspect runtime diagnostics before restarting",
+                )
             if not isinstance(error, asyncio.CancelledError):
                 self._terminal_failure_reason = f"runtime:{type(error).__name__}"
             if isinstance(error, FeedContinuityError | FeedOverflowError):
@@ -631,14 +738,83 @@ class LiveEngine:
         self.strategy_runtime.active_phase = phase
         self.strategy_runtime.current_event_time = event_time
         try:
-            return await self.lifecycle_dispatcher.dispatch(
-                phase,
-                *args,
-                event_time=event_time,
-            )
+            try:
+                return await self.lifecycle_dispatcher.dispatch(
+                    phase,
+                    *args,
+                    event_time=event_time,
+                )
+            except BaseException as error:
+                callback = self.lifecycle_dispatcher.contract.phase_spec(phase).callback
+                _attach_runtime_error_context(
+                    error,
+                    component="strategy",
+                    operation=callback,
+                    runtime_state=self._runtime_state,
+                    recovery_action="correct the strategy callback before restarting",
+                )
+                raise
         finally:
             self.strategy_runtime.active_phase = None
             self.strategy_runtime.current_event_time = None
+
+    async def _feed_items(self) -> AsyncIterator[Any]:
+        """Read feed items while retaining public failure context."""
+        iterator = aiter(self.feed)
+        while True:
+            try:
+                item = await anext(iterator)
+            except StopAsyncIteration:
+                return
+            except BaseException as error:
+                _attach_runtime_error_context(
+                    error,
+                    component="feed",
+                    operation="read",
+                    runtime_state=self._runtime_state,
+                    recovery_action=("restore the feed and establish continuity before restarting"),
+                )
+                raise
+            yield item
+
+    def _annotate_connect_failure(self, error: BaseException) -> None:
+        contexts = {
+            RuntimeState.PREFLIGHT: (
+                "engine",
+                "preflight",
+                "correct the preflight failure, then call connect() again",
+            ),
+            RuntimeState.CONNECTING_BROKER: (
+                "broker",
+                "connect",
+                "correct the broker failure, then call connect() again",
+            ),
+            RuntimeState.RECONCILING: (
+                "broker",
+                "reconcile",
+                "reconcile broker and persisted state before calling connect() again",
+            ),
+            RuntimeState.STARTING_FEED: (
+                "feed",
+                "start",
+                "correct the feed failure, then call connect() again",
+            ),
+        }
+        component, operation, recovery_action = contexts.get(
+            self._runtime_state,
+            (
+                "engine",
+                "connect",
+                "inspect startup diagnostics before calling connect() again",
+            ),
+        )
+        _attach_runtime_error_context(
+            error,
+            component=component,
+            operation=operation,
+            runtime_state=self._runtime_state,
+            recovery_action=recovery_action,
+        )
 
     async def _watchdog_loop(self) -> None:
         """Monitor runtime health and request recovery/escalation when needed."""

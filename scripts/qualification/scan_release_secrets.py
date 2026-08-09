@@ -158,11 +158,7 @@ def scan_release(
 
 def _default_evidence_root(repository: Path) -> Path | None:
     candidate = (
-        repository.parent
-        / "ml4t-live-dev"
-        / ".workspace"
-        / "work"
-        / ("ml4t-live-release-readiness")
+        repository.parent / "ml4t-live-dev" / ".workspace" / "work" / "ml4t-live-stable-readiness"
     )
     return candidate if candidate.exists() else None
 

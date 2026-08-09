@@ -125,6 +125,12 @@ A recovery gap, conflicting replay, older sequence, or event-time reversal raise
 discards pending work, and records the rejected event and queue state. Neither condition permits
 silent data loss or automatic continuation.
 
+Engine failures retain their original exception type and traceback. Pass the exception to
+`runtime_error_context(error)` to obtain a `RuntimeErrorContext` with `component`, `operation`, the
+pre-cleanup `runtime_state`, `recovery_action`, and `root_cause_type`. The same values are safe to
+serialize with `to_dict()`. Exception messages and runtime diagnostic payloads redact credential
+and account identifiers before they cross the public runtime boundary.
+
 An audit failure blocks the broker call when `fail_on_journal_error=True`. An accepted order that
 cannot be persisted raises `AcceptedOrderPersistenceError` and requires reconciliation instead of
 automatic retry. A cleanup failure raises `RuntimeCleanupError` and leaves the runtime failed until

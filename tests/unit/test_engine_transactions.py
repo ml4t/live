@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import signal
 import threading
 import time
@@ -18,6 +19,7 @@ from ml4t.live import (
     RuntimeFailureError,
     RuntimeState,
     SafeBroker,
+    runtime_error_context,
 )
 from ml4t.live.persistence import SecureStateStore
 
@@ -318,7 +320,7 @@ async def test_partial_feed_start_failure_rolls_back_feed_then_broker() -> None:
     feed = FaultFeed(fail_start_calls={1})
     engine = LiveEngine(PhaseStrategy(), broker, feed)
 
-    with pytest.raises(RuntimeError, match="feed start failure"):
+    with pytest.raises(RuntimeError, match="feed start failure") as captured:
         await engine.connect()
 
     assert feed.stop_calls == 1
@@ -335,6 +337,13 @@ async def test_partial_feed_start_failure_rolls_back_feed_then_broker() -> None:
         RuntimeState.STOPPING,
         RuntimeState.FAILED,
     ]
+    assert runtime_error_context(captured.value).to_dict() == {
+        "component": "feed",
+        "operation": "start",
+        "runtime_state": "starting_feed",
+        "recovery_action": "correct the feed failure, then call connect() again",
+        "root_cause_type": "RuntimeError",
+    }
 
 
 @pytest.mark.asyncio
@@ -346,7 +355,7 @@ async def test_strategy_startup_failure_runs_end_once_and_releases_runtime(phase
     engine = LiveEngine(strategy, broker, feed)
     await engine.connect()
 
-    with pytest.raises(RuntimeError, match=f"strategy {phase} failure"):
+    with pytest.raises(RuntimeError, match=f"strategy {phase} failure") as captured:
         await engine.run()
 
     assert strategy.start_calls == 1
@@ -355,6 +364,12 @@ async def test_strategy_startup_failure_runs_end_once_and_releases_runtime(phase
     assert feed.stop_calls == 1
     assert broker.disconnect_calls == 1
     assert engine.runtime_state is RuntimeState.FAILED
+    context = runtime_error_context(captured.value)
+    assert context.component == "strategy"
+    assert context.operation == f"on_{phase}"
+    assert context.runtime_state is RuntimeState.STARTING_STRATEGY
+    assert context.recovery_action == "correct the strategy callback before restarting"
+    assert context.root_cause_type == "RuntimeError"
 
 
 @pytest.mark.asyncio
@@ -365,13 +380,44 @@ async def test_feed_exception_fails_and_finalizes_the_complete_lifecycle() -> No
     engine = LiveEngine(strategy, broker, feed)
     await engine.connect()
 
-    with pytest.raises(RuntimeError, match="feed iteration failure"):
+    with pytest.raises(RuntimeError, match="feed iteration failure") as captured:
         await engine.run()
 
     assert (strategy.start_calls, strategy.prepare_calls, strategy.end_calls) == (1, 1, 1)
     assert feed.stop_calls == 1
     assert broker.disconnect_calls == 1
     assert engine.runtime_state is RuntimeState.FAILED
+    context = runtime_error_context(captured.value)
+    assert (context.component, context.operation) == ("feed", "read")
+    assert context.runtime_state is RuntimeState.RUNNING
+    assert context.recovery_action == "restore the feed and establish continuity before restarting"
+
+
+@pytest.mark.asyncio
+async def test_runtime_error_context_and_diagnostics_redact_sensitive_failure_text() -> None:
+    secret = "PKSUPERSECRET123"
+    account = "DU7654321"
+
+    class SensitiveStrategy(PhaseStrategy):
+        def on_start(self, broker: Any) -> None:
+            raise RuntimeError(f"api_key={secret} account={account} Bearer hidden-token")
+
+    engine = LiveEngine(SensitiveStrategy(), FaultBroker(), FaultFeed())
+    await engine.connect()
+
+    with pytest.raises(RuntimeError) as captured:
+        await engine.run()
+
+    retained = (
+        json.dumps(engine.operational_events, default=str)
+        + str(captured.value)
+        + str(captured.value.__notes__)
+    )
+    assert secret not in retained
+    assert account not in retained
+    assert "hidden-token" not in retained
+    assert retained.count("[REDACTED]") >= 3
+    assert runtime_error_context(captured.value).component == "strategy"
 
 
 @pytest.mark.asyncio
@@ -492,6 +538,13 @@ async def test_cleanup_failure_is_observable_and_terminal() -> None:
         await engine.stop()
 
     assert captured.value.cleanup_result["feed"] == "failed:RuntimeError"
+    assert runtime_error_context(captured.value).to_dict() == {
+        "component": "runtime_resources",
+        "operation": "release",
+        "runtime_state": "failed",
+        "recovery_action": "correct the reported release failure, then call stop() again",
+        "root_cause_type": "RuntimeCleanupError",
+    }
     assert broker.disconnect_calls == 1
     assert engine.runtime_state is RuntimeState.FAILED
 
@@ -515,7 +568,7 @@ async def test_recovery_exhaustion_is_bounded_without_repeating_callbacks() -> N
     await wait_for_state(engine, RuntimeState.RUNNING)
     broker.connected = False
 
-    with pytest.raises(RuntimeFailureError, match="recovery_exhausted"):
+    with pytest.raises(RuntimeFailureError, match="recovery_exhausted") as captured:
         await asyncio.wait_for(run_task, timeout=1)
 
     assert broker.connect_calls == 3
@@ -530,3 +583,12 @@ async def test_recovery_exhaustion_is_bounded_without_repeating_callbacks() -> N
     assert all(event["last_known_sequence"] == 0 for event in attempts)
     assert all("cleanup_result" in event for event in attempts)
     assert not [task for task in asyncio.all_tasks() if task.get_name() == "ml4t-live-watchdog"]
+    assert runtime_error_context(captured.value).to_dict() == {
+        "component": "engine",
+        "operation": "recover",
+        "runtime_state": "failed",
+        "recovery_action": (
+            "inspect recovery events and restore the failed dependency before restart"
+        ),
+        "root_cause_type": "RuntimeFailureError",
+    }
