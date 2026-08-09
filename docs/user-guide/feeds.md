@@ -3,7 +3,7 @@
 `AlpacaDataFeed`, `IBDataFeed`, `OKXFundingFeed`, and `BarAggregator` emit the shared
 `ml4t.specs.MarketEvent` contract. `LiveEngine` validates event timing and adapts each event to the
 existing `on_data(timestamp, data, context, broker)` strategy callback. `CryptoFeed` and
-`DataBentoFeed` retain the experimental tuple contract for now.
+`DataBentoFeed` emit typed UTC events but remain experimental and require explicit opt-in.
 
 | Feed | Event kinds | Event time | Completion | Sequence capability | Maximum age | Queue |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -37,14 +37,14 @@ evidence that no records were missed. Treat the halt as an operator reconciliati
 
 ## Choosing A Feed
 
-| Feed | Best for | Typical pairing |
-| --- | --- | --- |
-| `AlpacaDataFeed` | Alpaca-native equities and crypto | `AlpacaBroker` |
-| `IBDataFeed` | direct market data from TWS or IB Gateway | `IBBroker` |
-| `DataBentoFeed` | replay, institutional futures data, parity testing | replay workflows, validation |
-| `CryptoFeed` | exchange-agnostic crypto streaming through CCXT | custom crypto execution stacks |
-| `OKXFundingFeed` | perpetual-swap strategies that depend on funding context | funding-rate and perp strategies |
-| `BarAggregator` | converting tick or sub-minute feeds into strategy bars | `IBDataFeed`, custom feeds |
+| Feed | Status | Best for | Typical pairing |
+| --- | --- | --- | --- |
+| `AlpacaDataFeed` | beta-supported | Alpaca-native equities and crypto | `AlpacaBroker` |
+| `IBDataFeed` | beta-supported | direct market data from TWS or IB Gateway | `IBBroker` |
+| `OKXFundingFeed` | beta-supported | perpetual-swap strategies that depend on funding context | funding-rate and perp strategies |
+| `BarAggregator` | beta-supported | converting tick or sub-minute feeds into strategy bars | `IBDataFeed`, custom typed feeds |
+| `DataBentoFeed` | experimental | schema-limited replay and live evaluation | deliberate custom validation |
+| `CryptoFeed` | experimental | generic CCXT evaluation | deliberate custom validation |
 
 ## AlpacaDataFeed
 
@@ -86,7 +86,15 @@ feed = IBDataFeed(
 `BarAggregator` if your strategy expects OHLCV bars. The feed does not own a reconnect loop;
 watchdog-driven stop/restart belongs in `LiveEngine` when enabled.
 
-## DataBentoFeed
+## Experimental Feeds
+
+`DataBentoFeed` and `CryptoFeed` are not part of the beta support contract. Construction fails
+unless `experimental=True` is passed, then emits `ExperimentalFeedWarning` with the missing
+guarantees. They have typed UTC event boundaries and deterministic provider-failure propagation,
+but do not promise bounded overload behavior, reconnect continuity, performance targets, or
+credentialed service qualification. Do not treat their public imports as support claims.
+
+### DataBentoFeed
 
 Historical replay:
 
@@ -97,6 +105,7 @@ feed = DataBentoFeed.from_file(
     "data/ES_202401.dbn",
     symbols=["ES.FUT"],
     replay_speed=10.0,
+    experimental=True,
 )
 ```
 
@@ -108,12 +117,14 @@ feed = DataBentoFeed.from_live(
     dataset="GLBX.MDP3",
     schema="ohlcv-1s",
     symbols=["ES.c.0", "NQ.c.0"],
+    experimental=True,
 )
 ```
 
-`DataBentoFeed` requires the optional `databento` package.
+`DataBentoFeed` requires the optional `databento` package. Its deterministic tests cover only typed
+OHLCV, trade, and top-of-book records; this does not qualify the service or its other schemas.
 
-## CryptoFeed
+### CryptoFeed
 
 ```python
 from ml4t.live import CryptoFeed
@@ -123,10 +134,14 @@ feed = CryptoFeed(
     symbols=["BTC/USDT", "ETH/USDT"],
     timeframe="1m",
     stream_ohlcv=True,
+    experimental=True,
 )
 ```
 
-`CryptoFeed` uses `ccxt` or `ccxt.pro` depending on availability and supports both trade streaming and OHLCV streaming.
+`CryptoFeed` uses `ccxt.pro` when available and otherwise uses the asynchronous CCXT REST client.
+It never selects synchronous CCXT under async code. For a candle batch, every candle before the
+newest is `complete` and the newest is `evolving`. A changed evolving revision emits again, and the
+same timestamp emits once more when a later batch proves it complete.
 
 ## OKXFundingFeed
 
@@ -192,7 +207,7 @@ the engine watchdog can stop and restart the broker/feed pair after `feed_silent
 
 - Use `AlpacaDataFeed` for Alpaca-native stocks and crypto.
 - Use `IBDataFeed` for direct market data from TWS or IB Gateway.
-- Use `DataBentoFeed` for replay or institutional market-data workflows.
-- Use `CryptoFeed` for exchange-agnostic crypto streaming through CCXT.
 - Use `OKXFundingFeed` for perpetual-swap strategies that depend on funding-rate context.
 - Use `BarAggregator` when your upstream feed is tick-oriented but your strategy expects bars.
+- Opt in to `DataBentoFeed` or `CryptoFeed` only for experimental evaluation under the limitations
+  above.

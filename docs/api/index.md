@@ -19,8 +19,6 @@ from ml4t.live import (
     CanonicalOrderRequest,
     ConcurrentStateWriterError,
     CorruptStateError,
-    CryptoFeed,
-    DataBentoFeed,
     DataFeedProtocol,
     FeedContinuityError,
     FeedContractError,
@@ -54,7 +52,8 @@ from ml4t.live import (
 | --- | --- |
 | Engine | `LiveEngine`, `RuntimeState`, `RuntimeTransition`, `RuntimeFailureError`, `RuntimeCleanupError` |
 | Brokers | `IBBroker`, `AlpacaBroker` |
-| Feeds | `IBDataFeed`, `AlpacaDataFeed`, `DataBentoFeed`, `CryptoFeed`, `OKXFundingFeed` |
+| Beta-supported feeds | `IBDataFeed`, `AlpacaDataFeed`, `OKXFundingFeed` |
+| Experimental feeds | `DataBentoFeed`, `CryptoFeed`, `ExperimentalFeedError`, `ExperimentalFeedWarning` |
 | Feed helpers | `BarAggregator`, `BarBuffer`, `FeedContractError`, `FeedContinuityError`, `FeedOverflowError`, `FeedQueueSnapshot` |
 | Orders | `CanonicalOrderRequest`, `OrderValidationError`, `BrokerOrderContractError` |
 | Safety | `LiveRiskConfig`, `SafeBroker`, `RiskState`, `RiskLimitError`, `PersistenceSafetyError`, `AuditJournalError`, `AcceptedOrderPersistenceError`, `VirtualPortfolio` |
@@ -121,14 +120,6 @@ from ml4t.live import (
     options:
       show_root_heading: true
 
-::: ml4t.live.feeds.databento_feed.DataBentoFeed
-    options:
-      show_root_heading: true
-
-::: ml4t.live.feeds.crypto_feed.CryptoFeed
-    options:
-      show_root_heading: true
-
 ::: ml4t.live.feeds.okx_feed.OKXFundingFeed
     options:
       show_root_heading: true
@@ -154,6 +145,36 @@ from ml4t.live import (
       show_root_heading: true
 
 ::: ml4t.live.feeds.queue.FeedQueueSnapshot
+    options:
+      show_root_heading: true
+
+## Experimental Feed Opt-In
+
+These imports are available for deliberate evaluation. They are not part of the beta support
+contract and require `experimental=True`.
+
+```python
+from ml4t.live import (
+    CryptoFeed,
+    DataBentoFeed,
+    ExperimentalFeedError,
+    ExperimentalFeedWarning,
+)
+```
+
+::: ml4t.live.feeds.experimental.ExperimentalFeedError
+    options:
+      show_root_heading: true
+
+::: ml4t.live.feeds.experimental.ExperimentalFeedWarning
+    options:
+      show_root_heading: true
+
+::: ml4t.live.feeds.databento_feed.DataBentoFeed
+    options:
+      show_root_heading: true
+
+::: ml4t.live.feeds.crypto_feed.CryptoFeed
     options:
       show_root_heading: true
 

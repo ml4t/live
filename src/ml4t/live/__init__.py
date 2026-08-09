@@ -22,6 +22,7 @@ from .feeds.alpaca_feed import AlpacaDataFeed
 from .feeds.crypto_feed import CryptoFeed
 from .feeds.databento_feed import DataBentoFeed
 from .feeds.events import FeedContinuityError, FeedContractError
+from .feeds.experimental import ExperimentalFeedError, ExperimentalFeedWarning
 from .feeds.ib_feed import IBDataFeed
 from .feeds.okx_feed import OKXFundingFeed
 from .feeds.queue import FeedOverflowError, FeedQueueSnapshot
@@ -69,14 +70,17 @@ __all__ = [
     "AlpacaDataFeed",
     "BarAggregator",
     "BarBuffer",
-    "CryptoFeed",
-    "DataBentoFeed",
     "FeedContractError",
     "FeedContinuityError",
     "FeedOverflowError",
     "FeedQueueSnapshot",
     "IBDataFeed",
     "OKXFundingFeed",
+    # Experimental Data Feeds
+    "CryptoFeed",
+    "DataBentoFeed",
+    "ExperimentalFeedError",
+    "ExperimentalFeedWarning",
     # Engine
     "LifecycleInvocation",
     "LiveEngine",

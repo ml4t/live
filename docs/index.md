@@ -241,13 +241,13 @@ See [Brokers](user-guide/brokers.md) for connection details and usage patterns.
 
 ## Data Feed Comparison
 
-| Data Feed | Source | Market Shape | Best for |
-| --- | --- | --- | --- |
-| **AlpacaDataFeed** | Alpaca API | bars, quotes, trades | US equities and Alpaca crypto |
-| **IBDataFeed** | TWS / IB Gateway | real-time ticks | IB-driven multi-asset execution |
-| **DataBentoFeed** | DataBento API or DBN replay | tick and bar schemas | replay, validation, institutional futures workflows |
-| **CryptoFeed** | exchange WebSocket via CCXT | trades and candles | exchange-agnostic crypto streaming |
-| **OKXFundingFeed** | OKX public APIs | OHLCV plus funding context | perpetual futures and funding-rate strategies |
+| Data Feed | Status | Source | Market Shape | Best for |
+| --- | --- | --- | --- | --- |
+| **AlpacaDataFeed** | beta-supported | Alpaca API | bars, quotes, trades | US equities and Alpaca crypto |
+| **IBDataFeed** | beta-supported | TWS / IB Gateway | real-time ticks | IB-driven multi-asset execution |
+| **OKXFundingFeed** | beta-supported | OKX public APIs | OHLCV plus funding context | perpetual futures and funding-rate strategies |
+| **DataBentoFeed** | experimental opt-in | DataBento API or DBN replay | selected tick and bar schemas | custom evaluation only |
+| **CryptoFeed** | experimental opt-in | asynchronous CCXT | trades and candles | custom evaluation only |
 
 Use [Data Feeds](user-guide/feeds.md) for examples and feed-specific setup.
 
@@ -268,7 +268,7 @@ Or:
 pip install ml4t-live
 ```
 
-Install `databento` separately if you want `DataBentoFeed`.
+Install `databento` separately if you deliberately opt in to experimental `DataBentoFeed` use.
 
 ## Documentation Map
 

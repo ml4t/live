@@ -1,13 +1,7 @@
-"""Cryptocurrency market data feed.
+"""Experimental generic cryptocurrency market data feed via asynchronous CCXT.
 
-Generic crypto feed supporting multiple exchanges via CCXT.
-
-Exchanges Supported:
-- Binance (spot and futures)
-- Coinbase Pro
-- Kraken
-- FTX (if still available)
-- 100+ others via CCXT
+This adapter is not part of the beta support contract. Exchange availability and payload behavior
+depend on the installed CCXT implementation and require independent user validation.
 
 Features:
 - WebSocket streaming
@@ -20,6 +14,7 @@ Example Binance:
         exchange='binance',
         symbols=['BTC/USDT', 'ETH/USDT'],
         timeframe='1m',
+        experimental=True,
     )
     await feed.start()
 
@@ -29,46 +24,64 @@ Example Coinbase:
         symbols=['BTC-USD', 'ETH-USD'],
         api_key=os.getenv('COINBASE_API_KEY'),
         api_secret=os.getenv('COINBASE_SECRET'),
+        experimental=True,
     )
 """
 
 import asyncio
 import logging
 from collections.abc import AsyncIterator
-from datetime import datetime
-from typing import Any
+from datetime import UTC, datetime
+from typing import Any, ClassVar
 
+from ml4t.specs import (
+    BarPayload,
+    EventCompletion,
+    LifecycleVersion,
+    MarketEvent,
+    MarketEventKind,
+    TradePayload,
+)
+
+from ml4t.live.feeds.events import sequence_unavailable
+from ml4t.live.feeds.experimental import require_experimental_opt_in
 from ml4t.live.persistence import redact_sensitive
 from ml4t.live.protocols import DataFeedProtocol
 
 logger = logging.getLogger(__name__)
 
-# CCXT is optional dependency
+# CCXT is an optional dependency. Only async implementations are valid here.
+ccxt: Any = None
+CCXT_WEBSOCKET_AVAILABLE = False
 try:
     import ccxt.pro as ccxt
 
     CCXT_AVAILABLE = True
+    CCXT_WEBSOCKET_AVAILABLE = True
 except ImportError:
     try:
-        import ccxt
+        import ccxt.async_support as ccxt
 
         CCXT_AVAILABLE = True
-        logger.warning("ccxt.pro not available, using sync ccxt (slower)")
     except ImportError:
         CCXT_AVAILABLE = False
-        logger.warning("ccxt package not installed - CryptoFeed unavailable")
+
+
+CRYPTO_MISSING_GUARANTEES = (
+    "bounded overload behavior",
+    "provider continuity across reconnect",
+    "credentialed exchange qualification",
+)
 
 
 class CryptoFeed(DataFeedProtocol):
-    """Cryptocurrency market data feed via CCXT.
+    """Experimental cryptocurrency market data feed via asynchronous CCXT.
 
-    Provides unified interface to 100+ crypto exchanges.
-    Supports both REST (polling) and WebSocket (streaming).
+    Supports async REST polling and uses CCXT Pro websocket methods when available. No exchange,
+    overload, reconnect, or performance guarantee is included in the beta support contract.
 
     Data Format:
-        timestamp: datetime - Candle/trade timestamp
-        data: dict[str, dict] - {symbol: {'open', 'high', 'low', 'close', 'volume'}}
-        context: dict - Exchange-specific metadata
+        Experimental typed ``MarketEvent`` bars and trades with UTC timestamps.
 
     Exchange Symbols:
         - Binance: 'BTC/USDT', 'ETH/USDT'
@@ -83,6 +96,7 @@ class CryptoFeed(DataFeedProtocol):
             exchange='binance',
             symbols=['BTC/USDT', 'ETH/USDT'],
             stream_trades=True,  # Stream trades (fastest)
+            experimental=True,
         )
 
     Example OHLCV Bars:
@@ -91,6 +105,7 @@ class CryptoFeed(DataFeedProtocol):
             symbols=['BTC/USDT'],
             timeframe='1m',
             stream_ohlcv=True,
+            experimental=True,
         )
 
     Example Authenticated:
@@ -99,8 +114,11 @@ class CryptoFeed(DataFeedProtocol):
             symbols=['BTC/USDT'],
             api_key='your-key',
             api_secret='your-secret',
+            experimental=True,
         )
     """
+
+    support_status: ClassVar[str] = "experimental"
 
     def __init__(
         self,
@@ -113,6 +131,7 @@ class CryptoFeed(DataFeedProtocol):
         api_key: str | None = None,
         api_secret: str | None = None,
         api_passphrase: str | None = None,
+        experimental: bool = False,
     ):
         """Initialize crypto feed.
 
@@ -125,18 +144,34 @@ class CryptoFeed(DataFeedProtocol):
             api_key: API key (for authenticated endpoints)
             api_secret: API secret
             api_passphrase: API passphrase (Coinbase only)
+            experimental: Must be true to acknowledge the unsupported feed contract.
         """
+        require_experimental_opt_in(
+            "CryptoFeed",
+            experimental=experimental,
+            missing_guarantees=CRYPTO_MISSING_GUARANTEES,
+        )
         if not CCXT_AVAILABLE:
-            raise ImportError("ccxt package required. Install with: pip install ccxt[asyncio]")
+            raise ImportError(
+                "ccxt package required. Install ml4t-live with its locked dependencies"
+            )
+        if not isinstance(exchange, str) or not exchange.strip():
+            raise ValueError("exchange must be a non-empty string")
+        if not symbols or any(
+            not isinstance(symbol, str) or not symbol.strip() for symbol in symbols
+        ):
+            raise ValueError("symbols must contain at least one non-empty symbol")
 
         self.exchange_id = exchange
-        self.symbols = symbols
+        self.symbols = list(symbols)
         self.timeframe = timeframe
         self.stream_trades = stream_trades
         self.stream_ohlcv = stream_ohlcv
 
         # Create exchange instance
-        exchange_class = getattr(ccxt, exchange)
+        exchange_class = getattr(ccxt, exchange, None)
+        if not callable(exchange_class):
+            raise ValueError(f"CCXT exchange is unavailable: {exchange}")
         config = {
             "enableRateLimit": True,
         }
@@ -151,9 +186,12 @@ class CryptoFeed(DataFeedProtocol):
         self.exchange = exchange_class(config)
 
         # State
-        self._queue: asyncio.Queue = asyncio.Queue()
+        self._queue: asyncio.Queue[MarketEvent | None] = asyncio.Queue()
         self._running = False
         self._stream_tasks: list[asyncio.Task] = []
+        self._failure: RuntimeError | None = None
+        self._completed_candles: set[tuple[str, int]] = set()
+        self._evolving_candles: dict[tuple[str, int], BarPayload] = {}
 
         # Statistics
         self._tick_count = 0
@@ -165,11 +203,20 @@ class CryptoFeed(DataFeedProtocol):
 
         Initiates WebSocket subscriptions for all symbols.
         """
+        if self._running:
+            return
         logger.info(f"CryptoFeed: Starting {self.exchange_id} feed for {len(self.symbols)} symbols")
+        self._queue = asyncio.Queue()
+        self._stream_tasks.clear()
+        self._failure = None
         self._running = True
 
         # Load markets
-        await self.exchange.load_markets()
+        try:
+            await self.exchange.load_markets()
+        except BaseException:
+            self._running = False
+            raise
 
         # Start streaming tasks
         for symbol in self.symbols:
@@ -184,7 +231,7 @@ class CryptoFeed(DataFeedProtocol):
         logger.info(f"CryptoFeed: Started {len(self._stream_tasks)} stream(s)")
 
     def stop(self) -> None:
-        """Stop streaming and close exchange connection."""
+        """Stop streaming; use ``close`` to release the exchange connection."""
         logger.info("CryptoFeed: Stopping feed")
         self._running = False
 
@@ -193,7 +240,7 @@ class CryptoFeed(DataFeedProtocol):
             task.cancel()
 
         # Signal consumer
-        self._queue.put_nowait(None)
+        self._signal_stop()
 
         logger.info(
             f"CryptoFeed: Stopped. "
@@ -225,6 +272,7 @@ class CryptoFeed(DataFeedProtocol):
         except asyncio.CancelledError:
             logger.info(f"CryptoFeed: Trade stream for {symbol} cancelled")
         except Exception as e:
+            self._stream_failed(e, stream=f"trade:{symbol}")
             logger.error(
                 "CryptoFeed: Error streaming trades for %s: %s",
                 symbol,
@@ -238,112 +286,160 @@ class CryptoFeed(DataFeedProtocol):
             if hasattr(self.exchange, "watch_ohlcv"):
                 # WebSocket streaming (ccxt.pro)
                 while self._running:
-                    candles = await self.exchange.watch_ohlcv(symbol, self.timeframe)
-                    # Only emit latest complete candle
-                    if candles:
-                        await self._process_candle(candles[-1], symbol)
+                    candles = await self.exchange.watch_ohlcv(
+                        symbol,
+                        self.timeframe,
+                        limit=2,
+                    )
+                    await self._process_candle_batch(candles, symbol)
             else:
                 # Fallback: Poll REST API
-                last_timestamp = None
                 while self._running:
                     candles = await self.exchange.fetch_ohlcv(symbol, self.timeframe, limit=2)
-                    if candles:
-                        latest = candles[-1]
-                        # Only emit if new candle
-                        if latest[0] != last_timestamp:
-                            await self._process_candle(latest, symbol)
-                            last_timestamp = latest[0]
+                    await self._process_candle_batch(candles, symbol)
                     await asyncio.sleep(5)  # Poll every 5 seconds
 
         except asyncio.CancelledError:
             logger.info(f"CryptoFeed: OHLCV stream for {symbol} cancelled")
         except Exception as e:
+            self._stream_failed(e, stream=f"ohlcv:{symbol}")
             logger.error(
                 "CryptoFeed: Error streaming OHLCV for %s: %s",
                 symbol,
                 redact_sensitive(str(e)),
             )
 
-    async def _process_trade(self, trade: dict, symbol: str) -> None:
+    async def _process_trade(self, trade: dict[str, Any], symbol: str) -> None:
         """Process and emit a trade tick.
 
         Args:
             trade: CCXT trade dict with keys: timestamp, price, amount, side, etc.
             symbol: Trading pair
         """
+        receipt_time = datetime.now(UTC)
+        timestamp = datetime.fromtimestamp(float(trade["timestamp"]) / 1000, tz=UTC)
+        provider_sequence = trade.get("id")
+        if provider_sequence is not None and (
+            isinstance(provider_sequence, bool) or not isinstance(provider_sequence, str | int)
+        ):
+            provider_sequence = str(provider_sequence)
+        event = MarketEvent(
+            version=LifecycleVersion.V1,
+            event_time=timestamp,
+            receipt_time=receipt_time,
+            kind=MarketEventKind.TRADE,
+            completion=EventCompletion.COMPLETE,
+            source=f"ccxt:{self.exchange_id}",
+            asset=symbol,
+            payload=TradePayload(float(trade["price"]), float(trade["amount"])),
+            provider_sequence=provider_sequence,
+            gap=(
+                sequence_unavailable("CCXT", "trade identifier")
+                if provider_sequence is None
+                else None
+            ),
+            metadata={
+                "experimental": True,
+                "side": trade.get("side"),
+            },
+        )
+        self._queue.put_nowait(event)
         self._trade_count += 1
         self._tick_count += 1
 
-        # Extract timestamp (milliseconds)
-        timestamp = datetime.fromtimestamp(trade["timestamp"] / 1000)
+    async def _process_candle_batch(self, candles: list[list[Any]], symbol: str) -> None:
+        """Emit prior candles as complete and the newest candle as evolving."""
+        if not candles:
+            return
+        for candle in candles[:-1]:
+            await self._process_candle(candle, symbol, completion=EventCompletion.COMPLETE)
+        await self._process_candle(candles[-1], symbol, completion=EventCompletion.EVOLVING)
 
-        # Build data
-        data = {
-            symbol: {
-                "price": float(trade["price"]),
-                "size": float(trade["amount"]),
-            }
-        }
-
-        # Context
-        context = {
-            symbol: {
-                "side": trade.get("side"),  # 'buy' or 'sell'
-                "trade_id": trade.get("id"),
-            }
-        }
-
-        self._queue.put_nowait((timestamp, data, context))
-
-    async def _process_candle(self, candle: list, symbol: str) -> None:
+    async def _process_candle(
+        self,
+        candle: list[Any],
+        symbol: str,
+        *,
+        completion: EventCompletion,
+    ) -> None:
         """Process and emit an OHLCV candle.
 
         Args:
             candle: CCXT OHLCV array [timestamp, open, high, low, close, volume]
             symbol: Trading pair
         """
+        if len(candle) < 6:
+            raise ValueError("CCXT OHLCV candle must contain six fields")
+        timestamp_ms = int(candle[0])
+        timestamp = datetime.fromtimestamp(timestamp_ms / 1000, tz=UTC)
+        payload = BarPayload(
+            float(candle[1]),
+            float(candle[2]),
+            float(candle[3]),
+            float(candle[4]),
+            float(candle[5]),
+        )
+        key = (symbol, timestamp_ms)
+        if completion is EventCompletion.COMPLETE and key in self._completed_candles:
+            return
+        if completion is EventCompletion.EVOLVING and (
+            key in self._completed_candles or self._evolving_candles.get(key) == payload
+        ):
+            return
+        event = MarketEvent(
+            version=LifecycleVersion.V1,
+            event_time=timestamp,
+            receipt_time=datetime.now(UTC),
+            kind=MarketEventKind.BAR,
+            completion=completion,
+            source=f"ccxt:{self.exchange_id}",
+            asset=symbol,
+            payload=payload,
+            provider_sequence=str(timestamp_ms),
+            metadata={
+                "experimental": True,
+                "timeframe": self.timeframe,
+                "exchange": self.exchange_id,
+            },
+        )
+        self._queue.put_nowait(event)
+        if completion is EventCompletion.COMPLETE:
+            self._completed_candles.add(key)
+            self._evolving_candles.pop(key, None)
+        else:
+            self._evolving_candles[key] = payload
         self._candle_count += 1
         self._tick_count += 1
 
-        # Extract fields
-        timestamp = datetime.fromtimestamp(candle[0] / 1000)
-        open_price = float(candle[1])
-        high = float(candle[2])
-        low = float(candle[3])
-        close = float(candle[4])
-        volume = float(candle[5])
+    def _stream_failed(self, error: Exception, *, stream: str) -> None:
+        """Stop every producer and wake the consumer with the original cause."""
+        if self._failure is not None:
+            return
+        failure = RuntimeError(f"CryptoFeed experimental {stream} stream failed")
+        failure.__cause__ = error
+        self._failure = failure
+        self._running = False
+        current = asyncio.current_task()
+        for task in self._stream_tasks:
+            if task is not current and not task.done():
+                task.cancel()
+        self._signal_stop()
 
-        # Build data
-        data = {
-            symbol: {
-                "open": open_price,
-                "high": high,
-                "low": low,
-                "close": close,
-                "volume": volume,
-            }
-        }
+    def _signal_stop(self) -> None:
+        self._queue.put_nowait(None)
 
-        # Context
-        context = {
-            symbol: {
-                "timeframe": self.timeframe,
-                "exchange": self.exchange_id,
-            }
-        }
-
-        self._queue.put_nowait((timestamp, data, context))
-
-    async def __aiter__(self) -> AsyncIterator[tuple[datetime, dict, dict]]:
+    async def __aiter__(self) -> AsyncIterator[MarketEvent]:
         """Async iterator yielding market data.
 
         Yields:
-            Tuple of (timestamp, data, context)
+            Typed experimental market event.
         """
-        while self._running:
+        while True:
             item = await self._queue.get()
 
             if item is None:  # Shutdown sentinel
+                if self._failure is not None:
+                    raise self._failure
                 break
 
             yield item
@@ -366,4 +462,7 @@ class CryptoFeed(DataFeedProtocol):
             "candle_count": self._candle_count,
             "symbols": self.symbols,
             "timeframe": self.timeframe,
+            "experimental": True,
+            "missing_beta_guarantees": list(CRYPTO_MISSING_GUARANTEES),
+            "websocket_available": CCXT_WEBSOCKET_AVAILABLE,
         }

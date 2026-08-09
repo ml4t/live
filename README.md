@@ -20,7 +20,8 @@ Deploying a backtested strategy to live markets requires careful handling of asy
 
 - The same Strategy class used in ml4t-backtest works unchanged in production
 - Two broker integrations: Interactive Brokers (TWS/Gateway) and Alpaca (stocks + crypto)
-- Six data feeds: Alpaca, IB, Databento, CCXT (100+ crypto exchanges), OKX
+- Three beta-supported feed adapters for Alpaca, IB, and OKX, plus bar aggregation
+- Explicit opt-in experimental adapters for generic CCXT and DataBento workflows
 - Shadow mode for testing without placing real orders (VirtualPortfolio tracking)
 - 16-parameter risk configuration: position limits, order limits, loss limits, price protection
 - Kill switch with crash-safe state persistence (atomic JSON writes)
@@ -111,14 +112,14 @@ Requirements:
 
 ## Data Feeds
 
-| Feed | Source | Coverage |
-|------|--------|----------|
-| `AlpacaDataFeed` | Alpaca | US stocks + crypto, real-time bars/quotes/trades |
-| `IBDataFeed` | Interactive Brokers | Multi-asset tick-by-tick data |
-| `DataBentoFeed` | Databento | Historical replay + real-time streaming |
-| `CryptoFeed` | CCXT | 100+ crypto exchanges (Binance, Coinbase, Kraken, ...) |
-| `OKXFundingFeed` | OKX | Perpetual swaps with funding rates |
-| `BarAggregator` | Any feed | Multi-feed aggregation + bar assembly |
+| Feed | Source | Status | Coverage |
+|------|--------|--------|----------|
+| `AlpacaDataFeed` | Alpaca | beta-supported | US stocks + crypto, real-time bars/quotes/trades |
+| `IBDataFeed` | Interactive Brokers | beta-supported | Multi-asset tick-by-tick data |
+| `OKXFundingFeed` | OKX | beta-supported | Perpetual swaps with funding rates |
+| `BarAggregator` | Any typed feed | beta-supported | Multi-feed aggregation + bar assembly |
+| `DataBentoFeed` | DataBento | experimental | Historical replay + real-time streaming |
+| `CryptoFeed` | CCXT | experimental | Generic exchange trades and candles |
 
 ```python
 from ml4t.live.feeds.alpaca_feed import AlpacaDataFeed
@@ -131,13 +132,18 @@ feed = AlpacaDataFeed(
     feed="iex",          # "iex" (free) or "sip" (premium)
 )
 
-# Crypto via CCXT (any of 100+ exchanges)
+# Experimental generic crypto adapter; not part of the beta support contract
 feed = CryptoFeed(
     exchange="binance",
     symbols=["BTC/USDT", "ETH/USDT"],
     timeframe="1m",
+    experimental=True,
 )
 ```
+
+The experimental adapters require explicit opt-in and report their missing guarantees on first
+use. They do not currently promise bounded overload behavior, reconnect continuity, performance,
+or credentialed service qualification.
 
 ## Risk Configuration
 
@@ -289,7 +295,7 @@ await LiveEngine(MyStrategy(), safe_broker, live_feed).run()
 - [Installation](docs/getting-started/installation.md) - setup instructions
 - [Quick Start](docs/getting-started/quickstart.md) - first live strategy
 - [Brokers](docs/user-guide/brokers.md) - IB and Alpaca setup
-- [Data Feeds](docs/user-guide/feeds.md) - 6 feed types
+- [Data Feeds](docs/user-guide/feeds.md) - supported and experimental feed contracts
 - [Risk Management](docs/user-guide/risk.md) - LiveRiskConfig and SafeBroker
 
 ## Technical Characteristics

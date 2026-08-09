@@ -14,8 +14,8 @@ uv add ml4t-live
 
 ## Optional Add-Ons
 
-`ml4t-live` installs the core broker/feed stack used by the package. DataBento is optional and must
-be installed separately if you want `DataBentoFeed`:
+`ml4t-live` installs the beta-supported broker/feed stack used by the package. DataBento is optional
+and must be installed separately for deliberate experimental `DataBentoFeed` evaluation:
 
 ```bash
 uv add databento
