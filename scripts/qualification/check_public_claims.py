@@ -124,7 +124,7 @@ EXTERNAL_EXAMPLES = frozenset(
 
 def public_surface_paths(root: Path) -> tuple[Path, ...]:
     """Return every maintained public narrative surface in one source tree."""
-    paths = {root / relative for relative in ("README.md", "api.yaml", "DESIGN.md")}
+    paths = {root / relative for relative in ("README.md", "api.yaml", "DESIGN.md", "mkdocs.yml")}
     paths.update((root / "docs").rglob("*.md"))
     paths.update((root / "examples").glob("*.md"))
     paths.update((root / "examples").glob("*.py"))

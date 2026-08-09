@@ -128,6 +128,22 @@ def test_secret_scan_reports_only_redacted_location() -> None:
     assert "AKIA" not in repr(finding)
 
 
+def test_secret_scan_detects_broker_ids_authenticated_urls_and_signed_urls() -> None:
+    payload = (
+        b"DU7654321\n"
+        b"https://person:credential@example.test/path\n"
+        b"https://example.test/object?X-Amz-Signature=abcdef0123456789\n"
+    )
+
+    result = scan_payloads((("fixture", payload),))
+
+    assert {finding.pattern for finding in result.findings} == {
+        "broker-account-id",
+        "signed-url-query",
+        "url-basic-auth",
+    }
+
+
 def test_install_matrix_continues_after_profile_failure(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

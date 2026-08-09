@@ -31,8 +31,18 @@ TEXT_SUFFIXES = {
     ".yaml",
     ".yml",
 }
-SOURCE_ROOTS = ("src", "examples", "scripts", "docs")
-HISTORY_PATHS = (*SOURCE_ROOTS, "README.md", "pyproject.toml")
+SOURCE_ROOTS = ("src", "examples", "scripts", "docs", ".github")
+ROOT_FILES = (
+    "README.md",
+    "api.yaml",
+    "DESIGN.md",
+    "pyproject.toml",
+    "uv.lock",
+    "dependency-policy.toml",
+    "artifact-manifest.toml",
+    "release-recovery.toml",
+)
+HISTORY_PATHS = (*SOURCE_ROOTS, *ROOT_FILES)
 MAX_FILE_BYTES = 5_000_000
 
 SECRET_PATTERNS = {
@@ -46,7 +56,11 @@ SECRET_PATTERNS = {
         rb"(?i)\b(?:api[_-]?key|access[_-]?token|auth[_-]?token|client[_-]?secret|password)"
         rb"\b\s*[:=]\s*['\"][A-Za-z0-9_./+=:-]{16,}['\"]"
     ),
-    "broker-account-id": re.compile(rb"\b[UDF]\d{7,10}\b"),
+    "broker-account-id": re.compile(rb"\b(?:DU|DF|F|U)\d{7,10}\b"),
+    "url-basic-auth": re.compile(rb"https?://[^/\s:@]+:[^@\s/]+@"),
+    "signed-url-query": re.compile(
+        rb"(?i)https?://[^\s]+[?&](?:x-amz-signature|signature|sig|token)=[A-Za-z0-9_%+-]{12,}"
+    ),
 }
 
 
@@ -105,6 +119,10 @@ def current_source_payloads(repository: Path) -> Iterable[tuple[str, bytes]]:
     for path in repository.rglob("*.log"):
         if path.is_file() and path.stat().st_size <= MAX_FILE_BYTES and ".git" not in path.parts:
             yield f"log:{path.relative_to(repository)}", path.read_bytes()
+    for relative in ROOT_FILES:
+        path = repository / relative
+        if path.is_file() and path.stat().st_size <= MAX_FILE_BYTES:
+            yield f"source:{relative}", path.read_bytes()
 
 
 def history_payload(repository: Path) -> tuple[str, bytes]:

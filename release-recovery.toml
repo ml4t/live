@@ -1,0 +1,63 @@
+schema_version = 1
+policy = "published files, tags, attestations, and releases are immutable"
+
+[scenarios.partial_pypi_publish]
+immutable = true
+replacement_allowed = false
+requires_new_version_on_conflict = true
+procedure = [
+  "Stop the release workflow and download the qualified artifact bundle by commit.",
+  "Compare every published filename and SHA-256 digest with the qualified inventory.",
+  "If every published file matches, publish only the missing qualified file through the protected trusted-publishing environment.",
+  "If any filename or digest differs, abandon the version and qualify a new version.",
+]
+
+[scenarios.pypi_succeeded_github_failed]
+immutable = true
+replacement_allowed = false
+requires_new_version_on_conflict = true
+procedure = [
+  "Verify the PyPI files, tag target, artifact hashes, SBOM, dependency snapshot, and attestations against the qualified inventory.",
+  "If every identity matches, create only the missing GitHub release from the existing immutable tag and qualified artifacts.",
+  "If any identity differs, leave the existing records unchanged and qualify a new version.",
+]
+
+[scenarios.tag_conflict]
+immutable = true
+replacement_allowed = false
+requires_new_version_on_conflict = true
+procedure = [
+  "Stop before publication and compare the existing tag target with the qualified commit.",
+  "Do not move or replace the tag.",
+  "Resolve the source discrepancy and qualify a new version and tag.",
+]
+
+[scenarios.pypi_version_conflict]
+immutable = true
+replacement_allowed = false
+requires_new_version_on_conflict = true
+procedure = [
+  "Stop before uploading any remaining files and compare published hashes with the qualified inventory.",
+  "Do not replace a published distribution file.",
+  "Qualify a new version when any required filename already exists with a different hash.",
+]
+
+[scenarios.github_release_conflict]
+immutable = true
+replacement_allowed = false
+requires_new_version_on_conflict = true
+procedure = [
+  "Stop and compare the release tag, commit, assets, hashes, SBOM, and dependency snapshot with the qualified inventory.",
+  "Do not replace a conflicting tag or release asset.",
+  "Qualify a new version when the existing release cannot be completed using only matching qualified artifacts.",
+]
+
+[scenarios.provenance_failure]
+immutable = true
+replacement_allowed = false
+requires_new_version_on_conflict = true
+procedure = [
+  "Stop publication when trusted identity, attestation, SBOM, or dependency-snapshot verification fails.",
+  "Preserve all existing package and release records for audit.",
+  "Correct the provenance input and qualify a new version if publication already created an immutable record.",
+]

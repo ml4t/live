@@ -2,7 +2,7 @@
 # MkDocs Material configuration with Picasso Blue palette
 
 site_name: ML4T Live
-site_description: Live trading platform with zero-code migration from backtesting
+site_description: Live trading runtime for causal ML4T strategies
 site_url: https://www.ml4trading.io/docs/live/
 repo_url: https://github.com/ml4t/live
 repo_name: ml4t/live
@@ -112,6 +112,7 @@ nav:
     - Examples: user-guide/examples.md
     - Operator Guide: user-guide/operator-guide.md
   - Candidate Qualification: qualification.md
+  - Release Recovery: release-recovery.md
   - Claim Evidence: claim-evidence.md
   - API Reference:
     - api/index.md
