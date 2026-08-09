@@ -223,6 +223,12 @@ class MockLiveBroker:
         self._order_counter = 0
         self._cash = 100_000.0
 
+    def assert_paper_trading(self) -> None:
+        """Identify this deterministic adapter as a paper venue."""
+
+    def assert_live_trading(self) -> None:
+        """Allow tests that explicitly exercise the live routing contract."""
+
     async def connect(self):
         pass
 
@@ -364,7 +370,7 @@ async def test_ma_strategy_no_repeat_signals(tmp_path):
     await mock_broker.connect()
 
     config = LiveRiskConfig(
-        shadow_mode=False,
+        execution_mode="paper",
         dedup_window_seconds=0,
         state_file=tmp_path / "risk.json",
     )
@@ -411,7 +417,7 @@ async def test_simple_exit_strategy(tmp_path):
     await mock_broker.connect()
 
     config = LiveRiskConfig(
-        shadow_mode=False,
+        execution_mode="paper",
         dedup_window_seconds=0,
         state_file=tmp_path / "risk.json",
     )
@@ -459,7 +465,7 @@ async def test_flip_position_strategy(tmp_path):
     await mock_broker.connect()
 
     config = LiveRiskConfig(
-        shadow_mode=False,
+        execution_mode="paper",
         dedup_window_seconds=0,
         state_file=tmp_path / "risk.json",
     )

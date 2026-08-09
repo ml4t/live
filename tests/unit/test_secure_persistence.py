@@ -34,6 +34,12 @@ class PersistenceBroker:
     def get_position(self, asset: str) -> Position | None:
         return self.positions.get(asset.upper())
 
+    def assert_paper_trading(self) -> None:
+        """Identify this deterministic adapter as a paper venue."""
+
+    def assert_live_trading(self) -> None:
+        """Allow tests that explicitly exercise the live routing contract."""
+
     async def get_account_value_async(self) -> float:
         return 100_000.0
 
@@ -68,6 +74,7 @@ class PersistenceBroker:
 
 def config(root: Path, **overrides) -> LiveRiskConfig:
     values = {
+        "execution_mode": "paper",
         "state_file": str(root / "state.json"),
         "journal_file": str(root / "journal.jsonl"),
         "max_data_staleness_seconds": None,
@@ -318,6 +325,13 @@ async def test_explicit_best_effort_journal_policy_is_observable(tmp_path):
         "state_error": None,
         "journal_required": False,
         "journal_error": "AuditJournalError",
+        "execution_mode": "paper",
+        "execution_identity_validated": True,
+        "disabled_safety_controls": [
+            "max_daily_loss",
+            "max_drawdown_pct",
+            "max_data_staleness_seconds",
+        ],
     }
     safe.close_persistence()
 

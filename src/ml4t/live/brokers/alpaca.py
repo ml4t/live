@@ -256,6 +256,17 @@ class AlpacaBroker:
         if getattr(self._trading_client, "_base_url", None) != BaseURL.TRADING_PAPER:
             raise RuntimeError("Alpaca client is not using the official paper endpoint")
 
+    def assert_live_trading(self) -> None:
+        """Fail unless the connected client is authenticated through Alpaca's live endpoint."""
+        if not self.is_connected or self._trading_client is None or self._account_id is None:
+            raise RuntimeError("Alpaca live identity requires a connected account")
+        if self._paper is not False:
+            raise RuntimeError("Alpaca broker is configured for paper trading")
+        if getattr(self._trading_client, "_sandbox", None) is not False:
+            raise RuntimeError("Alpaca client did not confirm live mode")
+        if getattr(self._trading_client, "_base_url", None) != BaseURL.TRADING_LIVE:
+            raise RuntimeError("Alpaca client is not using the official live endpoint")
+
     # === AsyncBrokerProtocol Implementation ===
 
     @property

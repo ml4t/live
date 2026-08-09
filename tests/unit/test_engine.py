@@ -53,6 +53,12 @@ class MockAsyncBroker:
     def _record_market_data(self, timestamp: datetime, data: dict, context: dict) -> None:
         self.market_data_calls.append((timestamp, data, context))
 
+    def assert_paper_trading(self) -> None:
+        """Identify this deterministic adapter as a paper venue."""
+
+    def assert_live_trading(self) -> None:
+        """Allow tests that explicitly exercise the live routing contract."""
+
     # Properties (expected by ThreadSafeBrokerWrapper)
     @property
     def positions(self) -> dict[str, Position]:

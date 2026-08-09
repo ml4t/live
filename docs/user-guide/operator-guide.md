@@ -51,7 +51,7 @@ A paper deployment should still keep tight limits:
 
 ```python
 LiveRiskConfig(
-    shadow_mode=False,
+    execution_mode="paper",
     max_position_value=5_000,
     max_order_value=1_000,
     max_daily_loss=500,

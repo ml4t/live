@@ -266,6 +266,14 @@ class AsyncBrokerProtocol(Protocol):
         """
         ...
 
+    def assert_paper_trading(self) -> None:
+        """Fail unless the connected endpoint and account are paper-only."""
+        ...
+
+    def assert_live_trading(self) -> None:
+        """Fail unless the connected endpoint and explicitly selected account are live."""
+        ...
+
     async def get_positions_async(self) -> dict[str, Position]:
         """Get all positions (async version)."""
         ...

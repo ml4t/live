@@ -167,6 +167,12 @@ class MockAsyncBroker:
         self._connected = False
         self._cash = 100000.0
 
+    def assert_paper_trading(self) -> None:
+        """Identify this deterministic adapter as a paper venue."""
+
+    def assert_live_trading(self) -> None:
+        """Allow tests that explicitly exercise the live routing contract."""
+
     async def connect(self) -> None:
         self._connected = True
 

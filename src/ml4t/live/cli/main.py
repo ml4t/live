@@ -28,7 +28,13 @@ from ml4t.live.persistence import (
     redact_sensitive,
 )
 from ml4t.live.protocols import AsyncBrokerProtocol, DataFeedProtocol
-from ml4t.live.safety import LiveRiskConfig, RiskState, SafeBroker
+from ml4t.live.safety import (
+    ExecutionMode,
+    ExecutionModeError,
+    LiveRiskConfig,
+    RiskState,
+    SafeBroker,
+)
 
 DEFAULT_STATE_FILE = ".ml4t_risk_state.json"
 
@@ -62,6 +68,7 @@ class PreflightResult:
     journal_file: str | None
     session_state: str | None
     next_session_boundary: datetime | None
+    execution_mode: str | None = None
 
 
 class NullBroker:
@@ -80,6 +87,12 @@ class NullBroker:
     @property
     def pending_orders(self) -> list[Order]:
         return list(self._pending_orders)
+
+    def assert_paper_trading(self) -> None:
+        raise RuntimeError("NullBroker is only valid in shadow mode")
+
+    def assert_live_trading(self) -> None:
+        raise RuntimeError("NullBroker is only valid in shadow mode")
 
     async def connect(self) -> None:
         self._connected = True
@@ -504,7 +517,7 @@ async def _run_shadow_command(args: argparse.Namespace) -> int:
     broker = IntentPrintingSafeBroker(
         NullBroker(),
         LiveRiskConfig(
-            shadow_mode=True,
+            execution_mode="shadow",
             state_file=str(Path(args.state_file).expanduser().resolve()),
         ),
     )
@@ -586,6 +599,10 @@ async def _probe_alpaca() -> BrokerProbeResult:
     broker = AlpacaBroker(api_key=api_key, secret_key=secret_key, paper=paper)
     try:
         await broker.connect()
+        if paper:
+            broker.assert_paper_trading()
+        else:
+            broker.assert_live_trading()
         cash = await broker.get_cash_async()
         positions = _serialize_positions(await broker.get_positions_async())
         pending_orders = _serialize_pending_orders(await broker.get_pending_orders_async())
@@ -613,8 +630,9 @@ async def _probe_ib() -> BrokerProbeResult:
     host = os.environ.get("IB_HOST") or os.environ.get("ML4T_IB_HOST")
     port = os.environ.get("IB_PORT") or os.environ.get("ML4T_IB_PORT")
     client_id = os.environ.get("IB_CLIENT_ID") or os.environ.get("ML4T_IB_CLIENT_ID")
+    account = os.environ.get("IB_ACCOUNT") or os.environ.get("ML4T_IB_ACCOUNT")
 
-    if host is None and port is None and client_id is None:
+    if host is None and port is None and client_id is None and account is None:
         return BrokerProbeResult(
             status="skipped",
             detail="set IB_HOST or IB_PORT to enable this check",
@@ -626,9 +644,14 @@ async def _probe_ib() -> BrokerProbeResult:
         host=host or "127.0.0.1",
         port=int(port or 7497),
         client_id=int(client_id or 1999),
+        account=account,
     )
     try:
         await broker.connect()
+        if broker._port in {4001, 7496}:
+            broker.assert_live_trading()
+        else:
+            broker.assert_paper_trading()
         equity = await broker.get_account_value_async()
         positions = _serialize_positions(await broker.get_positions_async())
         pending_orders = _serialize_pending_orders(await broker.get_pending_orders_async())
@@ -670,6 +693,7 @@ async def _run_status_command(args: argparse.Namespace) -> int:
     else:
         print(
             "risk_state:"
+            f" execution_mode={state.execution_mode or 'unrecorded'}"
             f" date={state.date}"
             f" orders_placed={state.orders_placed}"
             f" daily_loss={state.daily_loss:,.2f}"
@@ -709,6 +733,8 @@ async def _preflight_broker(args: argparse.Namespace) -> PreflightResult:
     if args.broker == "alpaca":
         api_key = os.environ.get("ALPACA_API_KEY")
         secret_key = os.environ.get("ALPACA_SECRET_KEY")
+        paper = _alpaca_paper_mode()
+        execution_mode = ExecutionMode.PAPER if paper else ExecutionMode.LIVE
         if not api_key or not secret_key:
             return PreflightResult(
                 status="error",
@@ -721,11 +747,12 @@ async def _preflight_broker(args: argparse.Namespace) -> PreflightResult:
                 journal_file=str(_journal_path_for_state_file(state_path)),
                 session_state=None,
                 next_session_boundary=None,
+                execution_mode=execution_mode.value,
             )
         broker = AlpacaBroker(
             api_key=api_key,
             secret_key=secret_key,
-            paper=_alpaca_paper_mode(),
+            paper=paper,
         )
     else:
         host = os.environ.get("IB_HOST") or os.environ.get("ML4T_IB_HOST") or "127.0.0.1"
@@ -733,7 +760,9 @@ async def _preflight_broker(args: argparse.Namespace) -> PreflightResult:
         client_id = int(
             os.environ.get("IB_CLIENT_ID") or os.environ.get("ML4T_IB_CLIENT_ID") or 1999
         )
-        broker = IBBroker(host=host, port=port, client_id=client_id)
+        account = os.environ.get("IB_ACCOUNT") or os.environ.get("ML4T_IB_ACCOUNT")
+        broker = IBBroker(host=host, port=port, client_id=client_id, account=account)
+        execution_mode = ExecutionMode.LIVE if port in {4001, 7496} else ExecutionMode.PAPER
 
     session_state, next_boundary = _equity_session_snapshot()
 
@@ -741,11 +770,12 @@ async def _preflight_broker(args: argparse.Namespace) -> PreflightResult:
         safe_broker = SafeBroker(
             broker,
             LiveRiskConfig(
+                execution_mode=execution_mode,
                 state_file=str(state_path),
                 fail_on_reconciliation_mismatch=args.strict,
             ),
         )
-    except PersistenceSafetyError as exc:
+    except (ExecutionModeError, PersistenceSafetyError) as exc:
         return PreflightResult(
             status="error",
             detail=str(redact_sensitive(str(exc))),
@@ -757,6 +787,7 @@ async def _preflight_broker(args: argparse.Namespace) -> PreflightResult:
             journal_file=str(_journal_path_for_state_file(state_path)),
             session_state=session_state,
             next_session_boundary=next_boundary,
+            execution_mode=execution_mode.value,
         )
 
     try:
@@ -773,6 +804,7 @@ async def _preflight_broker(args: argparse.Namespace) -> PreflightResult:
             journal_file=str(safe_broker._journal_path()),
             session_state=session_state,
             next_session_boundary=next_boundary,
+            execution_mode=execution_mode.value,
         )
     finally:
         safe_broker.close_persistence()
@@ -794,6 +826,7 @@ async def _preflight_broker(args: argparse.Namespace) -> PreflightResult:
         journal_file=str(result["journal_file"]),
         session_state=session_state,
         next_session_boundary=next_boundary,
+        execution_mode=execution_mode.value,
     )
 
 
@@ -803,6 +836,8 @@ async def _run_preflight_command(args: argparse.Namespace) -> int:
 
     print(f"ml4t-live {__version__}")
     print(f"preflight_broker: {args.broker}")
+    if result.execution_mode is not None:
+        print(f"execution_mode: {result.execution_mode}")
     print(f"risk_state_file: {state_path}")
     if result.journal_file:
         print(f"journal_file: {result.journal_file}")

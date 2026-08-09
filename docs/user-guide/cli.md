@@ -64,7 +64,8 @@ export IB_CLIENT_ID=1999
 
 ## Shadow
 
-`shadow` loads a strategy file, builds a feed, wraps the broker in `SafeBroker(shadow_mode=True)`, and runs a bounded live-engine session.
+`shadow` loads a strategy file, builds a feed, wraps the broker in
+`SafeBroker(execution_mode="shadow")`, and runs a bounded live-engine session.
 
 ```bash
 uv run ml4t-live shadow examples/shadow_mode_demo.py --feed okx --duration 60

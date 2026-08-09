@@ -444,6 +444,7 @@ async def _assert_atomic_rejections(provider: str, broker: Any, state_directory:
         safe = SafeBroker(
             broker,
             LiveRiskConfig(
+                execution_mode="paper",
                 allowed_assets={"MSFT"},
                 state_file=str(state_directory / f"{provider}-risk.json"),
                 journal_file=str(state_directory / f"{provider}-journal.jsonl"),

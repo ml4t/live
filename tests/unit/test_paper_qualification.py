@@ -258,6 +258,9 @@ async def test_capability_and_policy_rejections_never_reach_provider(tmp_path: P
             self.positions = {}
             self.pending_orders = []
 
+        def assert_paper_trading(self) -> None:
+            """Identify this deterministic adapter as a paper venue."""
+
         async def submit_order_async(
             self,
             asset: str,

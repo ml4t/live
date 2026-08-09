@@ -51,7 +51,7 @@ With `ml4t-live`, you can:
 - take an existing `ml4t-backtest.Strategy` and run it in `LiveEngine`
 - connect that strategy to Alpaca or Interactive Brokers
 - replay or stream data through a live-style feed interface
-- start in `shadow_mode=True` so orders are tracked but not routed
+- start in `execution_mode="shadow"` so orders are tracked but not routed
 - add hard limits for order size, exposure, stale data, daily loss, and drawdown before going live
 - inspect persisted state and broker reachability with `ml4t-live status`
 - run bounded shadow sessions from the CLI before promoting to paper or live
@@ -107,7 +107,7 @@ result = engine.run()
 from ml4t.live import AlpacaBroker, AlpacaDataFeed, LiveEngine, LiveRiskConfig, SafeBroker
 
 raw_broker = AlpacaBroker(api_key="...", secret_key="...", paper=True)
-safe_broker = SafeBroker(raw_broker, LiveRiskConfig(shadow_mode=True))
+safe_broker = SafeBroker(raw_broker, LiveRiskConfig(execution_mode="shadow"))
 feed = AlpacaDataFeed(api_key="...", secret_key="...", symbols=["SPY"], data_type="bars")
 
 engine = LiveEngine(BuyOnceStrategy(), safe_broker, feed)
@@ -131,7 +131,7 @@ The strategy runs, risk checks run, and `VirtualPortfolio` tracks fills, but no 
 safe_broker = SafeBroker(
     raw_broker,
     LiveRiskConfig(
-        shadow_mode=True,
+        execution_mode="shadow",
         max_position_value=25_000,
         max_order_value=5_000,
         max_orders_per_minute=5,
@@ -147,7 +147,7 @@ The key config change is turning shadow mode off while still using paper broker 
 safe_broker = SafeBroker(
     raw_broker,
     LiveRiskConfig(
-        shadow_mode=False,
+        execution_mode="paper",
         max_position_value=25_000,
         max_order_value=5_000,
         max_orders_per_minute=5,
@@ -163,7 +163,7 @@ Keep limits tight enough that mistakes are survivable.
 safe_broker = SafeBroker(
     raw_broker,
     LiveRiskConfig(
-        shadow_mode=False,
+        execution_mode="live",
         max_position_value=10_000,
         max_total_exposure=25_000,
         max_order_value=2_500,
@@ -193,7 +193,7 @@ so it should be understood in concrete terms:
   `RiskLimitError`.
 - Set `max_drawdown_pct=0.05`. If portfolio equity drops 5% from the high-water mark, the kill switch
   activates and new orders are refused until you clear it.
-- Leave `shadow_mode=True` during the first rollout phase. Orders are recorded and reflected in the
+- Leave `execution_mode="shadow"` selected during the first rollout phase. Orders are recorded and reflected in the
   virtual portfolio, but the real broker never sees them.
 
 ### Example Configuration
@@ -213,7 +213,7 @@ config = LiveRiskConfig(
     max_drawdown_pct=0.05,
     dedup_window_seconds=1.0,
     allowed_assets={"SPY", "QQQ"},
-    shadow_mode=True,
+    execution_mode="shadow",
 )
 ```
 

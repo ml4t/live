@@ -121,6 +121,7 @@ class IBBroker:
         self._port = port
         self._client_id = client_id
         self._account = account
+        self._configured_account = account
         self._market_data_type = market_data_type
 
         self.ib = IB()
@@ -261,6 +262,19 @@ class IBBroker:
             raise RuntimeError("IB endpoint is not a standard paper-trading port")
         if re.fullmatch(r"DU[0-9]+", self._account.upper()) is None:
             raise RuntimeError("IB managed account is not identified as a paper account")
+
+    def assert_live_trading(self) -> None:
+        """Fail unless the connected live endpoint matches an explicitly selected account."""
+        if not self.is_connected or self._account is None:
+            raise RuntimeError("IB live identity requires a connected managed account")
+        if self._port not in {4001, 7496}:
+            raise RuntimeError("IB endpoint is not a standard live-trading port")
+        if self._configured_account is None:
+            raise RuntimeError("IB live trading requires explicit account selection")
+        if self._account.upper() != self._configured_account.upper():
+            raise RuntimeError("IB connected account does not match the selected live account")
+        if re.fullmatch(r"DU[0-9]+", self._account.upper()) is not None:
+            raise RuntimeError("IB managed account is identified as a paper account")
 
     # === AsyncBrokerProtocol Implementation ===
 

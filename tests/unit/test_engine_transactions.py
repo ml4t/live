@@ -53,6 +53,12 @@ class FaultBroker:
             raise RuntimeError("operational record failed")
         self.events.append((event, payload))
 
+    def assert_paper_trading(self) -> None:
+        """Identify this deterministic adapter as a paper venue."""
+
+    def assert_live_trading(self) -> None:
+        """Allow tests that explicitly exercise the live routing contract."""
+
     async def connect(self) -> None:
         self.connect_calls += 1
         self.connected = True
@@ -215,6 +221,7 @@ async def test_failed_safe_broker_connect_releases_persistence_writer(tmp_path) 
     safe_broker = SafeBroker(
         raw_broker,
         LiveRiskConfig(
+            execution_mode="paper",
             state_file=str(state_path),
             journal_file=str(tmp_path / "journal.jsonl"),
             max_data_staleness_seconds=None,
@@ -241,6 +248,7 @@ async def test_completed_safe_broker_run_releases_persistence_writer(tmp_path) -
     safe_broker = SafeBroker(
         raw_broker,
         LiveRiskConfig(
+            execution_mode="paper",
             state_file=str(state_path),
             journal_file=str(tmp_path / "journal.jsonl"),
             max_data_staleness_seconds=None,

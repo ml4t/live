@@ -105,3 +105,23 @@ An incompatible removal requires a `DeprecationWarning` through at least one pri
 this guide must identify the replacement, and removal requires a major release. A security or
 financial-safety correction may use the policy's urgent exception only when the release notes state
 the incompatibility, explain why the normal interval is unsafe, and provide the safe migration.
+
+## Select An Execution Destination Explicitly
+
+The stable candidate rejects `SafeBroker` construction unless `LiveRiskConfig.execution_mode` is
+set to `"shadow"`, `"paper"`, or `"live"`. The old `shadow_mode=False` default could route an order
+to whichever account a provider happened to expose, so preserving that behavior would create a
+financial-safety risk.
+
+Replace `LiveRiskConfig(shadow_mode=True)` with `LiveRiskConfig(execution_mode="shadow")`. Replace
+`LiveRiskConfig(shadow_mode=False)` with `execution_mode="paper"` or `execution_mode="live"` after
+choosing the intended destination. `shadow_mode=True` remains a prerelease compatibility alias for
+shadow execution, but new code should use `execution_mode`.
+
+Paper and live execution also require the connected broker identity to match the selected mode.
+Alpaca checks the official endpoint and client sandbox setting. IB checks the standard paper or live
+port, the managed-account form, and, for live execution, an explicitly configured `IB_ACCOUNT` or
+`ML4T_IB_ACCOUNT`. A mismatch fails before persistence or an order API call.
+
+Risk-state files record their execution mode. Use a separate state-file path for each destination.
+Reusing a shadow or paper state file for another destination is rejected before the broker connects.

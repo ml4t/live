@@ -54,6 +54,9 @@ class DemoBroker:
             )
         ]
 
+    def assert_paper_trading(self) -> None:
+        """Identify this deterministic demo adapter as a paper venue."""
+
     async def connect(self) -> None:
         self._connected = True
 
@@ -106,7 +109,10 @@ async def main() -> int:
         )
         RiskState.save_atomic(persisted_state, str(state_file))
 
-        safe_broker = SafeBroker(DemoBroker(), LiveRiskConfig(state_file=str(state_file)))
+        safe_broker = SafeBroker(
+            DemoBroker(),
+            LiveRiskConfig(execution_mode="paper", state_file=str(state_file)),
+        )
         await safe_broker.connect()
 
         print("Startup reconciliation report:")

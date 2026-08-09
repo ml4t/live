@@ -44,7 +44,7 @@ config = LiveRiskConfig(
     dedup_window_seconds=1.0,
     allowed_assets={"SPY", "QQQ"},
     blocked_assets={"GME"},
-    shadow_mode=True,
+    execution_mode="shadow",
     kill_switch_enabled=False,
     fail_on_reconciliation_mismatch=True,
     state_file=".ml4t_risk_state.json",
@@ -83,7 +83,7 @@ orders-per-minute remain positive integers.
 
 ### Execution And Persistence
 
-- `shadow_mode`
+- `execution_mode`: required `"shadow"`, `"paper"`, or `"live"` destination
 - `kill_switch_enabled`
 - `fail_on_reconciliation_mismatch`
 - `state_file`
@@ -144,7 +144,7 @@ accepted it, and operator reconciliation must determine its state.
 Shadow mode is the recommended first deployment step:
 
 ```python
-safe_broker = SafeBroker(broker, LiveRiskConfig(shadow_mode=True))
+safe_broker = SafeBroker(broker, LiveRiskConfig(execution_mode="shadow"))
 ```
 
 In shadow mode:
@@ -174,7 +174,7 @@ raw_broker = IBBroker(port=7497)
 safe_broker = SafeBroker(
     raw_broker,
     LiveRiskConfig(
-        shadow_mode=True,
+        execution_mode="shadow",
         max_position_value=10_000,
         max_order_value=2_500,
         max_daily_loss=500,

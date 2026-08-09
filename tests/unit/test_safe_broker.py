@@ -58,6 +58,8 @@ def mock_broker():
     broker.connect = AsyncMock()
     broker.disconnect = AsyncMock()
     broker.is_connected_async = AsyncMock(return_value=True)
+    broker.assert_paper_trading = MagicMock()
+    broker.assert_live_trading = MagicMock()
     return broker
 
 
@@ -88,6 +90,7 @@ def config(temp_state_file):
         max_daily_loss=1_000.0,
         max_drawdown_pct=0.10,
         shadow_mode=False,
+        execution_mode="paper",
         state_file=temp_state_file,
     )
 
@@ -119,7 +122,7 @@ def test_safe_broker_loads_existing_state(mock_broker, temp_state_file):
     )
     write_legacy_state(temp_state_file, state)
 
-    config = LiveRiskConfig(state_file=temp_state_file)
+    config = LiveRiskConfig(execution_mode="paper", state_file=temp_state_file)
     safe = SafeBroker(mock_broker, config)
 
     assert safe._state.daily_loss == 500.0
@@ -133,6 +136,7 @@ def test_safe_broker_loads_existing_state(mock_broker, temp_state_file):
 def test_positions_property_shadow_mode(mock_broker, config):
     """Test positions property returns virtual positions in shadow mode."""
     config.shadow_mode = True
+    config.execution_mode = "shadow"
     safe = SafeBroker(mock_broker, config)
 
     # Virtual portfolio starts empty
@@ -162,6 +166,7 @@ def test_positions_property_live_mode(mock_broker, config):
 def test_get_position_shadow_mode(mock_broker, config):
     """Test get_position returns virtual position in shadow mode."""
     config.shadow_mode = True
+    config.execution_mode = "shadow"
     safe = SafeBroker(mock_broker, config)
 
     safe._virtual_portfolio._positions["AAPL"] = Position(
@@ -176,6 +181,7 @@ def test_get_position_shadow_mode(mock_broker, config):
 async def test_get_account_value_shadow_mode(mock_broker, config):
     """Test get_account_value_async returns virtual value in shadow mode."""
     config.shadow_mode = True
+    config.execution_mode = "shadow"
     safe = SafeBroker(mock_broker, config)
 
     value = await safe.get_account_value_async()
@@ -185,6 +191,7 @@ async def test_get_account_value_shadow_mode(mock_broker, config):
 async def test_get_cash_shadow_mode(mock_broker, config):
     """Test get_cash_async returns virtual cash in shadow mode."""
     config.shadow_mode = True
+    config.execution_mode = "shadow"
     safe = SafeBroker(mock_broker, config)
 
     cash = await safe.get_cash_async()
@@ -708,7 +715,7 @@ def test_load_state_resets_daily_counters_on_new_day(mock_broker, temp_state_fil
     )
     write_legacy_state(temp_state_file, state)
 
-    config = LiveRiskConfig(state_file=temp_state_file)
+    config = LiveRiskConfig(execution_mode="paper", state_file=temp_state_file)
     safe = SafeBroker(mock_broker, config)
 
     # Daily counters should be reset
@@ -730,7 +737,7 @@ def test_load_state_preserves_kill_switch_across_days(mock_broker, temp_state_fi
     )
     write_legacy_state(temp_state_file, state)
 
-    config = LiveRiskConfig(state_file=temp_state_file)
+    config = LiveRiskConfig(execution_mode="paper", state_file=temp_state_file)
     safe = SafeBroker(mock_broker, config)
 
     # Kill switch should be preserved
@@ -782,6 +789,7 @@ def test_prune_history_removes_old_recent_orders(mock_broker, config):
 async def test_submit_order_shadow_mode(mock_broker, config):
     """Test submit_order_async in shadow mode."""
     config.shadow_mode = True
+    config.execution_mode = "shadow"
     safe = SafeBroker(mock_broker, config)
 
     safe._record_market_data(datetime.now(UTC), {"AAPL": {"close": 150.0}}, {})
@@ -868,6 +876,7 @@ async def test_submit_order_live_mode_passes_moc_through(mock_broker, config):
 async def test_submit_order_increments_state(mock_broker, config):
     """Test submit_order_async increments order counter."""
     config.shadow_mode = True
+    config.execution_mode = "shadow"
     safe = SafeBroker(mock_broker, config)
 
     initial_count = safe._state.orders_placed
@@ -882,6 +891,7 @@ async def test_submit_order_increments_state(mock_broker, config):
 async def test_submit_order_auto_detects_side(mock_broker, config):
     """Test submit_order_async auto-detects side from quantity sign."""
     config.shadow_mode = True
+    config.execution_mode = "shadow"
     safe = SafeBroker(mock_broker, config)
 
     safe._record_market_data(datetime.now(UTC), {"AAPL": {"close": 150.0}}, {})
@@ -896,6 +906,7 @@ async def test_submit_order_auto_detects_side(mock_broker, config):
 async def test_submit_order_uses_market_price_for_first_entry_limit_checks(mock_broker, config):
     """Test first-entry risk sizing uses the latest market snapshot rather than a fake fallback."""
     config.shadow_mode = True
+    config.execution_mode = "shadow"
     config.max_order_value = 1_200.0
     safe = SafeBroker(mock_broker, config)
     safe._record_market_data(datetime.now(UTC), {"AAPL": {"close": 150.0}}, {})
@@ -1069,6 +1080,7 @@ async def test_replace_order_async_cancels_and_resubmits(mock_broker, config):
 async def test_journal_records_runtime_events(mock_broker, config, tmp_path: Path):
     """Test journal captures structured order and kill-switch events."""
     config.shadow_mode = True
+    config.execution_mode = "shadow"
     config.journal_file = str(tmp_path / "runtime.jsonl")
     safe = SafeBroker(mock_broker, config)
     safe._record_market_data(datetime.now(UTC), {"AAPL": {"close": 150.0}}, {})

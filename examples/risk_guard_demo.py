@@ -38,6 +38,9 @@ class DemoBroker:
         self.pending_orders: list[Order] = []
         self.account_value = 100_000.0
 
+    def assert_paper_trading(self) -> None:
+        """Identify this deterministic demo adapter as a paper venue."""
+
     async def connect(self) -> None:
         self._connected = True
 
@@ -106,7 +109,7 @@ async def main() -> int:
         safe_broker = SafeBroker(
             raw_broker,
             LiveRiskConfig(
-                shadow_mode=False,
+                execution_mode="paper",
                 max_order_value=5_000.0,
                 max_daily_loss=500.0,
                 max_data_staleness_seconds=1.0,

@@ -89,7 +89,7 @@ async def exercise() -> None:
         safe = SafeBroker(
             venue,
             LiveRiskConfig(
-                shadow_mode=True,
+                execution_mode="shadow",
                 state_file=str(root / "state.json"),
                 journal_file=str(root / "journal.jsonl"),
             ),

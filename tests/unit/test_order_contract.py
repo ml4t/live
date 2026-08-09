@@ -7,6 +7,7 @@ from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
+from alpaca.common.enums import BaseURL
 from alpaca.trading.enums import OrderStatus as AlpacaOrderStatus
 from ml4t.backtest.types import Order, OrderSide, OrderStatus, OrderType, Position
 from ml4t.specs import ExecutionCapability
@@ -57,6 +58,12 @@ class RecordingBroker:
 
     def get_position(self, asset: str) -> Position | None:
         return self._positions.get(asset.upper())
+
+    def assert_paper_trading(self) -> None:
+        """Identify this deterministic adapter as a paper venue."""
+
+    def assert_live_trading(self) -> None:
+        """Allow tests that explicitly exercise the live routing contract."""
 
     async def connect(self) -> None:
         self._connected = True
@@ -147,6 +154,7 @@ class RecordingBroker:
 
 def risk_config(tmp_path, **overrides: Any) -> LiveRiskConfig:
     values = {
+        "execution_mode": "paper",
         "state_file": str(tmp_path / "state.json"),
         "journal_file": str(tmp_path / "journal.jsonl"),
         "max_position_value": 1_000_000.0,
@@ -217,6 +225,8 @@ async def test_real_alpaca_boundary_rejects_negative_quantity_with_explicit_side
     broker._trading_client = client
     broker._connected = True
     broker._account_id = "PA-TEST"
+    client._sandbox = True
+    client._base_url = BaseURL.TRADING_PAPER
     safe = SafeBroker(broker, risk_config(tmp_path))
     safe.record_market_snapshot("SPY", 100.0)
 
@@ -243,6 +253,8 @@ async def test_real_alpaca_boundary_submits_inferred_fractional_sell_unchanged(t
     broker._trading_client = client
     broker._connected = True
     broker._account_id = "PA-TEST"
+    client._sandbox = True
+    client._base_url = BaseURL.TRADING_PAPER
     safe = SafeBroker(broker, risk_config(tmp_path))
     safe.record_market_snapshot("SPY", 100.0)
 

@@ -14,6 +14,8 @@ from ml4t.live.protocols import AsyncBrokerProtocol
 from ml4t.live.safety import BrokerSnapshotError, LiveRiskConfig, SafeBroker
 
 REQUIRED_CONCRETE_METHODS = {
+    "assert_live_trading",
+    "assert_paper_trading",
     "connect",
     "disconnect",
     "is_connected_async",
@@ -78,6 +80,7 @@ async def test_seeded_real_adapter_pending_order_is_a_blocking_mismatch(tmp_path
     safe = SafeBroker(
         broker,
         LiveRiskConfig(
+            execution_mode="paper",
             state_file=str(tmp_path / "state.json"),
             fail_on_reconciliation_mismatch=True,
         ),
@@ -131,6 +134,9 @@ class InvalidSnapshotBroker:
     async def is_connected_async(self) -> bool:
         return self.connected
 
+    def assert_paper_trading(self) -> None:
+        """Identify this deterministic adapter as a paper venue."""
+
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
@@ -155,7 +161,7 @@ async def test_invalid_or_failed_snapshot_never_becomes_clean(
             AsyncBrokerProtocol,
             InvalidSnapshotBroker(positions=positions, pending=pending),
         ),
-        LiveRiskConfig(state_file=str(tmp_path / "state.json")),
+        LiveRiskConfig(execution_mode="paper", state_file=str(tmp_path / "state.json")),
     )
 
     with pytest.raises(BrokerSnapshotError, match=match):
@@ -167,7 +173,7 @@ async def test_invalid_snapshot_disconnects_before_connect_returns(tmp_path) -> 
     broker = InvalidSnapshotBroker(positions=None, pending=[])
     safe = SafeBroker(
         cast(AsyncBrokerProtocol, broker),
-        LiveRiskConfig(state_file=str(tmp_path / "state.json")),
+        LiveRiskConfig(execution_mode="paper", state_file=str(tmp_path / "state.json")),
     )
 
     with pytest.raises(BrokerSnapshotError, match="positions snapshot"):
@@ -229,7 +235,7 @@ async def test_invalid_pending_order_snapshot_is_unavailable(tmp_path, order) ->
             AsyncBrokerProtocol,
             InvalidSnapshotBroker(positions={}, pending=[order]),
         ),
-        LiveRiskConfig(state_file=str(tmp_path / "state.json")),
+        LiveRiskConfig(execution_mode="paper", state_file=str(tmp_path / "state.json")),
     )
 
     with pytest.raises(BrokerSnapshotError, match="pending-orders snapshot"):
@@ -254,7 +260,7 @@ async def test_invalid_position_snapshot_is_unavailable(tmp_path, position) -> N
             AsyncBrokerProtocol,
             InvalidSnapshotBroker(positions={"SPY": position}, pending=[]),
         ),
-        LiveRiskConfig(state_file=str(tmp_path / "state.json")),
+        LiveRiskConfig(execution_mode="paper", state_file=str(tmp_path / "state.json")),
     )
 
     with pytest.raises(BrokerSnapshotError, match="positions snapshot"):
@@ -269,7 +275,7 @@ async def test_zero_valued_position_snapshot_is_available(tmp_path) -> None:
             AsyncBrokerProtocol,
             InvalidSnapshotBroker(positions={"SPY": position}, pending=[]),
         ),
-        LiveRiskConfig(state_file=str(tmp_path / "state.json")),
+        LiveRiskConfig(execution_mode="paper", state_file=str(tmp_path / "state.json")),
     )
 
     report = await safe.preview_reconciliation_async()

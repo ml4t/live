@@ -26,7 +26,7 @@ position-rule state satisfy that contract in both runtimes.
 1. Validate the strategy in `ml4t-backtest` against lifecycle version 1.
 2. Compare callback and canonical-intent traces on one causal tape.
 3. Pick the broker and feed combination that matches the required capabilities.
-4. Wrap the broker in `SafeBroker` and start in `shadow_mode=True`.
+4. Wrap the broker in `SafeBroker` and start with `execution_mode="shadow"`.
 5. Promote to paper trading only after signal, intent, inventory, and order-flow checks pass.
 6. Go live only after separate operational qualification with conservative limits.
 
@@ -35,7 +35,7 @@ position-rule state satisfy that contract in both runtimes.
 ```python
 from ml4t.live import LiveEngine, LiveRiskConfig, SafeBroker
 
-safe_broker = SafeBroker(raw_broker, LiveRiskConfig(shadow_mode=True))
+safe_broker = SafeBroker(raw_broker, LiveRiskConfig(execution_mode="shadow"))
 engine = LiveEngine(strategy, safe_broker, live_feed)
 await engine.connect()
 await engine.run()

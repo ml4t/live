@@ -5,7 +5,9 @@ credential-free deterministic set. Release qualification copies all three outsid
 and runs them against the installed wheel. The other examples require an external service or paper
 credentials and never run in an untrusted pull-request context.
 
-`shadow_mode_demo.py` is the fastest path from install to a working run. It uses a synthetic feed plus `SafeBroker(shadow_mode=True)` and `VirtualPortfolio`, needs no credentials or broker session, prints progress every five seconds, and exits after about a minute.
+`shadow_mode_demo.py` is the fastest path from install to a working run. It uses a synthetic feed
+plus `SafeBroker(execution_mode="shadow")` and `VirtualPortfolio`, needs no credentials or broker
+session, prints progress every five seconds, and exits after about a minute.
 
 `startup_reconciliation_demo.py` shows the startup reconciliation path without any live infrastructure. It writes a persisted state snapshot that disagrees with the broker's live positions and orders, connects through `SafeBroker`, and prints the reconciliation report.
 

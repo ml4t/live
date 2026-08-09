@@ -54,7 +54,7 @@ workflow:
 | sync strategy calling async infrastructure | `ThreadSafeBrokerWrapper` |
 | explicit deployment risk policy | `LiveRiskConfig` |
 | pre-trade enforcement and kill switch | `SafeBroker` |
-| paper-like live validation without routing orders | `shadow_mode=True` with `VirtualPortfolio` |
+| paper-like live validation without routing orders | `execution_mode="shadow"` with `VirtualPortfolio` |
 | broker-specific execution path | `IBBroker` or `AlpacaBroker` |
 | beta-supported live data source | `IBDataFeed`, `AlpacaDataFeed`, `OKXFundingFeed` |
 | experimental opt-in data source | `DataBentoFeed`, `CryptoFeed` |

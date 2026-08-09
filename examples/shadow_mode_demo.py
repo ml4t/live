@@ -3,7 +3,7 @@
 
 Purpose:
     Demonstrate the full `LiveEngine` and `SafeBroker` workflow with
-    `shadow_mode=True` and a synthetic data feed, so readers can see order
+    `execution_mode="shadow"` and a synthetic data feed, so readers can see order
     intents and virtual positions without credentials or a broker connection.
 
 Prerequisites:
@@ -199,7 +199,7 @@ async def main() -> int:
         safe_broker = SafeBroker(
             DemoBroker(),
             LiveRiskConfig(
-                shadow_mode=True,
+                execution_mode="shadow",
                 max_position_value=5_000.0,
                 max_order_value=2_000.0,
                 max_positions=1,

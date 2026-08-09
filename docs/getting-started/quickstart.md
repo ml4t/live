@@ -34,7 +34,7 @@ async def main():
     safe_broker = SafeBroker(
         broker,
         LiveRiskConfig(
-            shadow_mode=True,
+            execution_mode="shadow",
             max_position_value=25_000,
             max_order_value=5_000,
         ),
@@ -71,9 +71,9 @@ Before you move past this example, confirm that:
 
 ## Deployment Progression
 
-1. Shadow mode: `shadow_mode=True`
-2. Paper trading: `shadow_mode=False` with paper broker credentials
-3. Small live size: conservative limits and low notional exposure
+1. Shadow mode: `execution_mode="shadow"`
+2. Paper trading: `execution_mode="paper"` with paper broker credentials
+3. Small live size: `execution_mode="live"` with conservative limits and low notional exposure
 4. Gradual scale-up only after observing stable behavior
 
 ## Common Variations

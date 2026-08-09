@@ -43,6 +43,12 @@ class MockAsyncBroker:
     def pending_orders(self) -> list[Order]:
         return self._pending_orders.copy()
 
+    def assert_paper_trading(self) -> None:
+        """Identify this deterministic adapter as a paper venue."""
+
+    def assert_live_trading(self) -> None:
+        """Allow tests that explicitly exercise the live routing contract."""
+
     async def connect(self) -> None:
         self._connected = True
 

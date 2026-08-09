@@ -20,6 +20,7 @@ import time
 from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
@@ -40,6 +41,33 @@ from .protocols import AsyncBrokerProtocol
 
 logger = logging.getLogger(__name__)
 
+_OPTIONAL_SAFETY_CONTROLS = (
+    "max_position_value",
+    "max_position_shares",
+    "max_total_exposure",
+    "max_positions",
+    "max_order_value",
+    "max_order_shares",
+    "max_orders_per_minute",
+    "max_daily_loss",
+    "max_drawdown_pct",
+    "max_price_deviation_pct",
+    "max_data_staleness_seconds",
+    "dedup_window_seconds",
+)
+
+
+class ExecutionMode(StrEnum):
+    """Explicit destination for strategy order intents."""
+
+    SHADOW = "shadow"
+    PAPER = "paper"
+    LIVE = "live"
+
+
+class ExecutionModeError(ValueError):
+    """Raised when execution routing is absent, ambiguous, or inconsistent."""
+
 
 @dataclass
 class LiveRiskConfig:
@@ -53,7 +81,7 @@ class LiveRiskConfig:
         config = LiveRiskConfig(
             max_position_value=25_000.0,
             max_daily_loss=2_000.0,
-            shadow_mode=True,  # Always start with shadow mode!
+            execution_mode="shadow",
         )
 
         # Disable a specific check explicitly
@@ -63,7 +91,7 @@ class LiveRiskConfig:
         )
 
     Safety Recommendations:
-        1. Always start with shadow_mode=True
+        1. Always start with execution_mode="shadow"
         2. Graduate to paper trading
         3. Use small positions when going live
         4. Set conservative risk limits
@@ -95,6 +123,7 @@ class LiveRiskConfig:
 
     # Shadow mode - log orders but don't execute
     shadow_mode: bool = False
+    execution_mode: ExecutionMode | str | None = None
 
     # Kill switch
     kill_switch_enabled: bool = False
@@ -111,6 +140,23 @@ class LiveRiskConfig:
 
     def __post_init__(self) -> None:
         """Validate configuration parameters."""
+        if isinstance(self.execution_mode, str):
+            try:
+                self.execution_mode = ExecutionMode(self.execution_mode.lower())
+            except ValueError as error:
+                raise ExecutionModeError(
+                    "execution_mode must be one of: shadow, paper, live"
+                ) from error
+        if self.execution_mode is None:
+            if self.shadow_mode:
+                self.execution_mode = ExecutionMode.SHADOW
+        else:
+            if self.shadow_mode and self.execution_mode is not ExecutionMode.SHADOW:
+                raise ExecutionModeError(
+                    "shadow_mode=True conflicts with a non-shadow execution_mode"
+                )
+            self.shadow_mode = self.execution_mode is ExecutionMode.SHADOW
+
         positive_numbers = (
             "max_position_value",
             "max_position_shares",
@@ -152,6 +198,24 @@ class LiveRiskConfig:
                 state_path.with_name(f"{state_path.name}.lock"),
             }:
                 raise ValueError("journal_file must not overlap state_file or its lock")
+
+    def require_execution_mode(self) -> ExecutionMode:
+        """Return the explicit mode or reject ambiguous external execution."""
+        if self.execution_mode is None:
+            raise ExecutionModeError(
+                "execution_mode must be explicitly set to shadow, paper, or live; "
+                "shadow_mode=False is ambiguous"
+            )
+        try:
+            mode = ExecutionMode(self.execution_mode)
+        except (TypeError, ValueError) as error:
+            raise ExecutionModeError(
+                "execution_mode must be one of: shadow, paper, live"
+            ) from error
+        if self.shadow_mode != (mode is ExecutionMode.SHADOW):
+            raise ExecutionModeError("shadow_mode conflicts with execution_mode")
+        self.execution_mode = mode
+        return mode
 
     def _validate_optional_number(
         self,
@@ -211,6 +275,7 @@ class RiskState:
     portable_strategy_state: dict[str, Any] = field(default_factory=dict)
     replacement_gaps: dict[str, dict[str, Any]] = field(default_factory=dict)
     shadow_portfolio: dict[str, Any] = field(default_factory=dict)
+    execution_mode: str | None = None
     kill_switch_activated: bool = False  # Was kill switch triggered?
     kill_switch_reason: str = ""  # Why?
 
@@ -237,6 +302,7 @@ class RiskState:
             "portable_strategy_state",
             "replacement_gaps",
             "shadow_portfolio",
+            "execution_mode",
             "kill_switch_activated",
             "kill_switch_reason",
         }
@@ -267,6 +333,11 @@ class RiskState:
             self.kill_switch_reason, str
         ):
             raise CorruptStateError("risk state kill-switch fields have invalid types")
+        if self.execution_mode is not None:
+            try:
+                ExecutionMode(self.execution_mode)
+            except (TypeError, ValueError) as error:
+                raise CorruptStateError("risk state execution_mode is invalid") from error
         if not isinstance(self.persisted_positions, dict):
             raise CorruptStateError("risk state persisted_positions must be an object")
         for asset, quantity in self.persisted_positions.items():
@@ -371,6 +442,8 @@ class RiskState:
             data["replacement_gaps"] = self.replacement_gaps
         if self.shadow_portfolio:
             data["shadow_portfolio"] = self.shadow_portfolio
+        if self.execution_mode is not None:
+            data["execution_mode"] = self.execution_mode
         return data
 
     @staticmethod
@@ -690,7 +763,7 @@ class SafeBroker:
             broker=broker,
             config=LiveRiskConfig(
                 max_position_value=25000,
-                shadow_mode=True,  # Test first!
+                execution_mode="shadow",
             )
         )
 
@@ -705,6 +778,7 @@ class SafeBroker:
             broker: Async broker implementation (IBBroker, AlpacaBroker, etc.)
             config: Risk configuration
         """
+        self.execution_mode = config.require_execution_mode()
         self._broker = broker
         self.config = config
         self._state_store = SecureStateStore(config.state_file)
@@ -715,6 +789,14 @@ class SafeBroker:
 
         try:
             self._state = self._load_state()
+            if (
+                self._state.execution_mode is not None
+                and self._state.execution_mode != self.execution_mode.value
+            ):
+                raise ExecutionModeError(
+                    "persisted execution mode does not match the configured execution_mode"
+                )
+            self._state.execution_mode = self.execution_mode.value
             self._audit_journal = SecureAuditJournal(self._journal_path())
             self._validate_journal()
         except BaseException:
@@ -745,7 +827,11 @@ class SafeBroker:
             except Exception:
                 pass
 
-        logger.info(f"SafeBroker initialized. Shadow mode: {config.shadow_mode}")
+        self._execution_identity_validated = self.execution_mode is ExecutionMode.SHADOW
+        logger.info("SafeBroker initialized. Execution mode: %s", self.execution_mode.value)
+        disabled_controls = self._disabled_safety_controls()
+        if disabled_controls:
+            logger.warning("Disabled safety controls: %s", ", ".join(disabled_controls))
         if self._state.kill_switch_activated:
             logger.warning(
                 f"Kill switch was previously activated: {self._state.kill_switch_reason}"
@@ -801,7 +887,40 @@ class SafeBroker:
             "state_error": type(self._state_error).__name__ if self._state_error else None,
             "journal_required": self.config.fail_on_journal_error,
             "journal_error": type(self._journal_error).__name__ if self._journal_error else None,
+            "execution_mode": self.execution_mode.value,
+            "execution_identity_validated": self._execution_identity_validated,
+            "disabled_safety_controls": self._disabled_safety_controls(),
         }
+
+    def _disabled_safety_controls(self) -> list[str]:
+        return [name for name in _OPTIONAL_SAFETY_CONTROLS if getattr(self.config, name) is None]
+
+    def _validate_execution_identity(self) -> None:
+        if self.execution_mode is ExecutionMode.SHADOW:
+            self._execution_identity_validated = True
+            return
+        assertion_name = (
+            "assert_paper_trading"
+            if self.execution_mode is ExecutionMode.PAPER
+            else "assert_live_trading"
+        )
+        assertion = getattr(self._broker, assertion_name, None)
+        if not callable(assertion):
+            raise ExecutionModeError(
+                f"broker does not implement {assertion_name}() for {self.execution_mode.value} mode"
+            )
+        try:
+            assertion()
+        except Exception as error:
+            raise ExecutionModeError(
+                f"broker identity does not match execution_mode={self.execution_mode.value}"
+            ) from error
+        self._execution_identity_validated = True
+
+    def _require_external_execution_identity(self) -> None:
+        if self.execution_mode is ExecutionMode.SHADOW:
+            return
+        self._validate_execution_identity()
 
     @property
     def is_connected(self) -> bool:
@@ -872,6 +991,9 @@ class SafeBroker:
         Returns:
             True if cancel request submitted
         """
+        if self.execution_mode is ExecutionMode.SHADOW:
+            return False
+        self._require_external_execution_identity()
         self._assert_persistence_ready()
         self.record_event("order_cancel_intent", order_id=order_id)
         cancelled = await self._broker.cancel_order_async(order_id)
@@ -933,6 +1055,7 @@ class SafeBroker:
             self.config.kill_switch_enabled or self._state.kill_switch_activated
         ) and not self.config.allow_reducing_risk_when_killed:
             raise RiskLimitError("Kill switch policy blocks reducing-risk orders")
+        self._require_external_execution_identity()
         self._assert_persistence_ready()
         self.record_event(
             "reducing_risk_intent",
@@ -1028,7 +1151,8 @@ class SafeBroker:
         stop_price: float | None = None,
     ) -> Order:
         """Replace a pending order via cancel-and-resubmit."""
-        self._assert_persistence_ready()
+        if self.execution_mode is ExecutionMode.SHADOW:
+            raise ExecutionModeError("shadow orders fill immediately and cannot be replaced")
         original = self._pending_order_by_id(order_id)
         if original is None:
             raise RiskLimitError(f"Pending order {order_id} not found")
@@ -1045,6 +1169,8 @@ class SafeBroker:
             replacement_stop,
             capabilities=self.execution_capabilities,
         )
+        self._require_external_execution_identity()
+        self._assert_persistence_ready()
         self.record_event(
             "order_replacement_intent",
             original_order_id=order_id,
@@ -1158,6 +1284,7 @@ class SafeBroker:
             stop_price,
             capabilities=self.execution_capabilities,
         )
+        self._require_external_execution_identity()
         self._assert_persistence_ready()
         asset = request.asset
         quantity = request.quantity
@@ -1831,6 +1958,8 @@ class SafeBroker:
             "timestamp": datetime.now(UTC).isoformat(),
             "event": event,
             "shadow_mode": self.config.shadow_mode,
+            "execution_mode": self.execution_mode.value,
+            "disabled_safety_controls": self._disabled_safety_controls(),
             "kill_switch": self._state.kill_switch_activated,
             "orders_placed": self._state.orders_placed,
             "daily_loss": self._state.daily_loss,
@@ -2240,6 +2369,7 @@ class SafeBroker:
         self._assert_persistence_ready()
         await self._broker.connect()
         try:
+            self._validate_execution_identity()
             account_value = await self.get_account_value_async()
             cash = await self.get_cash_async()
             report = await self.preview_reconciliation_async()
@@ -2268,6 +2398,8 @@ class SafeBroker:
             return result
         finally:
             await self._broker.disconnect()
+            if self.execution_mode is not ExecutionMode.SHADOW:
+                self._execution_identity_validated = False
 
     # === Broker Connection Methods (passthrough) ===
 
@@ -2276,12 +2408,15 @@ class SafeBroker:
         self._assert_persistence_ready()
         await self._broker.connect()
         try:
+            self._validate_execution_identity()
             connected = await self._broker.is_connected_async()
             if not isinstance(connected, bool) or not connected:
                 raise BrokerSnapshotError("broker did not report a connected state")
             report = await self.preview_reconciliation_async()
         except BaseException:
             await self._broker.disconnect()
+            if self.execution_mode is not ExecutionMode.SHADOW:
+                self._execution_identity_validated = False
             raise
         self._last_reconciliation_report = report
         for original_id in report["resolved_replacement_gaps"]:
@@ -2320,6 +2455,8 @@ class SafeBroker:
                 self._refresh_state_snapshot_from_cache()
             self._save_state()
             await self._broker.disconnect()
+            if self.execution_mode is not ExecutionMode.SHADOW:
+                self._execution_identity_validated = False
             self.record_event("broker_disconnected")
         finally:
             self.close_persistence()

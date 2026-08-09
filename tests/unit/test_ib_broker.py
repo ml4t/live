@@ -192,6 +192,33 @@ class TestIBBrokerSetup:
         with pytest.raises(RuntimeError, match=message):
             broker.assert_paper_trading()
 
+    def test_assert_live_trading_requires_standard_port_and_selected_account(self):
+        broker = IBBroker(port=7496, account="U1234567")
+        broker._connected = True
+        broker.ib.isConnected = MagicMock(return_value=True)
+
+        broker.assert_live_trading()
+
+    @pytest.mark.parametrize(
+        ("port", "configured_account", "connected_account", "message"),
+        [
+            (7497, "U1234567", "U1234567", "live-trading port"),
+            (7496, None, "U1234567", "explicit account selection"),
+            (7496, "U1234567", "U7654321", "does not match"),
+            (7496, "DU1234567", "DU1234567", "paper account"),
+        ],
+    )
+    def test_assert_live_trading_rejects_ambiguous_identity(
+        self, port, configured_account, connected_account, message
+    ):
+        broker = IBBroker(port=port, account=configured_account)
+        broker._account = connected_account
+        broker._connected = True
+        broker.ib.isConnected = MagicMock(return_value=True)
+
+        with pytest.raises(RuntimeError, match=message):
+            broker.assert_live_trading()
+
     def test_positions_property(self):
         """Test positions property returns copy."""
         broker = IBBroker()

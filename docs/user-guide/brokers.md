@@ -74,7 +74,7 @@ from ml4t.live import LiveRiskConfig, SafeBroker
 safe_broker = SafeBroker(
     broker,
     LiveRiskConfig(
-        shadow_mode=True,
+        execution_mode="shadow",
         max_position_value=25_000,
         max_order_value=5_000,
     ),

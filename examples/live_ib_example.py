@@ -159,7 +159,7 @@ async def main():
     logger.info("=" * 60)
 
     risk_config = LiveRiskConfig(
-        shadow_mode=True,  # CRITICAL: Start with shadow mode!
+        execution_mode="shadow",
         max_position_value=50_000.0,  # $50k max position
         max_order_value=10_000.0,  # $10k max single order
         max_orders_per_minute=10,  # Rate limiting
@@ -242,7 +242,7 @@ if __name__ == "__main__":
         - NO REAL ORDERS PLACED
 
     Safety:
-        - Shadow mode is enabled (shadow_mode=True)
+        - Shadow mode is enabled (`execution_mode="shadow"`)
         - All orders are virtual
         - Check broker.pending_orders == [] to verify
         - Check safe_broker._virtual_portfolio.positions for virtual positions
@@ -250,7 +250,7 @@ if __name__ == "__main__":
     Next steps:
         1. Run for 1-2 weeks in shadow mode
         2. Verify strategy logic is correct
-        3. Change shadow_mode=False for paper trading
+        3. Select `execution_mode="paper"` for paper trading
         4. Test with paper account for 2-4 weeks
         5. Gradually move to live with small positions
     """

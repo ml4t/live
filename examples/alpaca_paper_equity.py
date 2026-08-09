@@ -125,7 +125,7 @@ async def main() -> int:
     safe_broker = SafeBroker(
         broker,
         LiveRiskConfig(
-            shadow_mode=False,
+            execution_mode="paper",
             max_position_value=5_000.0,
             max_order_value=1_000.0,
             max_positions=len(SYMBOLS),

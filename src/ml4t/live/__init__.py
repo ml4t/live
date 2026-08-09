@@ -52,6 +52,8 @@ from .runtime import (
 )
 from .safety import (
     BrokerSnapshotError,
+    ExecutionMode,
+    ExecutionModeError,
     LiveRiskConfig,
     OrderReplacementGapError,
     ReconciliationMismatchError,
@@ -108,6 +110,8 @@ __all__ = [
     "AcceptedOrderPersistenceError",
     "AuditJournalError",
     "BrokerSnapshotError",
+    "ExecutionMode",
+    "ExecutionModeError",
     "ConcurrentStateWriterError",
     "CorruptStateError",
     "LiveRiskConfig",

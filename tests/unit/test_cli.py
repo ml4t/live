@@ -157,6 +157,7 @@ def test_preflight_command_reports_success(monkeypatch, tmp_path: Path, capsys):
             journal_file=str(tmp_path / "risk-state-journal.jsonl"),
             session_state="open",
             next_session_boundary=None,
+            execution_mode="paper",
         )
 
     monkeypatch.setattr("ml4t.live.cli.main._preflight_broker", fake_preflight)
@@ -165,6 +166,7 @@ def test_preflight_command_reports_success(monkeypatch, tmp_path: Path, capsys):
     output = capsys.readouterr().out
 
     assert exit_code == 0
+    assert "execution_mode: paper" in output
     assert "preflight_status: ok - preflight passed" in output
     assert "reconciliation_clean: True" in output
 

@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 
 from ml4t.live.persistence import CorruptStateError
-from ml4t.live.safety import LiveRiskConfig, RiskState
+from ml4t.live.safety import ExecutionMode, ExecutionModeError, LiveRiskConfig, RiskState
 
 # === LiveRiskConfig Tests ===
 
@@ -49,6 +49,7 @@ def test_live_risk_config_defaults():
 
     # Flags
     assert config.shadow_mode is False
+    assert config.execution_mode is None
     assert config.kill_switch_enabled is False
 
     # State file
@@ -68,6 +69,27 @@ def test_live_risk_config_custom_values():
     assert config.max_daily_loss == 2_000.0
     assert config.shadow_mode is True
     assert config.allowed_assets == {"AAPL", "TSLA"}
+    assert config.execution_mode is ExecutionMode.SHADOW
+
+
+@pytest.mark.parametrize("mode", list(ExecutionMode))
+def test_live_risk_config_normalizes_explicit_execution_mode(mode):
+    config = LiveRiskConfig(execution_mode=mode.value.upper())
+
+    assert config.execution_mode is mode
+    assert config.shadow_mode is (mode is ExecutionMode.SHADOW)
+    assert config.require_execution_mode() is mode
+
+
+def test_live_risk_config_rejects_ambiguous_or_conflicting_execution_mode():
+    with pytest.raises(ExecutionModeError, match="shadow_mode=False is ambiguous"):
+        LiveRiskConfig(shadow_mode=False).require_execution_mode()
+
+    with pytest.raises(ExecutionModeError, match="must be one of"):
+        LiveRiskConfig(execution_mode="external")
+
+    with pytest.raises(ExecutionModeError, match="conflicts"):
+        LiveRiskConfig(shadow_mode=True, execution_mode="paper")
 
 
 def test_live_risk_config_accepts_fractional_share_limits():

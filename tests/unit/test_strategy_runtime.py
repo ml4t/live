@@ -79,6 +79,12 @@ class RuntimeBroker:
     def get_position(self, asset: str) -> Position | None:
         return self._positions.get(asset)
 
+    def assert_paper_trading(self) -> None:
+        """Identify this deterministic adapter as a paper venue."""
+
+    def assert_live_trading(self) -> None:
+        """Allow tests that explicitly exercise the live routing contract."""
+
     async def get_account_value_async(self) -> float:
         return 100_000.0
 
@@ -325,6 +331,8 @@ def risk_config(tmp_path, **changes: Any) -> LiveRiskConfig:
     )
     for name, value in changes.items():
         setattr(config, name, value)
+    if "shadow_mode" in changes and "execution_mode" not in changes:
+        config.execution_mode = "shadow" if config.shadow_mode else "paper"
     return config
 
 

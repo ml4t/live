@@ -331,6 +331,39 @@ class TestAlpacaBrokerSetup:
         with pytest.raises(RuntimeError, match=message):
             broker.assert_paper_trading()
 
+    def test_assert_live_trading_requires_official_connected_live_endpoint(self):
+        broker = AlpacaBroker(api_key="PKTEST", secret_key="SECRET", paper=False)
+        client = MagicMock()
+        client._sandbox = False
+        client._base_url = BaseURL.TRADING_LIVE
+        broker._trading_client = client
+        broker._connected = True
+        broker._account_id = "redacted-in-memory"
+
+        broker.assert_live_trading()
+
+    @pytest.mark.parametrize(
+        ("paper", "sandbox", "base_url", "message"),
+        [
+            (True, True, BaseURL.TRADING_PAPER, "configured for paper"),
+            (False, True, BaseURL.TRADING_LIVE, "live mode"),
+            (False, False, BaseURL.TRADING_PAPER, "official live endpoint"),
+        ],
+    )
+    def test_assert_live_trading_rejects_ambiguous_identity(
+        self, paper, sandbox, base_url, message
+    ):
+        broker = AlpacaBroker(api_key="PKTEST", secret_key="SECRET", paper=paper)
+        client = MagicMock()
+        client._sandbox = sandbox
+        client._base_url = base_url
+        broker._trading_client = client
+        broker._connected = True
+        broker._account_id = "redacted-in-memory"
+
+        with pytest.raises(RuntimeError, match=message):
+            broker.assert_live_trading()
+
 
 class TestAlpacaBrokerPositions:
     """Test suite for position management."""
