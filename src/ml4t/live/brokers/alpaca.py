@@ -151,7 +151,7 @@ class AlpacaBroker:
                 raise RuntimeError("Alpaca returned no account identity")
             self._account_id = account_id.strip()
             equity = self._validate_account_metric(account, "equity")
-            cash = self._validate_account_metric(account, "cash")
+            cash = self._validate_account_metric(account, "cash", allow_negative=True)
             logger.info(
                 f"AlpacaBroker: Account verified - equity=${equity:,.2f}, cash=${cash:,.2f}"
             )
@@ -317,22 +317,24 @@ class AlpacaBroker:
         return self._validate_account_metric(account, "equity")
 
     async def get_cash_async(self) -> float:
-        """Get available cash.
+        """Get the signed cash balance.
 
         Returns:
-            Available cash in USD
+            Cash balance in USD. Margin accounts may report a negative balance.
         """
         if not self._trading_client:
             raise RuntimeError("Alpaca trading client is unavailable")
 
         account = self._trading_client.get_account()
-        return self._validate_account_metric(account, "cash")
+        return self._validate_account_metric(account, "cash", allow_negative=True)
 
     def _raise_snapshot_error(self) -> None:
         if self._snapshot_error is not None:
             raise RuntimeError(str(self._snapshot_error)) from self._snapshot_error
 
-    def _validate_account_metric(self, account: Any, name: str) -> float:
+    def _validate_account_metric(
+        self, account: Any, name: str, *, allow_negative: bool = False
+    ) -> float:
         account_id = getattr(account, "account_number", None)
         if not isinstance(account_id, str) or not account_id.strip():
             raise RuntimeError("Alpaca account identity is unavailable")
@@ -342,7 +344,9 @@ class AlpacaBroker:
             metric = float(getattr(account, name))
         except (AttributeError, TypeError, ValueError) as error:
             raise RuntimeError(f"Alpaca {name} is not numeric") from error
-        if not math.isfinite(metric) or metric < 0:
+        if not math.isfinite(metric):
+            raise RuntimeError(f"Alpaca {name} must be finite")
+        if metric < 0 and not allow_negative:
             raise RuntimeError(f"Alpaca {name} must be finite and non-negative")
         return metric
 

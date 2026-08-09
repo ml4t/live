@@ -154,6 +154,22 @@ class TestAlpacaBrokerSetup:
     @pytest.mark.asyncio
     @patch("ml4t.live.brokers.alpaca.TradingClient")
     @patch("ml4t.live.brokers.alpaca.TradingStream")
+    async def test_connect_accepts_negative_margin_cash(self, mock_stream_class, mock_client_class):
+        mock_client = MagicMock()
+        mock_client_class.return_value = mock_client
+        mock_client.get_account.return_value = MockAlpacaAccount(cash="-1250.50")
+        mock_client.get_all_positions.return_value = []
+        mock_client.get_orders.return_value = []
+        mock_stream_class.return_value = MagicMock()
+
+        broker = AlpacaBroker(api_key="PKTEST", secret_key="SECRET")
+        await broker.connect()
+
+        assert broker.is_connected is True
+
+    @pytest.mark.asyncio
+    @patch("ml4t.live.brokers.alpaca.TradingClient")
+    @patch("ml4t.live.brokers.alpaca.TradingStream")
     async def test_connect_syncs_positions(self, mock_stream_class, mock_client_class):
         """Test connect syncs existing positions."""
         mock_client = MagicMock()
@@ -410,6 +426,34 @@ class TestAlpacaBrokerAccount:
         cash = await broker.get_cash_async()
 
         assert cash == 75000.25
+
+    @pytest.mark.asyncio
+    @patch("ml4t.live.brokers.alpaca.TradingClient")
+    async def test_get_cash_async_accepts_negative_margin_cash(self, mock_client_class):
+        mock_client = MagicMock()
+        mock_client_class.return_value = mock_client
+        mock_client.get_account.return_value = MockAlpacaAccount(cash="-1250.50")
+
+        broker = AlpacaBroker(api_key="PKTEST", secret_key="SECRET")
+        broker._trading_client = mock_client
+        broker._connected = True
+
+        assert await broker.get_cash_async() == -1250.50
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("cash", ["nan", "inf", "-inf"])
+    @patch("ml4t.live.brokers.alpaca.TradingClient")
+    async def test_get_cash_async_rejects_nonfinite_values(self, mock_client_class, cash):
+        mock_client = MagicMock()
+        mock_client_class.return_value = mock_client
+        mock_client.get_account.return_value = MockAlpacaAccount(cash=cash)
+
+        broker = AlpacaBroker(api_key="PKTEST", secret_key="SECRET")
+        broker._trading_client = mock_client
+        broker._connected = True
+
+        with pytest.raises(RuntimeError, match="must be finite"):
+            await broker.get_cash_async()
 
     @pytest.mark.asyncio
     async def test_get_account_value_not_connected(self):

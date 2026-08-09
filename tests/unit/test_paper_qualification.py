@@ -2,6 +2,7 @@ import json
 import zipfile
 from copy import deepcopy
 from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from ml4t.backtest.types import OrderSide, OrderType
@@ -18,6 +19,7 @@ from scripts.qualification.qualify_paper import (
     build_candidate_manifest,
     validate_bundle,
 )
+from scripts.qualification.qualify_paper import _snapshot as capture_snapshot
 
 COMMIT = "a" * 40
 WHEEL_HASH = "b" * 64
@@ -290,3 +292,20 @@ async def test_cleanup_never_uses_order_api_when_paper_identity_is_uncertain() -
 
     assert await _cleanup_tags("ib", broker, {"ml4tq-12345678-a"}) is False
     assert broker.cancel_calls == 0
+
+
+@pytest.mark.asyncio
+async def test_alpaca_snapshot_accepts_negative_margin_cash() -> None:
+    broker = MagicMock()
+    broker.positions = {}
+    broker.pending_orders = []
+    broker._trading_client.get_all_positions.return_value = []
+    broker._trading_client.get_orders.return_value = []
+    broker.get_pending_orders_async = AsyncMock(return_value=[])
+    broker.get_account_value_async = AsyncMock(return_value=100_000.0)
+    broker.get_cash_async = AsyncMock(return_value=-1_250.50)
+
+    snapshot = await capture_snapshot("alpaca", broker)
+
+    assert snapshot["account_value_valid"] is True
+    assert snapshot["cash_valid"] is True

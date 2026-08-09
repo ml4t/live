@@ -346,8 +346,8 @@ async def _snapshot(provider: str, broker: Any) -> dict[str, Any]:
     if len(filtered) != expected_filtered:
         raise PaperQualificationError("asset-filtered pending orders are incomplete")
     account_value = _number(await broker.get_account_value_async())
-    cash = _number(await broker.get_cash_async())
-    if account_value <= 0 or cash < 0:
+    _number(await broker.get_cash_async())
+    if account_value <= 0:
         raise PaperQualificationError("paper account metrics are invalid")
     return {
         "positions_count": len(adapter_positions),
