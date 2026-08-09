@@ -408,8 +408,7 @@ class LiveEngine:
                     self.strategy_runtime,
                 )
                 if not self._signals_installed:
-                    self._install_signal_handlers()
-                    self._signals_installed = True
+                    self._signals_installed = self._install_signal_handlers()
             except BaseException as error:
                 self._annotate_connect_failure(error)
                 self._terminal_failure_reason = f"startup:{type(error).__name__}"
@@ -1277,7 +1276,7 @@ class LiveEngine:
                 LifecyclePhase.CAUSAL_INITIALIZATION,
             )
 
-    def _install_signal_handlers(self) -> None:
+    def _install_signal_handlers(self) -> bool:
         """Install SIGINT/SIGTERM handlers for graceful shutdown."""
         loop = asyncio.get_running_loop()
 
@@ -1285,11 +1284,19 @@ class LiveEngine:
             logger.info("LiveEngine: Received %s", sig.name)
             self._request_signal_shutdown(sig)
 
+        installed: list[signal.Signals] = []
         for sig in (signal.SIGINT, signal.SIGTERM):
             try:
                 loop.add_signal_handler(sig, handler, sig)
-            except NotImplementedError:
-                pass
+            except (NotImplementedError, RuntimeError):
+                for installed_signal in installed:
+                    loop.remove_signal_handler(installed_signal)
+                logger.info(
+                    "LiveEngine: Process signal handlers are unavailable; use stop() to shut down"
+                )
+                return False
+            installed.append(sig)
+        return True
 
     def _request_signal_shutdown(self, sig: signal.Signals) -> None:
         """Schedule the same transactional stop path used by API callers."""

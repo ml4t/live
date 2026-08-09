@@ -4,6 +4,7 @@ import asyncio
 import threading
 import time
 from collections.abc import AsyncIterator
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
@@ -466,6 +467,24 @@ async def test_connect():
     # Wrapper created
     assert engine._wrapped_broker is not None
     assert engine._loop is not None
+
+
+def test_connect_and_stop_outside_main_thread() -> None:
+    """The public lifecycle remains usable when process signals are unavailable."""
+
+    async def connect_and_stop() -> tuple[bool, str]:
+        broker = MockAsyncBroker()
+        engine = LiveEngine(RecordingStrategy(), broker, MockDataFeed([]))
+        await engine.connect()
+        connected = broker.is_connected
+        await engine.stop()
+        return connected, engine.stats["last_cleanup_result"]["signals"]
+
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        connected, signal_cleanup = executor.submit(asyncio.run, connect_and_stop()).result()
+
+    assert connected is True
+    assert signal_cleanup == "not_installed"
 
 
 @pytest.mark.asyncio
