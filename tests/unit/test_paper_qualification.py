@@ -299,6 +299,8 @@ async def test_alpaca_snapshot_accepts_negative_margin_cash() -> None:
     broker = MagicMock()
     broker.positions = {}
     broker.pending_orders = []
+    broker._sync_positions = AsyncMock()
+    broker._sync_orders = AsyncMock()
     broker._trading_client.get_all_positions.return_value = []
     broker._trading_client.get_orders.return_value = []
     broker.get_pending_orders_async = AsyncMock(return_value=[])
@@ -309,3 +311,5 @@ async def test_alpaca_snapshot_accepts_negative_margin_cash() -> None:
 
     assert snapshot["account_value_valid"] is True
     assert snapshot["cash_valid"] is True
+    broker._sync_positions.assert_awaited_once()
+    broker._sync_orders.assert_awaited_once()

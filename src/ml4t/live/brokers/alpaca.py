@@ -202,20 +202,31 @@ class AlpacaBroker:
         if not self._connected:
             return
 
-        # Cancel stream task
-        if self._stream_task and not self._stream_task.done():
-            self._stream_task.cancel()
-            try:
-                await self._stream_task
-            except asyncio.CancelledError:
-                pass
-
-        # Close stream
+        stream_task = self._stream_task
         if self._trading_stream:
             try:
+                deadline = time.monotonic() + 2.0
+                stream_loop = getattr(self._trading_stream, "_loop", None)
+                while (
+                    stream_task is not None
+                    and not stream_task.done()
+                    and stream_loop is None
+                    and time.monotonic() < deadline
+                ):
+                    await asyncio.sleep(0.01)
+                    stream_loop = getattr(self._trading_stream, "_loop", None)
                 self._trading_stream.stop()
             except Exception as e:
                 logger.warning("AlpacaBroker: Error stopping stream: %s", redact_sensitive(str(e)))
+        if stream_task and not stream_task.done():
+            try:
+                await asyncio.wait_for(stream_task, timeout=5.0)
+            except TimeoutError:
+                stream_task.cancel()
+                try:
+                    await stream_task
+                except asyncio.CancelledError:
+                    pass
 
         self._connected = False
         self._account_id = None

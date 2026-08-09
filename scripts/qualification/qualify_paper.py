@@ -11,6 +11,7 @@ import math
 import os
 import re
 import subprocess
+import sys
 import time
 import urllib.request
 import zipfile
@@ -335,6 +336,8 @@ def _vendor_snapshot(
 
 
 async def _snapshot(provider: str, broker: Any) -> dict[str, Any]:
+    await broker._sync_positions()
+    await broker._sync_orders()
     adapter_positions, adapter_orders = _adapter_snapshot(broker)
     vendor_positions, vendor_orders = _vendor_snapshot(provider, broker)
     filtered = await broker.get_pending_orders_async(ASSET)
@@ -617,8 +620,16 @@ async def run_provider_phase(
         else:
             snapshots = {"restart": await _restart_provider(provider, broker, tags, steps)}
         passed = True
-    except Exception:
+    except Exception as error:
         failed_stage = steps[-1] if steps else "initialization"
+        from ml4t.live.persistence import redact_sensitive
+
+        detail = redact_sensitive(str(error))
+        print(
+            f"paper {provider} {phase} failed after {failed_stage}: "
+            f"{type(error).__name__}: {detail}",
+            file=sys.stderr,
+        )
     finally:
         if broker is not None:
             try:
