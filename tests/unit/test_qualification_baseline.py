@@ -38,6 +38,19 @@ def test_parse_repository_requires_name_and_path() -> None:
         parse_repository("/tmp/live")
 
 
+def test_baseline_inventories_every_paper_qualification_input() -> None:
+    sensitive_names = set(cast(tuple[str, ...], NAMESPACE["SENSITIVE_ENVIRONMENT_NAMES"]))
+
+    assert {
+        "ALPACA_API_KEY",
+        "ALPACA_SECRET_KEY",
+        "IB_ACCOUNT",
+        "IB_CLIENT_ID",
+        "IB_HOST",
+        "IB_PORT",
+    } <= sensitive_names
+
+
 def test_repository_record_is_clean_remote_comparable_and_redacted(tmp_path: Path) -> None:
     repository_record = cast(Callable[[str, Path], dict[str, Any]], NAMESPACE["repository_record"])
     git(tmp_path, "init", "-b", "main")
