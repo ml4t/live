@@ -54,7 +54,7 @@ from ml4t.live import (
 | --- | --- |
 | Engine | `LiveEngine`, `RuntimeState`, `RuntimeTransition`, `RuntimeErrorContext`, `runtime_error_context`, `RuntimeFailureError`, `RuntimeCleanupError` |
 | Brokers | `IBBroker`, `AlpacaBroker` |
-| Beta-supported feeds | `OKXFundingFeed` |
+| Stable-supported feeds | `OKXFundingFeed` |
 | Experimental feeds | `AlpacaDataFeed`, `IBDataFeed`, `DataBentoFeed`, `CryptoFeed`, `ExperimentalFeedError`, `ExperimentalFeedWarning` |
 | Feed helpers | `BarAggregator`, `BarBuffer`, `FeedContractError`, `FeedContinuityError`, `FeedOverflowError`, `FeedQueueSnapshot` |
 | Orders | `CanonicalOrderRequest`, `OrderValidationError`, `BrokerOrderContractError` |
@@ -160,7 +160,7 @@ from ml4t.live import (
 
 ## Experimental Feed Opt-In
 
-These imports are available for deliberate evaluation. They are not part of the beta support
+These imports are available for deliberate evaluation. They are not part of the stable support
 contract and require `experimental=True`.
 
 ```python

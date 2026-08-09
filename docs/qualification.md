@@ -1,4 +1,4 @@
-# Qualify A Beta Candidate
+# Qualify A Stable Candidate
 
 This procedure validates one exact candidate commit and its built artifacts. It stops before any
 release action.
@@ -78,4 +78,4 @@ and final scorecard. Publication must consume the qualified artifact without reb
 
 Candidate qualification does not create a tag. It does not publish to PyPI or create a GitHub
 release. It does not place a live-money order. Those actions require a separate release decision
-after all evidence is current and the scorecard has no unresolved beta blocker.
+after all evidence is current and the scorecard has no unresolved stable-release blocker.

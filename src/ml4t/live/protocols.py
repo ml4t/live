@@ -356,7 +356,7 @@ class AsyncBrokerProtocol(Protocol):
 class DataFeedProtocol(Protocol):
     """Protocol for real-time data feeds.
 
-    Beta-supported feeds provide an async iterator of validated ``MarketEvent`` objects.
+    Stable-supported feeds provide an async iterator of validated ``MarketEvent`` objects.
     The legacy tuple member of ``FeedItem`` is temporary compatibility for experimental feeds.
     The feed handles:
     - Subscribing to market data

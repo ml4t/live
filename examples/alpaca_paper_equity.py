@@ -16,6 +16,13 @@ Expected Output:
     - Minute-bar updates when market data is available
     - Small paper-order attempts when the toy crossover flips
 
+Expected Failure:
+    Missing or invalid credentials, an unavailable paper endpoint, or unavailable market data
+    produces a non-zero exit without switching to a live account.
+
+Cleanup:
+    The bounded run stops the engine and closes broker and feed resources in a `finally` block.
+
 Runtime:
     About 95 seconds. The script exits on its own.
 """

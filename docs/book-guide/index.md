@@ -7,7 +7,7 @@ the library docs and the book materials without guessing which notebook or chapt
 
 - Start with the chapter map if you are reading the book.
 - Start with the API map if you are coming from the library and want the matching notebook.
-- Treat the listed code paths as the canonical book-side references in the `third_edition` materials.
+- Treat the listed code paths as the canonical references in the `ml4t/code` repository.
 
 ## Chapter To Feature Map
 
@@ -24,13 +24,13 @@ the library docs and the book materials without guessing which notebook or chapt
 | Book path | Why it matters here |
 | --- | --- |
 | `code/16_strategy_simulation/06_framework_parity.py` | shows why keeping one strategy interface matters before live deployment |
-| `code/25_live_trading/unified_framework_demo.py` | demonstrates the same strategy moving from backtest to live-style execution |
-| `code/25_live_trading/ib_paper_trading_demo.py` | Interactive Brokers connectivity path |
-| `code/25_live_trading/alpaca_paper_trading_demo.py` | Alpaca paper-trading path |
-| `code/25_live_trading/alpaca_crypto_live_demo.py` | Alpaca crypto workflow |
-| `code/25_live_trading/pipeline_verification.py` | parity checks between research and live workflows |
-| `code/25_live_trading/okx_funding_rate_demo.py` | live-style funding-rate deployment with exchange data |
-| `code/25_live_trading/safety_risk_demo.py` | `SafeBroker` limits, shadow mode, and kill-switch behavior |
+| `code/25_live_trading/01_unified_framework_demo.py` | compares lifecycle traces, canonical intents, and signals across the two engines |
+| `code/25_live_trading/03_ib_paper_trading_demo.py` | Interactive Brokers connectivity path |
+| `code/25_live_trading/04_alpaca_paper_trading_demo.py` | Alpaca paper-trading path |
+| `code/25_live_trading/05_alpaca_crypto_live_demo.py` | Alpaca crypto workflow |
+| `code/25_live_trading/08_pipeline_verification.py` | parity checks between research and live workflows |
+| `code/25_live_trading/09_crypto_funding_deployment_loop.py` | OKX funding-rate deployment loop |
+| `code/25_live_trading/10_safety_risk_demo.py` | `SafeBroker` limits, shadow mode, and kill-switch behavior |
 | `code/26_mlops_governance/03_safe_model_rollout.py` | shadow-mode and staged-promotion procedures around live deployment |
 | `code/26_mlops_governance/04_circuit_breakers.py` | broader operational safety concepts that complement `SafeBroker` |
 
@@ -50,13 +50,13 @@ workflow:
 
 | Book concept | Library API |
 | --- | --- |
-| same strategy in backtest and live | `LiveEngine` plus unchanged `Strategy` subclass |
+| portable decision logic | `LiveEngine` plus a lifecycle-v1 `Strategy` subclass using supported broker operations |
 | sync strategy calling async infrastructure | `ThreadSafeBrokerWrapper` |
 | explicit deployment risk policy | `LiveRiskConfig` |
 | pre-trade enforcement and kill switch | `SafeBroker` |
 | paper-like live validation without routing orders | `execution_mode="shadow"` with `VirtualPortfolio` |
 | broker-specific execution path | `IBBroker` or `AlpacaBroker` |
-| beta-supported live data source | `OKXFundingFeed` |
+| stable-supported live data source | `OKXFundingFeed` |
 | experimental opt-in data source | `AlpacaDataFeed`, `IBDataFeed`, `DataBentoFeed`, `CryptoFeed` |
 
 ## What The Book Often Shows Manually
@@ -75,9 +75,9 @@ If you are learning the stack end to end, the most efficient route is:
 
 1. `code/16_strategy_simulation/06_framework_parity.py`
 2. [Backtest to Live](../user-guide/backtest-to-live.md)
-3. `code/25_live_trading/unified_framework_demo.py`
+3. `code/25_live_trading/01_unified_framework_demo.py`
 4. the broker page that matches your venue
-5. `code/25_live_trading/safety_risk_demo.py`
+5. `code/25_live_trading/10_safety_risk_demo.py`
 6. [Risk Controls](../user-guide/risk.md)
 
 ## Related Docs

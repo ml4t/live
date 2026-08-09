@@ -1,4 +1,4 @@
-"""Explicit opt-in contract for feeds outside the beta support boundary."""
+"""Explicit opt-in contract for feeds outside the stable support boundary."""
 
 from __future__ import annotations
 
@@ -23,12 +23,12 @@ def require_experimental_opt_in(
     """Require explicit opt-in and report the unsupported guarantees."""
     if experimental is not True:
         raise ExperimentalFeedError(
-            f"{feed} is experimental and is not part of the ml4t-live beta support contract. "
+            f"{feed} is experimental and is not part of the ml4t-live stable support contract. "
             "Pass experimental=True only after accepting its documented limitations."
         )
     detail = ", ".join(missing_guarantees)
     warnings.warn(
-        f"{feed} experimental opt-in accepted. Missing beta guarantees: {detail}.",
+        f"{feed} experimental opt-in accepted. Missing stable guarantees: {detail}.",
         ExperimentalFeedWarning,
         stacklevel=3,
     )

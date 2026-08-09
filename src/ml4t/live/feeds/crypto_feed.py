@@ -1,6 +1,6 @@
 """Experimental generic cryptocurrency market data feed via asynchronous CCXT.
 
-This adapter is not part of the beta support contract. Exchange availability and payload behavior
+This adapter is not part of the stable support contract. Exchange availability and payload behavior
 depend on the installed CCXT implementation and require independent user validation.
 
 Features:
@@ -78,7 +78,7 @@ class CryptoFeed(DataFeedProtocol):
     """Experimental cryptocurrency market data feed via asynchronous CCXT.
 
     Supports async REST polling and uses CCXT Pro websocket methods when available. No exchange,
-    overload, reconnect, or performance guarantee is included in the beta support contract.
+    overload, reconnect, or performance guarantee is included in the stable support contract.
 
     Data Format:
         Experimental typed ``MarketEvent`` bars and trades with UTC timestamps.

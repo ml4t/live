@@ -1,6 +1,6 @@
 """Experimental DataBento market data feed.
 
-This adapter is not part of the beta support contract. Its selected deterministic schema adapters
+This adapter is not part of the stable support contract. Its selected deterministic schema adapters
 do not qualify the DataBento service, datasets, or live performance.
 
 Features:
@@ -104,7 +104,7 @@ class DataBentoFeed(DataFeedProtocol):
     Real-time Mode:
         - Streams live market data
         - Supports multiple datasets (GLBX, XNAS, OPRA, etc.)
-        - No beta latency or throughput guarantee
+        - No stable latency or throughput guarantee
 
     Data Format:
         Experimental typed ``MarketEvent`` bars, trades, and quotes with UTC timestamps.

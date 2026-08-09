@@ -16,6 +16,13 @@ Expected Output:
     - Tick updates for a few large-cap names when market data is available
     - Small paper-order attempts when the toy signal flips
 
+Expected Failure:
+    An unreachable Gateway/TWS session, failed paper authentication, or missing market data
+    produces a non-zero exit without switching ports or accounts.
+
+Cleanup:
+    The bounded run stops the engine and closes broker and feed resources in a `finally` block.
+
 Runtime:
     About 75 seconds. The script exits on its own.
 """

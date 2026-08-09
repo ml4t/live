@@ -7,15 +7,19 @@
 
 ---
 
+> **Historical design record:** This document records the original architecture proposal. It does not define current behavior or the supported API. Use `README.md`, `api.yaml`, and `docs/` for the qualified contract.
+
 ## 1. Executive Summary
 
 ### 1.1 Vision
 
-Enable users to **copy-paste their Strategy class** from backtesting to live trading with zero code changes. The same `Strategy.on_data(timestamp, data, context, broker)` signature works in both environments.
+Support one `Strategy` subclass in both runtimes when it satisfies lifecycle version 1 and uses the
+portable broker surface. The callback signature is shared, while feeds, execution, risk decisions,
+latency, fills, and account state remain runtime-specific.
 
 ### 1.2 Key Principles
 
-1. **Strategy Portability**: Identical strategy code runs in backtest and live
+1. **Strategy Portability**: Lifecycle-compatible strategy logic can run in backtest and live
 2. **Protocol-Based Abstraction**: `BrokerProtocol` implemented by all broker types
 3. **Safety First**: Multiple layers of risk controls, paper trading recommended
 4. **Broker Agnostic**: Support IB, Alpaca, and extensible to others
@@ -52,7 +56,7 @@ ml4t-live (depends on ml4t-backtest for protocols, types, Strategy base class)
 │                                                                              │
 │   class MyStrategy(Strategy):                                                │
 │       def on_data(self, timestamp, data, context, broker):                   │
-│           # SAME CODE for backtest AND live                                  │
+│           # Portable decision logic; runtime infrastructure differs          │
 │           target = {'AAPL': 0.5, 'GOOG': 0.3}                               │
 │           self.executor.execute(target, data, broker)                        │
 │                                                                              │
@@ -1649,7 +1653,7 @@ from ml4t.live import LiveEngine, IBBroker, IBDataFeed, SafeBroker, LiveRiskConf
 
 
 class MyStrategy(Strategy):
-    """Same strategy for backtest AND live."""
+    """Lifecycle-compatible strategy used by both runtimes."""
 
     def __init__(self):
         self.executor = TargetWeightExecutor(
@@ -1731,7 +1735,7 @@ feed = DataFeed(historical_df)
 engine = Engine(strategy, broker, feed)
 results = engine.run()
 
-# === LIVE (same strategy!) ===
+# === LIVE (portable strategy logic, live infrastructure) ===
 from ml4t.live import LiveEngine, IBBroker, IBDataFeed
 
 strategy = MyStrategy()  # EXACT SAME CLASS

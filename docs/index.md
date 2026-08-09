@@ -252,7 +252,7 @@ See [Brokers](user-guide/brokers.md) for connection details and usage patterns.
 | --- | --- | --- | --- | --- |
 | **AlpacaDataFeed** | experimental opt-in | Alpaca API | bars, quotes, trades | custom evaluation only |
 | **IBDataFeed** | experimental opt-in | TWS / IB Gateway | real-time ticks | custom evaluation only |
-| **OKXFundingFeed** | beta-supported | OKX public APIs | OHLCV plus funding context | perpetual futures and funding-rate strategies |
+| **OKXFundingFeed** | stable-supported | OKX public APIs | OHLCV plus funding context | perpetual futures and funding-rate strategies |
 | **DataBentoFeed** | experimental opt-in | DataBento API or DBN replay | selected tick and bar schemas | custom evaluation only |
 | **CryptoFeed** | experimental opt-in | asynchronous CCXT | trades and candles | custom evaluation only |
 
@@ -290,8 +290,8 @@ Install `ml4t-live[experimental]` if you deliberately opt in to experimental `Da
 
 ## From Book To Deployment
 
-The book develops strategies through research, diagnostics, and backtesting. `ml4t-live` takes the
-same strategy surface and runs it against real brokers with explicit deployment controls around it.
+The book develops strategies through research, diagnostics, and backtesting. `ml4t-live` runs a
+lifecycle-compatible strategy surface against real brokers with explicit deployment controls.
 
 If you are reading *Machine Learning for Trading, Third Edition*, the practical sequence is:
 
@@ -307,7 +307,7 @@ If you are reading *Machine Learning for Trading, Third Edition*, the practical 
 ml4t-data -> ml4t-engineer -> ml4t-diagnostic -> ml4t-backtest -> ml4t-live
 ```
 
-The same `Strategy` class sits at the handoff between `ml4t-backtest` and `ml4t-live`.
+A lifecycle-v1 `Strategy` class is the portable handoff between `ml4t-backtest` and `ml4t-live`.
 
 ## Disclaimer
 

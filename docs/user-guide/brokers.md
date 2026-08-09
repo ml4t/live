@@ -5,7 +5,7 @@
 - `IBBroker` for Interactive Brokers
 - `AlpacaBroker` for Alpaca stocks and crypto
 
-Both are beta-supported for the documented paper workflows and adapter contract. Support does not
+Both are stable-supported for the documented paper workflows and adapter contract. Support does not
 mean that every order type or account feature is portable. A requested behavior must appear in the
 adapter's declared execution capabilities before the runtime can use it.
 

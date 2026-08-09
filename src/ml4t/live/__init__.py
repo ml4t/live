@@ -1,6 +1,6 @@
 """ML4T Live Trading Platform.
 
-Enable copy-paste Strategy class from backtesting to live trading with zero code changes.
+Lifecycle-compatible strategies can share decision logic across backtest and live runtimes.
 """
 
 try:

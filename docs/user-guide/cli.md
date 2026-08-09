@@ -8,7 +8,9 @@
 
 ## Preflight
 
-`preflight` is the beta-oriented operator check. It opens the configured broker, reads account state, builds a startup reconciliation report, and exits with a non-zero status when the result is degraded.
+`preflight` is the operator readiness check. It opens the configured broker, reads account state,
+builds a startup reconciliation report, and exits with a non-zero status when the result is
+degraded.
 
 ```bash
 uv run ml4t-live preflight ib --state-file .ml4t_risk_state.json --strict

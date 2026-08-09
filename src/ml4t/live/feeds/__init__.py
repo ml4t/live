@@ -1,4 +1,4 @@
-"""Beta-supported and explicitly opt-in experimental data-feed components."""
+"""Stable-supported and explicitly opt-in experimental data-feed components."""
 
 from ml4t.live.feeds.aggregator import BarAggregator, BarBuffer
 from ml4t.live.feeds.alpaca_feed import AlpacaDataFeed

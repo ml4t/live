@@ -72,7 +72,7 @@ class MockLiveClient:
 def make_feed(client: Any, **kwargs: Any) -> DataBentoFeed:
     with (
         patch("ml4t.live.feeds.databento_feed.DATABENTO_AVAILABLE", True),
-        pytest.warns(ExperimentalFeedWarning, match="Missing beta guarantees"),
+        pytest.warns(ExperimentalFeedWarning, match="Missing stable guarantees"),
     ):
         return DataBentoFeed(
             client,

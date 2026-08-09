@@ -20,7 +20,7 @@ Deploying a backtested strategy to live markets requires careful handling of asy
 
 - Strategy portability under the shared lifecycle version 1 contract
 - Two broker integrations: Interactive Brokers (TWS/Gateway) and Alpaca (stocks + crypto)
-- A beta-supported OKX feed plus typed bar aggregation
+- A stable-supported OKX feed plus typed bar aggregation
 - Explicit opt-in experimental adapters for Alpaca, IB, generic CCXT, and DataBento workflows
 - Shadow mode for testing without placing real orders (VirtualPortfolio tracking)
 - 16-parameter risk configuration: position limits, order limits, loss limits, price protection
@@ -66,7 +66,7 @@ async def main():
     )
 
     config = LiveRiskConfig(
-        shadow_mode=True,           # No real orders
+        execution_mode="shadow",   # No real orders
         max_position_value=50_000,
     )
     safe = SafeBroker(broker, config)
@@ -124,8 +124,8 @@ Requirements:
 |------|--------|--------|----------|
 | `AlpacaDataFeed` | Alpaca | experimental | US stocks + crypto, real-time bars/quotes/trades |
 | `IBDataFeed` | Interactive Brokers | experimental | Multi-asset tick-by-tick data |
-| `OKXFundingFeed` | OKX | beta-supported | Perpetual swaps with funding rates |
-| `BarAggregator` | Any typed feed | beta-supported | Multi-feed aggregation + bar assembly |
+| `OKXFundingFeed` | OKX | stable-supported | Perpetual swaps with funding rates |
+| `BarAggregator` | Any typed feed | stable-supported | Multi-feed aggregation + bar assembly |
 | `DataBentoFeed` | DataBento | experimental | Historical replay + real-time streaming |
 | `CryptoFeed` | CCXT | experimental | Generic exchange trades and candles |
 
@@ -141,7 +141,7 @@ feed = AlpacaDataFeed(
     experimental=True,
 )
 
-# Experimental generic crypto adapter; not part of the beta support contract
+# Experimental generic crypto adapter; not part of the stable support contract
 feed = CryptoFeed(
     exchange="binance",
     symbols=["BTC/USDT", "ETH/USDT"],
@@ -162,8 +162,8 @@ adapters are present in the default environment.
 from ml4t.live import LiveRiskConfig, SafeBroker
 
 config = LiveRiskConfig(
-    # Shadow mode
-    shadow_mode=True,                   # Virtual orders only (no real execution)
+    # Explicit execution routing
+    execution_mode="shadow",           # Virtual orders only (no real execution)
 
     # Position limits
     max_position_value=50_000,          # Max $ per position
@@ -257,7 +257,9 @@ uv run ml4t-live status --state-file .ml4t_risk_state.json
 uv run ml4t-live shadow examples/shadow_mode_demo.py --feed okx --duration 60
 ```
 
-`preflight` is the beta-oriented command: it checks broker reachability, balances, persisted kill-switch state, startup reconciliation, and session state, and exits non-zero when the result is degraded.
+`preflight` is the operator readiness command: it checks broker reachability, balances, persisted
+kill-switch state, startup reconciliation, and session state, and exits non-zero when the result is
+degraded.
 
 ## Order Lifecycle
 
@@ -313,11 +315,11 @@ See the [portability contract](docs/user-guide/backtest-to-live.md) and
 - [Risk Management](docs/user-guide/risk.md) - LiveRiskConfig and SafeBroker
 - [Candidate Qualification](docs/qualification.md) - validate an exact candidate without release
 
-## Beta Support Boundary
+## Stable Support Boundary
 
-The beta package supports Linux with Python 3.12, 3.13, and 3.14. CI, wheel, and source
+The stable candidate supports Linux with Python 3.12, 3.13, and 3.14. CI, wheel, and source
 distribution qualification cover those interpreter versions. Windows, macOS, and Python 3.15 are
-not part of this beta contract. IB and Alpaca broker adapters and the OKX feed are supported only
+not part of this stable contract. IB and Alpaca broker adapters and the OKX feed are supported only
 within the documented capabilities, reconciliation, causal-event, overload, and paper-account
 boundaries. Alpaca, IB, DataBento, and generic CCXT feeds require explicit experimental opt-in.
 
@@ -355,7 +357,7 @@ uv run python scripts/qualification/run_beta_gate.py
 
 This library is designed for paper trading and educational purposes. When transitioning to live trading:
 
-- Always start with `shadow_mode=True`
+- Always start with `execution_mode="shadow"`
 - Set conservative position and order limits
 - Enable `kill_switch_enabled=True` with a reasonable `max_drawdown_pct`
 - Monitor virtual vs real positions carefully

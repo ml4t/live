@@ -18,3 +18,9 @@ session, prints progress every five seconds, and exits after about a minute.
 `alpaca_paper_equity.py` connects to Alpaca paper trading for SPY, QQQ, and IWM with a tiny moving-average crossover strategy. It requires `ALPACA_API_KEY` and `ALPACA_SECRET_KEY`, uses paper-only endpoints, prints heartbeats every five seconds, and exits after about 95 seconds.
 
 `ib_paper_equity.py` connects to TWS or IB Gateway on `127.0.0.1:7497` and runs a toy momentum strategy on a few large-cap equities. It requires a local IB paper session with API access and market-data subscriptions, prints heartbeats every five seconds, and exits after about 75 seconds.
+
+`live_ib_example.py` connects only to the configured IB paper session and combines the experimental
+IB tick feed with stable bar aggregation. It routes strategy orders to the shadow portfolio, runs
+for 90 seconds by default, and closes all resources. Set `ML4T_EXAMPLE_DURATION_SECONDS` to change
+the bound. Connection, authentication, account-identity, and market-data failures exit non-zero and
+never select a live port automatically.

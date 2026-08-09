@@ -1,4 +1,4 @@
-"""Validate public beta claims, documentation coverage, and example classification."""
+"""Validate maintained public claims, documentation coverage, and examples."""
 
 from __future__ import annotations
 
@@ -8,8 +8,11 @@ from pathlib import Path
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 
-PUBLIC_FILES = (
+REQUIRED_PUBLIC_FILES = (
     "README.md",
+    "api.yaml",
+    "DESIGN.md",
+    "examples/README.md",
     "docs/index.md",
     "docs/getting-started/installation.md",
     "docs/user-guide/backtest-to-live.md",
@@ -24,11 +27,18 @@ PUBLIC_FILES = (
 
 PROHIBITED_CLAIMS = (
     "zero-code migration",
+    "zero code changes",
+    "zero changes",
     "works unchanged in production",
     "code runs identically in backtest and live",
     "same Strategy class works in both environments",
     "identical code in both backtest and live modes",
     "eliminates technical divergence by construction",
+    "reproduced exactly in production",
+    "production code waiting for a live data source",
+    "same strategy class works in backtest and live",
+    "identical outputs in backtest and live modes",
+    "same code for backtest and live",
 )
 
 REQUIRED_TEXT = {
@@ -38,6 +48,17 @@ REQUIRED_TEXT = {
         "Python 3.12, 3.13, and 3.14",
         "DataBento",
         "experimental",
+    ),
+    "api.yaml": (
+        "lifecycle version 1",
+        "execution_mode",
+        "max_position_shares",
+        "experimental",
+        "dedicated worker thread",
+    ),
+    "DESIGN.md": (
+        "Historical design record",
+        "does not define current behavior",
     ),
     "docs/user-guide/backtest-to-live.md": (
         "CanonicalTargetIntent",
@@ -101,21 +122,41 @@ EXTERNAL_EXAMPLES = frozenset(
 )
 
 
+def public_surface_paths(root: Path) -> tuple[Path, ...]:
+    """Return every maintained public narrative surface in one source tree."""
+    paths = {root / relative for relative in ("README.md", "api.yaml", "DESIGN.md")}
+    paths.update((root / "docs").rglob("*.md"))
+    paths.update((root / "examples").glob("*.md"))
+    paths.update((root / "examples").glob("*.py"))
+    paths.update((root / "src").rglob("*.py"))
+    return tuple(sorted(paths))
+
+
+def unsupported_claims(paths: tuple[Path, ...], *, prefix: str = "") -> list[str]:
+    """Return unsupported absolute claims with their source paths."""
+    failures: list[str] = []
+    for path in paths:
+        if not path.is_file():
+            continue
+        text = path.read_text().casefold()
+        for claim in PROHIBITED_CLAIMS:
+            if claim.casefold() in text:
+                failures.append(f"{prefix}unsupported absolute claim in {path}: {claim}")
+    return failures
+
+
 def check_public_claims(root: Path = REPOSITORY_ROOT) -> list[str]:
     """Return claim and example-policy failures for one source tree."""
     failures: list[str] = []
     texts: dict[str, str] = {}
-    for relative in PUBLIC_FILES:
+    for relative in REQUIRED_PUBLIC_FILES:
         path = root / relative
         if not path.is_file():
             failures.append(f"missing public document: {relative}")
             continue
         texts[relative] = path.read_text()
 
-    combined = "\n".join(texts.values()).casefold()
-    for claim in PROHIBITED_CLAIMS:
-        if claim.casefold() in combined:
-            failures.append(f"unsupported absolute claim: {claim}")
+    failures.extend(unsupported_claims(public_surface_paths(root)))
 
     for relative, required in REQUIRED_TEXT.items():
         text = texts.get(relative, "")
@@ -130,38 +171,45 @@ def check_public_claims(root: Path = REPOSITORY_ROOT) -> list[str]:
             "example classification mismatch: "
             f"missing={sorted(examples - classified)}; stale={sorted(classified - examples)}"
         )
+    for name in sorted(EXTERNAL_EXAMPLES):
+        path = root / "examples" / name
+        text = path.read_text() if path.is_file() else ""
+        for heading in ("Prerequisites:", "Expected Output:", "Expected Failure:", "Cleanup:"):
+            if heading not in text:
+                failures.append(f"external example {name} does not state: {heading}")
+        if name != "okx_funding_paper.py" and "paper" not in text.casefold():
+            failures.append(f"external broker example {name} does not identify a paper account")
     return failures
 
 
 def check_chapter_claims(book_root: Path, code_root: Path) -> list[str]:
     """Return failures in the maintained chapter 25 portability material."""
     failures: list[str] = []
-    book_paths = (
-        book_root / "25_live_trading/chapter/sections/section_00_intro.md",
-        book_root
-        / "25_live_trading/chapter/sections/section_01_the_unified_researchtoproduction_framewo.md",
-        book_root
-        / "25_live_trading/chapter/sections/section_06_ensuring_technical_parity_through_pipeli.md",
-        book_root / "25_live_trading/chapter/sections/section_08_summary.md",
+    section_root = book_root / "25_live_trading/chapter/sections"
+    code_chapter = code_root / "25_live_trading"
+    book_paths = tuple(sorted(section_root.glob("*.md")))
+    code_paths = tuple(sorted((*code_chapter.glob("*.py"), *code_chapter.glob("*.md"))))
+    required_paths = (
+        section_root / "section_00_intro.md",
+        section_root / "section_01_the_unified_researchtoproduction_framewo.md",
+        section_root / "section_06_ensuring_technical_parity_through_pipeli.md",
+        section_root / "section_08_summary.md",
+        code_chapter / "01_unified_framework_demo.py",
+        code_chapter / "README.md",
     )
-    code_paths = (
-        code_root / "25_live_trading/01_unified_framework_demo.py",
-        code_root / "25_live_trading/README.md",
-    )
-    for path in (*book_paths, *code_paths):
+    for path in required_paths:
         if not path.is_file():
             failures.append(f"missing chapter file: {path}")
 
     book_text = "\n".join(path.read_text() for path in book_paths if path.is_file())
     code_text = "\n".join(path.read_text() for path in code_paths if path.is_file())
     combined = f"{book_text}\n{code_text}".casefold()
-    for claim in PROHIBITED_CLAIMS:
-        if claim.casefold() in combined:
-            failures.append(f"chapter contains unsupported absolute claim: {claim}")
+    failures.extend(unsupported_claims((*book_paths, *code_paths), prefix="chapter "))
     for phrase in ("lifecycle version 1", "canonical intent", "outcome parity"):
         if phrase.casefold() not in combined:
             failures.append(f"chapter does not state: {phrase}")
-    demo = code_paths[0].read_text() if code_paths[0].is_file() else ""
+    demo_path = code_chapter / "01_unified_framework_demo.py"
+    demo = demo_path.read_text() if demo_path.is_file() else ""
     for phrase in ("Engine(", "LiveEngine(", "callback_trace", "CanonicalTargetIntent"):
         if phrase not in demo:
             failures.append(f"chapter parity demo does not exercise: {phrase}")
@@ -183,7 +231,9 @@ def main() -> int:
 
     report = {
         "schema_version": 1,
-        "public_files": list(PUBLIC_FILES),
+        "public_files": [
+            str(path.relative_to(REPOSITORY_ROOT)) for path in public_surface_paths(REPOSITORY_ROOT)
+        ],
         "deterministic_examples": sorted(DETERMINISTIC_EXAMPLES),
         "external_examples": sorted(EXTERNAL_EXAMPLES),
         "chapter_checked": bool(args.book_root),

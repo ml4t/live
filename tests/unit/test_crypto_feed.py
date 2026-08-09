@@ -23,7 +23,7 @@ def make_feed(exchange: MockExchange | None = None, **kwargs: Any) -> CryptoFeed
     with (
         patch("ml4t.live.feeds.crypto_feed.CCXT_AVAILABLE", True),
         patch("ml4t.live.feeds.crypto_feed.ccxt") as ccxt,
-        pytest.warns(ExperimentalFeedWarning, match="Missing beta guarantees"),
+        pytest.warns(ExperimentalFeedWarning, match="Missing stable guarantees"),
     ):
         ccxt.binance.return_value = exchange
         return CryptoFeed(

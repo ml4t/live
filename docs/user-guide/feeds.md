@@ -41,8 +41,8 @@ evidence that no records were missed. Treat the halt as an operator reconciliati
 | --- | --- | --- | --- |
 | `AlpacaDataFeed` | experimental | Alpaca-native equities and crypto | custom evaluation |
 | `IBDataFeed` | experimental | direct market data from TWS or IB Gateway | custom evaluation |
-| `OKXFundingFeed` | beta-supported | perpetual-swap strategies that depend on funding context | funding-rate and perp strategies |
-| `BarAggregator` | beta-supported | converting tick or sub-minute feeds into strategy bars | custom typed feeds |
+| `OKXFundingFeed` | stable-supported | perpetual-swap strategies that depend on funding context | funding-rate and perp strategies |
+| `BarAggregator` | stable-supported | converting tick or sub-minute feeds into strategy bars | custom typed feeds |
 | `DataBentoFeed` | experimental | schema-limited replay and live evaluation | deliberate custom validation |
 | `CryptoFeed` | experimental | generic CCXT evaluation | deliberate custom validation |
 
@@ -94,7 +94,7 @@ time and reports sequence unavailability, which is insufficient for stable conti
 
 ## Experimental Feeds
 
-`AlpacaDataFeed`, `IBDataFeed`, `DataBentoFeed`, and `CryptoFeed` are not part of the beta support
+`AlpacaDataFeed`, `IBDataFeed`, `DataBentoFeed`, and `CryptoFeed` are not part of the stable support
 contract. Construction fails unless `experimental=True` is passed, then emits
 `ExperimentalFeedWarning` with that adapter's missing guarantees. Do not treat their public imports
 as support claims.

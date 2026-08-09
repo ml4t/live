@@ -14,6 +14,12 @@ Expected Output:
     - Funding-rate snapshots for BTC, ETH, and SOL perpetuals
     - Simple long/short/flat bias labels based on funding extremes
 
+Expected Failure:
+    DNS, TLS, HTTP, schema, continuity, and timeout failures terminate the run with a non-zero exit.
+
+Cleanup:
+    The bounded run stops and closes the feed in a `finally` block.
+
 Runtime:
     About 70 seconds. The script exits on its own.
 """

@@ -1,7 +1,7 @@
 """Complete end-to-end example: IB live trading with strategy from backtest.
 
 This example shows how to:
-1. Define a Strategy (same as backtest)
+1. Define a lifecycle-compatible Strategy
 2. Connect to Interactive Brokers
 3. Subscribe to IB market data feed
 4. Aggregate ticks to minute bars
@@ -10,10 +10,26 @@ This example shows how to:
 Strategy: Simple moving average crossover
 Data: Real-time IB market data for SPY
 Mode: Shadow mode (tracks orders virtually)
+
+Prerequisites:
+    - TWS or IB Gateway running on the configured paper port
+    - Paper account authenticated with API access enabled
+    - SPY market-data permission
+
+Expected Output:
+    A bounded shadow session with IB ticks, one-minute bars, signals, and virtual positions.
+
+Expected Failure:
+    An unreachable session, wrong account, failed authentication, or unavailable market data
+    terminates the run without placing an order at IB.
+
+Cleanup:
+    The bounded run stops the engine and closes broker and feed resources in a `finally` block.
 """
 
 import asyncio
 import logging
+import os
 from datetime import datetime
 
 from ml4t.backtest import OrderSide, Strategy
@@ -28,10 +44,11 @@ logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
+DURATION_SECONDS = int(os.environ.get("ML4T_EXAMPLE_DURATION_SECONDS", "90"))
 
 
 # ============================================================================
-# STRATEGY DEFINITION (Same as backtest - zero changes!)
+# STRATEGY DEFINITION (portable decision logic)
 # ============================================================================
 
 
@@ -43,7 +60,7 @@ class SimpleMAStrategy(Strategy):
     - Buy when fast MA crosses above slow MA
     - Sell when fast MA crosses below slow MA
 
-    This is the SAME strategy you'd use in backtest!
+    This strategy uses lifecycle-v1 callbacks and portable broker operations.
     """
 
     def __init__(self, fast_period: int = 10, slow_period: int = 30):
@@ -58,7 +75,8 @@ class SimpleMAStrategy(Strategy):
     def on_data(self, timestamp: datetime, data: dict, context: dict, broker):
         """Called for each bar.
 
-        This method signature is IDENTICAL to backtest Strategy!
+        The callback signature is shared with the backtest runtime. Live data,
+        broker behavior, latency, fills, and risk decisions remain distinct.
 
         Args:
             timestamp: Bar timestamp
@@ -95,12 +113,12 @@ class SimpleMAStrategy(Strategy):
         # Trading logic
         if fast_ma > slow_ma and not has_position:
             # Bullish crossover - buy
-            logger.info("🚀 BUY Signal: Fast MA crossed above Slow MA")
+            logger.info("BUY signal: fast MA crossed above slow MA")
             broker.submit_order("SPY", 100, side=OrderSide.BUY)
 
         elif fast_ma < slow_ma and has_position:
             # Bearish crossover - sell
-            logger.info("📉 SELL Signal: Fast MA crossed below Slow MA")
+            logger.info("SELL signal: fast MA crossed below slow MA")
             broker.submit_order("SPY", 100, side=OrderSide.SELL)
 
     def on_end(self, broker):
@@ -115,8 +133,14 @@ class SimpleMAStrategy(Strategy):
 # ============================================================================
 
 
-async def main():
-    """Main entry point for live trading."""
+async def stop_after(duration: int, engine: LiveEngine) -> None:
+    """Stop the engine after the documented bound."""
+    await asyncio.sleep(duration)
+    await engine.stop()
+
+
+async def main() -> int:
+    """Run the bounded IB shadow workflow."""
 
     # Step 1: Connect to Interactive Brokers
     logger.info("=" * 60)
@@ -124,13 +148,10 @@ async def main():
     logger.info("=" * 60)
 
     broker = IBBroker(
-        host="127.0.0.1",
-        port=7497,  # Paper trading port (use 7496 for live)
-        client_id=1,
+        host=os.environ.get("IB_HOST", "127.0.0.1"),
+        port=int(os.environ.get("IB_PORT", "7497")),
+        client_id=int(os.environ.get("IB_CLIENT_ID", "78")),
     )
-
-    await broker.connect()
-    logger.info(f"✅ Connected to IB. Account: {broker._account}")
 
     # Step 2: Create market data feed
     logger.info("=" * 60)
@@ -152,7 +173,7 @@ async def main():
         assets=["SPY"],
     )
 
-    logger.info("✅ Feed created: IB ticks → 1-minute bars")
+    logger.info("Feed created: IB ticks to 1-minute bars")
 
     # Step 3: Configure risk management
     logger.info("=" * 60)
@@ -167,7 +188,7 @@ async def main():
     )
 
     safe_broker = SafeBroker(broker, risk_config)
-    logger.info("✅ Risk controls configured (SHADOW MODE - no real orders)")
+    logger.info("Risk controls configured (shadow mode - no broker orders)")
 
     # Step 4: Create strategy
     logger.info("=" * 60)
@@ -175,7 +196,7 @@ async def main():
     logger.info("=" * 60)
 
     strategy = SimpleMAStrategy(fast_period=10, slow_period=30)
-    logger.info("✅ Strategy initialized: MA(10, 30)")
+    logger.info("Strategy initialized: MA(10, 30)")
 
     # Step 5: Create and start engine
     logger.info("=" * 60)
@@ -188,20 +209,24 @@ async def main():
         feed=feed,
     )
 
-    await engine.connect()
-    logger.info("✅ Engine connected and ready")
+    try:
+        await engine.connect()
+    except Exception as exc:
+        logger.error("IB paper shadow setup failed: %s", exc)
+        return 1
+    logger.info("Engine connected to the configured IB paper session")
 
     # Step 6: Run!
     logger.info("=" * 60)
-    logger.info("LIVE TRADING ACTIVE - Press Ctrl+C to stop")
+    logger.info("SHADOW SESSION ACTIVE - bounded to %ss", DURATION_SECONDS)
     logger.info("=" * 60)
 
+    stop_task = asyncio.create_task(stop_after(DURATION_SECONDS, engine))
     try:
         await engine.run()
-    except KeyboardInterrupt:
-        logger.info("\n⚠️  Shutdown requested by user")
-    except Exception as e:
-        logger.error(f"❌ Error: {e}", exc_info=True)
+    except Exception:
+        logger.exception("IB shadow session failed")
+        return 1
     finally:
         # Step 7: Clean shutdown
         logger.info("=" * 60)
@@ -209,7 +234,8 @@ async def main():
         logger.info("=" * 60)
 
         await engine.stop()
-        await broker.disconnect()
+        stop_task.cancel()
+        await asyncio.gather(stop_task, return_exceptions=True)
 
         # Print final stats
         logger.info("\nEngine Statistics:")
@@ -220,39 +246,10 @@ async def main():
         for key, value in feed.stats.items():
             logger.info(f"  {key}: {value}")
 
-        logger.info("\n✅ Shutdown complete")
+        logger.info("\nShutdown complete")
+
+    return 0
 
 
 if __name__ == "__main__":
-    """
-    Prerequisites:
-    1. TWS or IB Gateway running
-    2. API enabled (port 7497 for paper trading)
-    3. Market data subscription for SPY
-
-    To run:
-        python examples/live_ib_example.py
-
-    Expected output:
-        - Connects to IB
-        - Subscribes to SPY market data
-        - Receives ticks, aggregates to 1-minute bars
-        - Calculates moving averages
-        - Generates buy/sell signals
-        - Tracks positions VIRTUALLY (shadow mode)
-        - NO REAL ORDERS PLACED
-
-    Safety:
-        - Shadow mode is enabled (`execution_mode="shadow"`)
-        - All orders are virtual
-        - Check broker.pending_orders == [] to verify
-        - Check safe_broker._virtual_portfolio.positions for virtual positions
-
-    Next steps:
-        1. Run for 1-2 weeks in shadow mode
-        2. Verify strategy logic is correct
-        3. Select `execution_mode="paper"` for paper trading
-        4. Test with paper account for 2-4 weeks
-        5. Gradually move to live with small positions
-    """
-    asyncio.run(main())
+    raise SystemExit(asyncio.run(main()))

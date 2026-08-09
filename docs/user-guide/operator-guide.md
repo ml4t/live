@@ -83,9 +83,8 @@ uv run python examples/startup_reconciliation_demo.py
 
 ## Live Promotion
 
-Promotion from paper to live should be a size change, not a system change.
-
-Keep the same strategy, broker adapter, and monitoring path. Tighten nothing except your operational discipline:
+Promote only the strategy, broker adapter, risk policy, and monitoring path already qualified in
+paper trading. Begin with lower notional and preserve every safety control:
 
 - run `preflight --strict` before the session starts
 - use `status` for the human-readable snapshot and recent journal tail

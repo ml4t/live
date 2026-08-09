@@ -7,7 +7,7 @@
 - A supported broker or data source for live use
 - `ml4t-backtest` is installed automatically as a package dependency
 
-Windows, macOS, and Python 3.15 are not qualified for this beta. Package metadata rejects Python
+Windows, macOS, and Python 3.15 are not qualified for this stable release. Package metadata rejects Python
 3.15 before dependency resolution.
 
 ## Install From PyPI
@@ -18,7 +18,7 @@ uv add ml4t-live
 
 ## Optional Add-Ons
 
-`ml4t-live` installs the beta-supported broker/feed stack used by the package. The DataBento SDK is
+`ml4t-live` installs the stable-supported broker/feed stack used by the package. The DataBento SDK is
 available only through the bounded optional extra for deliberate experimental evaluation:
 
 ```bash
