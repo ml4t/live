@@ -180,6 +180,7 @@
       "RiskLimitError",
       "RiskState",
       "RuntimeCleanupError",
+      "RuntimeErrorContext",
       "RuntimeFailureError",
       "RuntimeState",
       "RuntimeTransition",
@@ -191,7 +192,8 @@
       "UnsupportedOrderCapabilityError",
       "VirtualPortfolio",
       "callback_trace",
-      "default_live_execution_policy"
+      "default_live_execution_policy",
+      "runtime_error_context"
     ],
     "ml4t.live.brokers": [
       "AlpacaBroker",
@@ -367,6 +369,7 @@
     "RiskLimitError",
     "RiskState",
     "RuntimeCleanupError",
+    "RuntimeErrorContext",
     "RuntimeFailureError",
     "RuntimeState",
     "RuntimeTransition",
@@ -378,7 +381,8 @@
     "UnsupportedOrderCapabilityError",
     "VirtualPortfolio",
     "callback_trace",
-    "default_live_execution_policy"
+    "default_live_execution_policy",
+    "runtime_error_context"
   ],
   "schema_version": 1,
   "source_runtime_mismatches": [],
@@ -1936,6 +1940,51 @@
     },
     {
       "bases": [
+        "builtins.object"
+      ],
+      "classification": "stable",
+      "dataclass_fields": [
+        {
+          "default": "<required>",
+          "name": "component",
+          "type": "<class 'str'>"
+        },
+        {
+          "default": "<required>",
+          "name": "operation",
+          "type": "<class 'str'>"
+        },
+        {
+          "default": "<required>",
+          "name": "runtime_state",
+          "type": "<enum 'RuntimeState'>"
+        },
+        {
+          "default": "<required>",
+          "name": "recovery_action",
+          "type": "<class 'str'>"
+        },
+        {
+          "default": "<required>",
+          "name": "root_cause_type",
+          "type": "<class 'str'>"
+        }
+      ],
+      "defined_in": "ml4t.live.engine",
+      "kind": "dataclass",
+      "methods": [
+        {
+          "kind": "method",
+          "name": "to_dict",
+          "signature": "(self) -> dict[str, str]"
+        }
+      ],
+      "module": "ml4t.live",
+      "name": "RuntimeErrorContext",
+      "signature": "(component: str, operation: str, runtime_state: ml4t.live.engine.RuntimeState, recovery_action: str, root_cause_type: str) -> None"
+    },
+    {
+      "bases": [
         "builtins.RuntimeError"
       ],
       "classification": "stable",
@@ -1944,7 +1993,7 @@
       "methods": [],
       "module": "ml4t.live",
       "name": "RuntimeFailureError",
-      "signature": null
+      "signature": "(reason: str) -> None"
     },
     {
       "bases": [
@@ -2471,6 +2520,14 @@
       "module": "ml4t.live",
       "name": "default_live_execution_policy",
       "signature": "(*, opening_auction: 'ExecutionBehavior' = <ExecutionBehavior.DISABLED: 'disabled'>) -> 'ExecutionPolicy'"
+    },
+    {
+      "classification": "stable",
+      "defined_in": "ml4t.live.engine",
+      "kind": "function",
+      "module": "ml4t.live",
+      "name": "runtime_error_context",
+      "signature": "(error: BaseException) -> ml4t.live.engine.RuntimeErrorContext | None"
     },
     {
       "bases": [
@@ -3291,6 +3348,51 @@
     },
     {
       "bases": [
+        "builtins.object"
+      ],
+      "classification": "stable",
+      "dataclass_fields": [
+        {
+          "default": "<required>",
+          "name": "component",
+          "type": "<class 'str'>"
+        },
+        {
+          "default": "<required>",
+          "name": "operation",
+          "type": "<class 'str'>"
+        },
+        {
+          "default": "<required>",
+          "name": "runtime_state",
+          "type": "<enum 'RuntimeState'>"
+        },
+        {
+          "default": "<required>",
+          "name": "recovery_action",
+          "type": "<class 'str'>"
+        },
+        {
+          "default": "<required>",
+          "name": "root_cause_type",
+          "type": "<class 'str'>"
+        }
+      ],
+      "defined_in": "ml4t.live.engine",
+      "kind": "dataclass",
+      "methods": [
+        {
+          "kind": "method",
+          "name": "to_dict",
+          "signature": "(self) -> dict[str, str]"
+        }
+      ],
+      "module": "ml4t.live.engine",
+      "name": "RuntimeErrorContext",
+      "signature": "(component: str, operation: str, runtime_state: ml4t.live.engine.RuntimeState, recovery_action: str, root_cause_type: str) -> None"
+    },
+    {
+      "bases": [
         "builtins.RuntimeError"
       ],
       "classification": "stable",
@@ -3299,7 +3401,7 @@
       "methods": [],
       "module": "ml4t.live.engine",
       "name": "RuntimeFailureError",
-      "signature": null
+      "signature": "(reason: str) -> None"
     },
     {
       "bases": [
@@ -3427,6 +3529,14 @@
       "kind": "constant",
       "module": "ml4t.live.engine",
       "name": "US_EQUITY_OPEN"
+    },
+    {
+      "classification": "stable",
+      "defined_in": "ml4t.live.engine",
+      "kind": "function",
+      "module": "ml4t.live.engine",
+      "name": "runtime_error_context",
+      "signature": "(error: BaseException) -> ml4t.live.engine.RuntimeErrorContext | None"
     },
     {
       "bases": [
