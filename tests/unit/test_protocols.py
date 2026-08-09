@@ -46,6 +46,9 @@ class MockBroker:
     def get_position(self, asset: str) -> Position | None:
         return self._positions.get(asset)
 
+    def get_positions(self) -> dict[str, Position]:
+        return self.positions
+
     def get_account_value(self) -> float:
         position_value = sum(p.market_value for p in self._positions.values())
         return self._cash + position_value
@@ -509,6 +512,7 @@ def test_broker_protocol_has_all_required_methods():
         "pending_orders",
         "is_connected",
         "get_position",
+        "get_positions",
         "get_account_value",
         "get_cash",
         "get_pending_orders",

@@ -121,6 +121,10 @@ class ThreadSafeBrokerWrapper:
         # Can use positions property since it returns a copy
         return self.positions.get(asset)
 
+    def get_positions(self) -> dict[str, Position]:
+        """Get all current positions through the portable strategy facade."""
+        return self.positions
+
     def get_account_value(self) -> float:
         """Get total account value (cash + positions).
 

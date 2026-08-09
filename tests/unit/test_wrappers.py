@@ -193,6 +193,21 @@ async def test_positions_property():
 
 
 @pytest.mark.asyncio
+async def test_get_positions_matches_portable_backtest_method():
+    broker = MockAsyncBroker()
+    broker._positions["AAPL"] = Position(
+        asset="AAPL",
+        quantity=100,
+        entry_price=150.0,
+        entry_time=datetime.now(),
+        current_price=155.0,
+    )
+    wrapper = ThreadSafeBrokerWrapper(broker, asyncio.get_running_loop())
+
+    assert wrapper.get_positions() == wrapper.positions
+
+
+@pytest.mark.asyncio
 async def test_pending_orders_property():
     """Test pending_orders property access (no async needed)."""
     broker = MockAsyncBroker()

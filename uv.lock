@@ -1199,8 +1199,8 @@ wheels = [
 
 [[package]]
 name = "ml4t-backtest"
-version = "0.1.0b23.dev14+g12bcbc568"
-source = { git = "https://github.com/ml4t/backtest.git?rev=12bcbc5684112a6137b0778350d7f44588544164#12bcbc5684112a6137b0778350d7f44588544164" }
+version = "0.1.0b23.dev15+gf9f8dd763"
+source = { git = "https://github.com/ml4t/backtest.git?rev=f9f8dd763719afb710e571e06ba8f93ed71bd9db#f9f8dd763719afb710e571e06ba8f93ed71bd9db" }
 dependencies = [
     { name = "ml4t-specs" },
     { name = "numpy" },
@@ -1272,7 +1272,7 @@ requires-dist = [
     { name = "mkdocs", marker = "extra == 'docs'", specifier = ">=1.6,<2" },
     { name = "mkdocs-material", marker = "extra == 'docs'", specifier = ">=9.5.0" },
     { name = "mkdocstrings", extras = ["python"], marker = "extra == 'docs'", specifier = ">=0.24.0" },
-    { name = "ml4t-backtest", git = "https://github.com/ml4t/backtest.git?rev=12bcbc5684112a6137b0778350d7f44588544164" },
+    { name = "ml4t-backtest", git = "https://github.com/ml4t/backtest.git?rev=f9f8dd763719afb710e571e06ba8f93ed71bd9db" },
     { name = "ml4t-specs", git = "https://github.com/ml4t/specs.git?rev=85d3476683a70b4f17e5e8cb82dd23d05b373dc8" },
     { name = "packaging", marker = "extra == 'dev'", specifier = "==26.3" },
     { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=3.0" },

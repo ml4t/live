@@ -86,6 +86,10 @@ class BrokerProtocol(Protocol):
         """
         ...
 
+    def get_positions(self) -> dict[str, Position]:
+        """Get all current positions using the portable backtest-facing method."""
+        ...
+
     def get_account_value(self) -> float:
         """Get total account value (cash + positions).
 

@@ -839,6 +839,10 @@ class SafeBroker:
             return self._virtual_portfolio.positions.get(asset)
         return self._broker.get_position(asset)  # type: ignore[attr-defined]
 
+    def get_positions(self) -> dict[str, Position]:
+        """Get all current positions through the portable strategy facade."""
+        return self.positions
+
     async def get_account_value_async(self) -> float:
         """Get total account value (async).
 

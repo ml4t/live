@@ -15,6 +15,8 @@ from ml4t.backtest import (
     Strategy,
 )
 from ml4t.backtest import callback_trace as backtest_callback_trace
+from ml4t.backtest.execution import RebalanceSchedule
+from ml4t.backtest.strategies import LongShortStrategy
 from ml4t.specs import (
     AssetTarget,
     CanonicalTargetIntent,
@@ -164,7 +166,11 @@ class DeterministicLiveFeed:
             (
                 timestamp,
                 {
-                    asset: {**values, "price": values["close"], "signals": {}}
+                    asset: {
+                        **values,
+                        "price": values["close"],
+                        "signals": values.get("signals", {}),
+                    }
                     for asset, values in data.items()
                 },
                 context,
@@ -500,3 +506,96 @@ async def test_contract_comparator_detects_runtime_branch_fault(tmp_path) -> Non
     )
 
     assert live.strategy_trace != backtest.strategy_trace
+
+
+@pytest.mark.asyncio
+async def test_builtin_schedule_strategy_makes_equal_completed_sequence_decisions(tmp_path) -> None:
+    schedule_time = datetime(2026, 8, 10, 20, tzinfo=UTC)
+
+    class ScheduledLongShort(LongShortStrategy):
+        signal_column = "signal"
+        long_count = 1
+        short_count = 1
+        position_size = 0.1
+        rebalance_schedule = RebalanceSchedule.explicit_timestamps([schedule_time])
+
+        def __init__(self) -> None:
+            super().__init__()
+            self.decisions: list[tuple[datetime, tuple[str, ...], tuple[str, ...]]] = []
+
+        def rank_assets(self, data):
+            long_assets, short_assets = super().rank_assets(data)
+            self.decisions.append((schedule_time, tuple(long_assets), tuple(short_assets)))
+            return long_assets, short_assets
+
+    events = [
+        (
+            schedule_time,
+            {
+                "AAA": {
+                    "open": 100.0,
+                    "high": 101.0,
+                    "low": 99.0,
+                    "close": 100.0,
+                    "volume": 1_000_000.0,
+                    "signals": {"signal": 1.0},
+                },
+                "BBB": {
+                    "open": 100.0,
+                    "high": 101.0,
+                    "low": 99.0,
+                    "close": 100.0,
+                    "volume": 1_000_000.0,
+                    "signals": {"signal": -1.0},
+                },
+            },
+            {},
+        )
+    ]
+    records = [
+        {
+            "timestamp": timestamp,
+            "asset": asset,
+            **{name: value for name, value in values.items() if name != "signals"},
+        }
+        for timestamp, data, _ in events
+        for asset, values in data.items()
+    ]
+    signals = [
+        {
+            "timestamp": timestamp,
+            "asset": asset,
+            **values["signals"],
+        }
+        for timestamp, data, _ in events
+        for asset, values in data.items()
+    ]
+    backtest_strategy = ScheduledLongShort()
+    Engine(
+        DataFeed(prices_df=pl.DataFrame(records), signals_df=pl.DataFrame(signals)),
+        backtest_strategy,
+    ).run()
+
+    live_strategy = ScheduledLongShort()
+    raw = DeterministicLiveBroker()
+    safe = SafeBroker(
+        raw,
+        LiveRiskConfig(
+            shadow_mode=True,
+            max_position_value=200_000.0,
+            max_order_value=200_000.0,
+            max_position_shares=10_000,
+            max_order_shares=10_000,
+            dedup_window_seconds=0.0,
+            state_file=str(tmp_path / "built-in-schedule-state.json"),
+        ),
+    )
+    live = LiveEngine(live_strategy, safe, DeterministicLiveFeed(events))
+    await live.connect()
+    await live.run()
+
+    assert (
+        live_strategy.decisions
+        == backtest_strategy.decisions
+        == [(schedule_time, ("AAA",), ("BBB",))]
+    )
