@@ -17,6 +17,7 @@ import time
 from datetime import UTC, datetime
 from typing import Any
 
+from alpaca.common.enums import BaseURL
 from alpaca.trading.client import TradingClient
 from alpaca.trading.enums import OrderSide as AlpacaOrderSide
 from alpaca.trading.enums import OrderStatus as AlpacaOrderStatus
@@ -233,6 +234,17 @@ class AlpacaBroker:
         """Return current REST and adapter connection state."""
         return bool(self.is_connected)
 
+    def assert_paper_trading(self) -> None:
+        """Fail unless the connected client is authenticated through Alpaca's paper endpoint."""
+        if not self.is_connected or self._trading_client is None or self._account_id is None:
+            raise RuntimeError("Alpaca paper identity requires a connected account")
+        if self._paper is not True:
+            raise RuntimeError("Alpaca broker is configured for live trading")
+        if getattr(self._trading_client, "_sandbox", None) is not True:
+            raise RuntimeError("Alpaca client did not confirm sandbox mode")
+        if getattr(self._trading_client, "_base_url", None) != BaseURL.TRADING_PAPER:
+            raise RuntimeError("Alpaca client is not using the official paper endpoint")
+
     # === AsyncBrokerProtocol Implementation ===
 
     @property
@@ -381,6 +393,16 @@ class AlpacaBroker:
         order_type = request.order_type
         limit_price = request.limit_price
         stop_price = request.stop_price
+        client_order_id = kwargs.get("client_order_id")
+        if client_order_id is not None and (
+            not isinstance(client_order_id, str)
+            or not client_order_id
+            or len(client_order_id) > 48
+            or not client_order_id.replace("-", "").replace("_", "").isalnum()
+        ):
+            raise ValueError(
+                "client_order_id must be 1-48 letters, numbers, hyphens, or underscores"
+            )
         if order_type == OrderType.MOC:
             if kwargs.get("extended_hours"):
                 raise ValueError("Alpaca MOC orders do not support extended_hours=True")
@@ -391,7 +413,13 @@ class AlpacaBroker:
 
         # Create order request
         order_request = self._create_order_request(
-            asset, qty, side, order_type, limit_price, stop_price
+            asset,
+            qty,
+            side,
+            order_type,
+            limit_price,
+            stop_price,
+            client_order_id=client_order_id,
         )
 
         # Submit atomically with lock (IBBroker pattern)
@@ -472,6 +500,7 @@ class AlpacaBroker:
         quantity: float | None = None,
         limit_price: float | None = None,
         stop_price: float | None = None,
+        **kwargs: Any,
     ) -> Order:
         """Replace a pending order via cancel-and-resubmit."""
         original = self._pending_orders.get(order_id)
@@ -493,6 +522,7 @@ class AlpacaBroker:
             order_type=original.order_type,
             limit_price=replacement_limit,
             stop_price=replacement_stop,
+            **kwargs,
         )
 
     async def close_position_async(self, asset: str) -> Order | None:
@@ -521,6 +551,8 @@ class AlpacaBroker:
         order_type: OrderType,
         limit_price: float | None,
         stop_price: float | None,
+        *,
+        client_order_id: str | None = None,
     ) -> MarketOrderRequest | LimitOrderRequest | StopOrderRequest | StopLimitOrderRequest:
         """Create Alpaca order request.
 
@@ -553,6 +585,7 @@ class AlpacaBroker:
                 qty=quantity,
                 side=alpaca_side,
                 time_in_force=TimeInForce.CLS,
+                client_order_id=client_order_id,
             )
         elif order_type == OrderType.MARKET:
             return MarketOrderRequest(
@@ -560,6 +593,7 @@ class AlpacaBroker:
                 qty=quantity,
                 side=alpaca_side,
                 time_in_force=tif,
+                client_order_id=client_order_id,
             )
         elif order_type == OrderType.LIMIT:
             if limit_price is None:
@@ -570,6 +604,7 @@ class AlpacaBroker:
                 side=alpaca_side,
                 limit_price=limit_price,
                 time_in_force=tif,
+                client_order_id=client_order_id,
             )
         elif order_type == OrderType.STOP:
             if stop_price is None:
@@ -580,6 +615,7 @@ class AlpacaBroker:
                 side=alpaca_side,
                 stop_price=stop_price,
                 time_in_force=tif,
+                client_order_id=client_order_id,
             )
         elif order_type == OrderType.STOP_LIMIT:
             if limit_price is None or stop_price is None:
@@ -591,6 +627,7 @@ class AlpacaBroker:
                 limit_price=limit_price,
                 stop_price=stop_price,
                 time_in_force=tif,
+                client_order_id=client_order_id,
             )
         else:
             raise ValueError(f"Unsupported order type: {order_type}")
@@ -842,7 +879,12 @@ class AlpacaBroker:
             order_id = f"ML4T-{next_order_counter}"
 
             order_type = OrderType.MARKET
-            if alpaca_order.limit_price:
+            time_in_force = str(
+                getattr(getattr(alpaca_order, "time_in_force", None), "value", "")
+            ).lower()
+            if time_in_force == "cls":
+                order_type = OrderType.MOC
+            elif alpaca_order.limit_price:
                 if alpaca_order.stop_price:
                     order_type = OrderType.STOP_LIMIT
                 else:

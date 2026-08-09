@@ -32,6 +32,7 @@ def test_every_external_action_is_immutable_and_updateable() -> None:
         ("documentation", "every mandatory"),
         ("artifact", "candidate build"),
         ("publish", "complete reusable"),
+        ("paper-hash", "paper-qualified wheel hash"),
         ("always", "success dependency"),
     ],
 )
@@ -56,6 +57,8 @@ def test_seeded_mandatory_failure_cannot_reach_publish(mutation: str, expected: 
         seeded_qualification["jobs"]["artifact-qualification"]["needs"] = []
     elif mutation == "publish":
         seeded_release["jobs"]["publish"]["needs"] = "github-release"
+    elif mutation == "paper-hash":
+        del seeded_release["jobs"]["paper-evidence"]["outputs"]
     else:
         seeded_release["jobs"]["publish"]["if"] = "always()"
 

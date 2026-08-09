@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import io
+import json
+import zipfile
 from datetime import UTC, datetime, timedelta
 
 from scripts.qualification.check_paper_evidence import find_fresh_paper_run
+from scripts.qualification.qualify_paper import EXERCISE_STEPS, RESTART_STEPS
 
 NOW = datetime(2026, 8, 8, 20, tzinfo=UTC)
 COMMIT = "a" * 40
@@ -27,12 +31,84 @@ def _fetcher(created_at: str, *, conclusion: str = "success", expired: bool = Fa
                         "name": f"paper-{COMMIT}-42",
                         "expired": expired,
                         "created_at": created_at,
+                        "archive_download_url": "https://api.github.test/archive/42",
                     }
                 ]
             }
         return {"workflow_runs": [run]}
 
     return fetch
+
+
+def _snapshot() -> dict:
+    return {
+        "positions_count": 0,
+        "pending_orders_count": 0,
+        "filtered_pending_orders_count": 0,
+        "position_snapshot_exact": True,
+        "pending_order_snapshot_exact": True,
+        "account_value_valid": True,
+        "cash_valid": True,
+    }
+
+
+def _report(provider: str, phase: str, commit: str) -> dict:
+    snapshots = (
+        {"initial": _snapshot(), "reconnect": _snapshot(), "final": _snapshot()}
+        if phase == "exercise"
+        else {"restart": _snapshot()}
+    )
+    return {
+        "schema_version": 1,
+        "provider": provider,
+        "phase": phase,
+        "candidate": {
+            "commit": commit,
+            "qualification_run_id": 41,
+            "version": "0.1.0b4",
+            "wheel_sha256": "b" * 64,
+        },
+        "started_at": "2026-08-07T20:00:00+00:00",
+        "completed_at": "2026-08-07T20:01:00+00:00",
+        "paper_identity_verified_before_submission": True,
+        "steps_passed": sorted(EXERCISE_STEPS if phase == "exercise" else RESTART_STEPS),
+        "snapshots": snapshots,
+        "cleanup_passed": True,
+        "failed_stage": None,
+        "passed": True,
+    }
+
+
+def _archive(commit: str = COMMIT) -> bytes:
+    bundle = {
+        "schema_version": 1,
+        "generated_at": "2026-08-07T20:02:00+00:00",
+        "candidate": {
+            "commit": commit,
+            "qualification_run_id": 41,
+            "version": "0.1.0b4",
+            "wheel_sha256": "b" * 64,
+        },
+        "providers": {
+            provider: {phase: _report(provider, phase, commit) for phase in ("exercise", "restart")}
+            for provider in ("alpaca", "ib")
+        },
+        "redacted": True,
+        "passed": True,
+    }
+    payload = io.BytesIO()
+    with zipfile.ZipFile(payload, "w") as archive:
+        archive.writestr("paper-qualification.json", json.dumps(bundle))
+    return payload.getvalue()
+
+
+def _downloader(payload: bytes = _archive()):
+    def download(url: str, token: str) -> bytes:
+        assert url == "https://api.github.test/archive/42"
+        assert token == "token"
+        return payload
+
+    return download
 
 
 def test_exact_fresh_successful_paper_evidence_passes() -> None:
@@ -43,6 +119,7 @@ def test_exact_fresh_successful_paper_evidence_passes() -> None:
         max_age=timedelta(days=7),
         now=NOW,
         fetcher=_fetcher("2026-08-07T20:00:00Z"),
+        downloader=_downloader(),
     )
 
     assert evidence == {
@@ -50,6 +127,8 @@ def test_exact_fresh_successful_paper_evidence_passes() -> None:
         "run_url": "https://github.test/run/42",
         "created_at": "2026-08-07T20:00:00Z",
         "artifact": f"paper-{COMMIT}-42",
+        "qualification_run_id": 41,
+        "wheel_sha256": "b" * 64,
     }
 
 
@@ -61,6 +140,7 @@ def test_stale_paper_evidence_fails() -> None:
         max_age=timedelta(days=7),
         now=NOW,
         fetcher=_fetcher("2026-07-01T20:00:00Z"),
+        downloader=_downloader(),
     )
 
     assert evidence is None
@@ -74,6 +154,35 @@ def test_expired_paper_artifact_fails() -> None:
         max_age=timedelta(days=7),
         now=NOW,
         fetcher=_fetcher("2026-08-07T20:00:00Z", expired=True),
+        downloader=_downloader(),
+    )
+
+    assert evidence is None
+
+
+def test_wrong_commit_inside_retained_artifact_fails() -> None:
+    evidence = find_fresh_paper_run(
+        repository="ml4t/live",
+        commit=COMMIT,
+        token="token",
+        max_age=timedelta(days=7),
+        now=NOW,
+        fetcher=_fetcher("2026-08-07T20:00:00Z"),
+        downloader=_downloader(_archive("c" * 40)),
+    )
+
+    assert evidence is None
+
+
+def test_malformed_retained_artifact_fails() -> None:
+    evidence = find_fresh_paper_run(
+        repository="ml4t/live",
+        commit=COMMIT,
+        token="token",
+        max_age=timedelta(days=7),
+        now=NOW,
+        fetcher=_fetcher("2026-08-07T20:00:00Z"),
+        downloader=_downloader(b"not a zip"),
     )
 
     assert evidence is None

@@ -148,6 +148,16 @@ def promotion_failures(qualification: dict[str, Any], release: dict[str, Any]) -
     paper_evidence = release_jobs.get("paper-evidence", {})
     if "check_paper_evidence.py" not in _run_text(paper_evidence):
         failures.append("release does not verify fresh paper evidence for the exact commit")
+    if paper_evidence.get("outputs", {}).get("wheel_sha256") != (
+        "${{ steps.paper.outputs.wheel_sha256 }}"
+    ):
+        failures.append("release does not expose the paper-qualified wheel hash")
+    publish_text = json.dumps(release_jobs.get("publish", {}), sort_keys=True)
+    if (
+        "needs.paper-evidence.outputs.wheel_sha256" not in publish_text
+        or "sha256sum --check" not in publish_text
+    ):
+        failures.append("publish does not match its wheel to the paper-qualified hash")
     return failures
 
 
@@ -244,13 +254,37 @@ def validate_workflows(root: Path = WORKFLOW_ROOT) -> list[str]:
         failures.append("paper qualification does not use the protected paper environment")
     if "secrets." not in json.dumps(paper_job, sort_keys=True):
         failures.append("paper qualification has no explicit protected credential inputs")
-    if "--run-external" not in _run_text(paper_job) or "-m paper" not in _run_text(paper_job):
-        failures.append("paper qualification does not select explicit external paper tests")
+    paper_run_text = _run_text(paper_job)
+    if "qualify_paper.py candidate" not in paper_run_text:
+        failures.append("paper qualification does not bind the downloaded candidate artifact")
+    for provider in ("alpaca", "ib"):
+        for phase in ("exercise", "restart"):
+            if (
+                f"--provider {provider}" not in paper_run_text
+                or f"--phase {phase}" not in paper_run_text
+            ):
+                failures.append(f"paper qualification lacks {provider} {phase} evidence")
+    if "qualify_paper.py assemble" not in paper_run_text:
+        failures.append("paper qualification does not require a complete redacted evidence bundle")
+    if "uv sync" in paper_run_text or "uv pip install" not in paper_run_text:
+        failures.append("paper qualification does not install only the candidate wheel")
     checkouts = _action_steps(paper_job, "actions/checkout")
     if len(checkouts) != 1 or checkouts[0].get("with", {}).get("ref") != (
         "${{ inputs.candidate-sha }}"
     ):
         failures.append("paper qualification is not tied to its requested candidate commit")
+    paper_downloads = _action_steps(paper_job, "actions/download-artifact")
+    if len(paper_downloads) != 1:
+        failures.append("paper qualification does not download one candidate artifact")
+    else:
+        download_inputs = paper_downloads[0].get("with", {})
+        if download_inputs.get("name") != "dist-${{ inputs.candidate-sha }}":
+            failures.append("paper qualification downloads an artifact for a different commit")
+        if download_inputs.get("run-id") != "${{ inputs.qualification-run-id }}":
+            failures.append("paper qualification is not tied to a successful qualification run")
+    uploads = _action_steps(paper_job, "actions/upload-artifact")
+    if len(uploads) != 1 or uploads[0].get("with", {}).get("path") != "paper-evidence/":
+        failures.append("paper qualification does not retain its evidence bundle")
 
     allowed_job_writes = {
         ("release.yml", "publish"): {"id-token"},

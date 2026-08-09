@@ -14,6 +14,7 @@ IB Integration Layer: COMPLETE ✅
 import asyncio
 import logging
 import math
+import re
 import time
 from datetime import UTC, datetime
 from typing import Any
@@ -222,6 +223,15 @@ class IBBroker:
         """Return current adapter and vendor connection state."""
         return bool(self.is_connected)
 
+    def assert_paper_trading(self) -> None:
+        """Fail unless the connected endpoint and managed account identify IB paper trading."""
+        if not self.is_connected or self._account is None:
+            raise RuntimeError("IB paper identity requires a connected managed account")
+        if self._port not in {4002, 7497}:
+            raise RuntimeError("IB endpoint is not a standard paper-trading port")
+        if re.fullmatch(r"DU[0-9]+", self._account.upper()) is None:
+            raise RuntimeError("IB managed account is not identified as a paper account")
+
     # === AsyncBrokerProtocol Implementation ===
 
     @property
@@ -383,11 +393,21 @@ class IBBroker:
         # Create IB order
         action = "BUY" if side == OrderSide.BUY else "SELL"
         outside_rth = bool(kwargs.get("outsideRth", False))
+        order_ref = kwargs.get("order_ref")
+        if order_ref is not None and (
+            not isinstance(order_ref, str)
+            or not order_ref
+            or len(order_ref) > 32
+            or not order_ref.replace("-", "").replace("_", "").isalnum()
+        ):
+            raise ValueError("order_ref must be 1-32 letters, numbers, hyphens, or underscores")
         if order_type == OrderType.MOC and outside_rth:
             raise ValueError("IB MOC orders do not support outsideRth=True")
         ib_order = self._create_ib_order(
             action, quantity, order_type, limit_price, stop_price, outside_rth
         )
+        if order_ref is not None:
+            ib_order.orderRef = order_ref
 
         # Submit atomically with lock
         async with self._order_lock:
@@ -472,6 +492,7 @@ class IBBroker:
         quantity: float | None = None,
         limit_price: float | None = None,
         stop_price: float | None = None,
+        **kwargs: Any,
     ) -> Order:
         """Replace a pending order via cancel-and-resubmit."""
         original = self._pending_orders.get(order_id)
@@ -493,6 +514,7 @@ class IBBroker:
             order_type=original.order_type,
             limit_price=replacement_limit,
             stop_price=replacement_stop,
+            **kwargs,
         )
 
     async def close_position_async(self, asset: str) -> Order | None:
@@ -769,25 +791,24 @@ class IBBroker:
                 self._order_counter += 1
                 order_id = f"ML4T-{self._order_counter}"
 
-                # Determine order type from IB order
-                order_type = OrderType.MARKET
                 ib_order_type = str(getattr(trade.order, "orderType", "")).upper()
-                if ib_order_type == "MOC":
-                    order_type = OrderType.MOC
-                elif hasattr(trade.order, "lmtPrice") and trade.order.lmtPrice:
-                    if hasattr(trade.order, "auxPrice") and trade.order.auxPrice:
-                        order_type = OrderType.STOP_LIMIT
-                    else:
-                        order_type = OrderType.LIMIT
-                elif hasattr(trade.order, "auxPrice") and trade.order.auxPrice:
-                    order_type = OrderType.STOP
+                order_types = {
+                    "MKT": OrderType.MARKET,
+                    "MOC": OrderType.MOC,
+                    "LMT": OrderType.LIMIT,
+                    "STP": OrderType.STOP,
+                    "STP LMT": OrderType.STOP_LIMIT,
+                }
+                if ib_order_type not in order_types:
+                    raise RuntimeError("IB open-orders snapshot contains an unsupported order type")
+                order_type = order_types[ib_order_type]
 
                 # Create our order object
                 asset = str(trade.contract.symbol).strip().upper()
                 quantity = float(trade.order.totalQuantity)
                 action = str(trade.order.action).upper()
-                limit_value = trade.order.lmtPrice
-                stop_value = trade.order.auxPrice
+                limit_value = getattr(trade.order, "lmtPrice", None)
+                stop_value = getattr(trade.order, "auxPrice", None)
                 limit_price = (
                     float(limit_value)
                     if order_type in (OrderType.LIMIT, OrderType.STOP_LIMIT)

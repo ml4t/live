@@ -3,14 +3,21 @@
 from __future__ import annotations
 
 import argparse
+import io
 import json
 import os
 import urllib.parse
 import urllib.request
+import zipfile
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
+
+try:
+    from scripts.qualification.qualify_paper import PaperQualificationError, validate_bundle
+except ModuleNotFoundError:
+    from qualify_paper import PaperQualificationError, validate_bundle
 
 GITHUB_API = "https://api.github.com"
 
@@ -32,6 +39,32 @@ def fetch_json(url: str, token: str) -> dict[str, Any]:
         return json.load(response)
 
 
+def fetch_bytes(url: str, token: str) -> bytes:
+    request = urllib.request.Request(
+        url,
+        headers={
+            "Accept": "application/octet-stream",
+            "Authorization": f"Bearer {token}",
+            "X-GitHub-Api-Version": "2022-11-28",
+        },
+    )
+    with urllib.request.urlopen(request, timeout=30) as response:
+        return response.read()
+
+
+def validate_evidence_archive(payload: bytes, expected_commit: str) -> dict[str, Any]:
+    """Validate the retained bundle rather than trusting workflow metadata alone."""
+    with zipfile.ZipFile(io.BytesIO(payload)) as archive:
+        matches = [name for name in archive.namelist() if name.endswith("paper-qualification.json")]
+        if len(matches) != 1:
+            raise PaperQualificationError("paper artifact has no unique qualification bundle")
+        loaded = json.loads(archive.read(matches[0]))
+    if not isinstance(loaded, dict):
+        raise PaperQualificationError("paper qualification bundle is not a JSON object")
+    validate_bundle(loaded, expected_commit=expected_commit)
+    return loaded
+
+
 def find_fresh_paper_run(
     *,
     repository: str,
@@ -40,6 +73,7 @@ def find_fresh_paper_run(
     max_age: timedelta,
     now: datetime,
     fetcher: Callable[[str, str], dict[str, Any]] = fetch_json,
+    downloader: Callable[[str, str], bytes] = fetch_bytes,
 ) -> dict[str, Any] | None:
     query = urllib.parse.urlencode(
         {
@@ -59,17 +93,39 @@ def find_fresh_paper_run(
             continue
         artifacts = fetcher(run["artifacts_url"], token).get("artifacts", [])
         expected_name = f"paper-{commit}-{run['id']}"
-        if any(
-            artifact.get("name") == expected_name
+        matching = [
+            artifact
+            for artifact in artifacts
+            if artifact.get("name") == expected_name
             and not artifact.get("expired", True)
             and _parse_time(artifact["created_at"]) >= created_at
-            for artifact in artifacts
+            and artifact.get("archive_download_url")
+        ]
+        if len(matching) != 1:
+            continue
+        try:
+            bundle = validate_evidence_archive(
+                downloader(str(matching[0]["archive_download_url"]), token), commit
+            )
+        except (
+            PaperQualificationError,
+            ValueError,
+            KeyError,
+            json.JSONDecodeError,
+            zipfile.BadZipFile,
         ):
+            continue
+        bundle_created_at = _parse_time(bundle["generated_at"])
+        if bundle_created_at < created_at or bundle_created_at > now + timedelta(minutes=5):
+            continue
+        if bundle["passed"]:
             return {
                 "run_id": run["id"],
                 "run_url": run.get("html_url"),
                 "created_at": run["created_at"],
                 "artifact": expected_name,
+                "qualification_run_id": bundle["candidate"]["qualification_run_id"],
+                "wheel_sha256": bundle["candidate"]["wheel_sha256"],
             }
     return None
 
@@ -80,6 +136,7 @@ def main() -> int:
     parser.add_argument("--commit", required=True)
     parser.add_argument("--max-age-days", type=int, default=7)
     parser.add_argument("--output")
+    parser.add_argument("--github-output", type=Path)
     args = parser.parse_args()
     token = os.environ.get("GITHUB_TOKEN", "")
     if not token:
@@ -103,9 +160,15 @@ def main() -> int:
         output = Path(args.output)
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
+    if args.github_output and evidence:
+        with args.github_output.open("a") as output:
+            output.write(f"wheel_sha256={evidence['wheel_sha256']}\n")
     print(f"paper evidence: {'PASS' if evidence else 'FAIL'} for commit {args.commit}")
     if evidence:
-        print(f"run_id={evidence['run_id']} created_at={evidence['created_at']}")
+        print(
+            f"run_id={evidence['run_id']} created_at={evidence['created_at']} "
+            f"wheel_sha256={evidence['wheel_sha256']}"
+        )
     return int(evidence is None)
 
 

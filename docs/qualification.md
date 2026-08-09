@@ -35,11 +35,27 @@ on Linux; they do not state venue latency or capacity.
 ## Qualify Paper Accounts Separately
 
 Credentialed IB and Alpaca checks run only through the manually dispatched `Paper Qualification`
-workflow in the protected `paper` environment. Supply the exact candidate commit. The result must
-pass for both brokers, retain only redacted evidence, and remain within the release workflow's
+workflow in the protected `paper` environment. Supply the exact candidate commit and the successful
+qualification run that retained `dist-CANDIDATE_SHA`. The workflow downloads that artifact instead
+of rebuilding it, installs its wheel outside the checkout, and rejects a run whose commit or status
+does not match.
+
+Each provider must verify its official paper endpoint and paper account before submission. The
+workflow then checks positions, all pending orders and an asset-filtered view, cash, account value,
+unsupported-capability rejection, risk-policy rejection, a tagged one-share limit order, working
+acknowledgement, reconnect reconciliation, replacement, cancellation, cleanup, and reconciliation
+from a fresh process. IB accepts only the standard paper ports and an account identified by IB as a
+paper account. Alpaca accepts only the SDK's official paper endpoint in sandbox mode.
+
+The retained bundle contains counts and pass/fail state, not account or order identifiers. The
+release gate downloads and validates the bundle, requires both phases for both brokers, and returns
+the qualified wheel's SHA-256 digest. Before publication, the tag workflow compares that digest with
+the only wheel in its qualified distribution artifact. A successful workflow conclusion or artifact
+name is not sufficient by itself. The evidence must also remain within the release workflow's
 freshness interval.
 
-Do not expose broker credentials to pull-request code. Do not substitute a run from another commit.
+Do not expose broker credentials to pull-request code. Do not substitute a run from another commit,
+reuse an artifact after a source or workflow change, or point IB qualification at a live port.
 
 ## Retain Candidate Identity
 

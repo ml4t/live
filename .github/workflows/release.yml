@@ -17,12 +17,15 @@ jobs:
   paper-evidence:
     name: Require fresh paper qualification
     runs-on: ubuntu-latest
+    outputs:
+      wheel_sha256: ${{ steps.paper.outputs.wheel_sha256 }}
     permissions:
       actions: read
       contents: read
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - name: Match successful retained evidence to this commit
+        id: paper
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: >-
@@ -30,6 +33,7 @@ jobs:
           --repository "${{ github.repository }}"
           --commit "${{ github.sha }}"
           --max-age-days 7
+          --github-output "$GITHUB_OUTPUT"
 
   publish:
     name: Publish exact candidate to PyPI
@@ -45,6 +49,13 @@ jobs:
         with:
           name: dist-${{ github.sha }}
           path: dist/
+      - name: Match the publishable wheel to the paper-qualified hash
+        env:
+          PAPER_WHEEL_SHA256: ${{ needs.paper-evidence.outputs.wheel_sha256 }}
+        run: |
+          mapfile -t wheels < <(find dist -maxdepth 1 -type f -name '*.whl')
+          test "${#wheels[@]}" -eq 1
+          echo "${PAPER_WHEEL_SHA256}  ${wheels[0]}" | sha256sum --check --status
       - uses: pypa/gh-action-pypi-publish@6733eb7d741f0b11ec6a39b58540dab7590f9b7d # v1.14.0
         with:
           packages-dir: dist/

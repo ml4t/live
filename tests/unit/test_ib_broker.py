@@ -1,11 +1,11 @@
 """Unit tests for IBBroker connection and setup (TASK-011, TASK-013, TASK-014)."""
 
 import time
-from datetime import datetime
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from ml4t.backtest.types import OrderSide, OrderType, Position
+from ml4t.backtest.types import Order, OrderSide, OrderStatus, OrderType, Position
 
 from ml4t.live.brokers.ib import IBBroker
 
@@ -153,6 +153,29 @@ class TestIBBrokerSetup:
         broker.ib.isConnected = MagicMock(return_value=True)
 
         assert broker.is_connected
+
+    def test_assert_paper_trading_requires_standard_port_and_paper_account(self):
+        broker = IBBroker(port=7497, account="DU1234567")
+        broker._connected = True
+        broker.ib.isConnected = MagicMock(return_value=True)
+
+        broker.assert_paper_trading()
+
+    @pytest.mark.parametrize(
+        ("port", "account", "message"),
+        [
+            (7496, "DU1234567", "paper-trading port"),
+            (7497, "U1234567", "paper account"),
+            (7497, "DUMMY", "paper account"),
+        ],
+    )
+    def test_assert_paper_trading_rejects_live_or_ambiguous_identity(self, port, account, message):
+        broker = IBBroker(port=port, account=account)
+        broker._connected = True
+        broker.ib.isConnected = MagicMock(return_value=True)
+
+        with pytest.raises(RuntimeError, match=message):
+            broker.assert_paper_trading()
 
     def test_positions_property(self):
         """Test positions property returns copy."""
@@ -558,6 +581,62 @@ class TestOrderSubmission:
 
     @pytest.mark.asyncio
     @patch("ml4t.live.brokers.ib.IB")
+    async def test_submit_order_passes_valid_qualification_tag(self, mock_ib_class):
+        mock_ib = MagicMock()
+        mock_ib.isConnected = MagicMock(return_value=True)
+        mock_trade = MagicMock()
+        mock_trade.order.orderId = 142
+        mock_ib.placeOrder = MagicMock(return_value=mock_trade)
+        broker = IBBroker()
+        broker.ib = mock_ib
+        broker._connected = True
+
+        await broker.submit_order_async("AAPL", 1, order_ref="ml4t-qual-123")
+
+        _, ib_order = mock_ib.placeOrder.call_args.args
+        assert ib_order.orderRef == "ml4t-qual-123"
+
+    @pytest.mark.asyncio
+    @patch("ml4t.live.brokers.ib.IB")
+    async def test_submit_order_rejects_invalid_tag_before_vendor_call(self, mock_ib_class):
+        mock_ib = MagicMock()
+        mock_ib.isConnected = MagicMock(return_value=True)
+        broker = IBBroker()
+        broker.ib = mock_ib
+        broker._connected = True
+
+        with pytest.raises(ValueError, match="order_ref"):
+            await broker.submit_order_async("AAPL", 1, order_ref="contains spaces")
+
+        mock_ib.placeOrder.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_replace_order_forwards_qualification_tag(self):
+        broker = IBBroker()
+        original = Order(
+            asset="AAPL",
+            quantity=1,
+            side=OrderSide.BUY,
+            order_type=OrderType.LIMIT,
+            limit_price=1.0,
+            order_id="ML4T-1",
+            status=OrderStatus.PENDING,
+            created_at=datetime.now(UTC),
+        )
+        broker._pending_orders[original.order_id] = original
+        broker.cancel_order_async = AsyncMock(return_value=True)
+        broker.submit_order_async = AsyncMock(return_value=original)
+
+        await broker.replace_order_async(
+            original.order_id,
+            limit_price=1.01,
+            order_ref="ml4t-qual-replacement",
+        )
+
+        assert broker.submit_order_async.await_args.kwargs["order_ref"] == ("ml4t-qual-replacement")
+
+    @pytest.mark.asyncio
+    @patch("ml4t.live.brokers.ib.IB")
     async def test_submit_market_order_defaults_rth_only(self, mock_ib_class):
         """Without outsideRth, the order stays regular-hours only."""
         mock_ib = MagicMock()
@@ -687,6 +766,7 @@ class TestOrderSubmission:
         mock_trade1.order.action = "BUY"
         mock_trade1.order.totalQuantity = 100
         mock_trade1.order.orderId = 200
+        mock_trade1.order.orderType = "MKT"
         mock_trade1.orderStatus.status = "Submitted"
         mock_trade1.contract.symbol = "AAPL"
 
@@ -694,6 +774,7 @@ class TestOrderSubmission:
         mock_trade2.order.action = "SELL"
         mock_trade2.order.totalQuantity = 50
         mock_trade2.order.orderId = 201
+        mock_trade2.order.orderType = "MKT"
         mock_trade2.orderStatus.status = "PreSubmitted"
         mock_trade2.contract.symbol = "GOOGL"
 
@@ -757,6 +838,7 @@ class TestOrderSubmission:
         mock_trade_sync.order.action = "BUY"
         mock_trade_sync.order.totalQuantity = 100
         mock_trade_sync.order.orderId = 300
+        mock_trade_sync.order.orderType = "MKT"
         mock_trade_sync.orderStatus.status = "Submitted"
         mock_trade_sync.contract.symbol = "AAPL"
 

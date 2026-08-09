@@ -2,9 +2,10 @@
 
 import time
 from datetime import UTC, datetime
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from alpaca.common.enums import BaseURL
 from alpaca.trading.enums import OrderStatus as AlpacaOrderStatus
 from alpaca.trading.enums import TimeInForce
 from alpaca.trading.requests import MarketOrderRequest
@@ -62,6 +63,7 @@ class MockAlpacaOrder:
         filled_avg_price: str | None = None,
         limit_price: str | None = None,
         stop_price: str | None = None,
+        time_in_force: TimeInForce = TimeInForce.DAY,
         created_at: datetime | None = None,
     ):
         self.id = id
@@ -74,6 +76,7 @@ class MockAlpacaOrder:
         self.filled_avg_price = filled_avg_price
         self.limit_price = limit_price
         self.stop_price = stop_price
+        self.time_in_force = time_in_force
         self.created_at = created_at or datetime.now(UTC)
 
 
@@ -202,6 +205,25 @@ class TestAlpacaBrokerSetup:
         assert "order-2" in broker._alpaca_order_map
 
     @pytest.mark.asyncio
+    async def test_sync_orders_preserves_moc_time_in_force(self):
+        client = MagicMock()
+        client.get_orders.return_value = [
+            MockAlpacaOrder(
+                id="order-moc",
+                symbol="AAPL",
+                qty="1",
+                side="sell",
+                time_in_force=TimeInForce.CLS,
+            )
+        ]
+        broker = AlpacaBroker(api_key="PKTEST", secret_key="SECRET")
+        broker._trading_client = client
+
+        await broker._sync_orders()
+
+        assert broker.pending_orders[0].order_type is OrderType.MOC
+
+    @pytest.mark.asyncio
     @patch("ml4t.live.brokers.alpaca.TradingClient")
     @patch("ml4t.live.brokers.alpaca.TradingStream")
     async def test_disconnect(self, mock_stream_class, mock_client_class):
@@ -245,6 +267,39 @@ class TestAlpacaBrokerSetup:
 
         broker._trading_client = MagicMock()
         assert broker.is_connected is True
+
+    def test_assert_paper_trading_requires_official_connected_sandbox(self):
+        broker = AlpacaBroker(api_key="PKTEST", secret_key="SECRET")
+        client = MagicMock()
+        client._sandbox = True
+        client._base_url = BaseURL.TRADING_PAPER
+        broker._trading_client = client
+        broker._connected = True
+        broker._account_id = "redacted-in-memory"
+
+        broker.assert_paper_trading()
+
+    @pytest.mark.parametrize(
+        ("paper", "sandbox", "base_url", "message"),
+        [
+            (False, False, BaseURL.TRADING_LIVE, "configured for live"),
+            (True, False, BaseURL.TRADING_PAPER, "sandbox mode"),
+            (True, True, BaseURL.TRADING_LIVE, "official paper endpoint"),
+        ],
+    )
+    def test_assert_paper_trading_rejects_ambiguous_identity(
+        self, paper, sandbox, base_url, message
+    ):
+        broker = AlpacaBroker(api_key="PKTEST", secret_key="SECRET", paper=paper)
+        client = MagicMock()
+        client._sandbox = sandbox
+        client._base_url = base_url
+        broker._trading_client = client
+        broker._connected = True
+        broker._account_id = "redacted-in-memory"
+
+        with pytest.raises(RuntimeError, match=message):
+            broker.assert_paper_trading()
 
 
 class TestAlpacaBrokerPositions:
@@ -424,6 +479,60 @@ class TestAlpacaBrokerOrderSubmission:
         assert "ML4T-1" in broker._pending_orders
         assert "alpaca-order-123" in broker._alpaca_order_map
         assert broker._alpaca_order_map["alpaca-order-123"][0] == "ML4T-1"
+
+    @pytest.mark.asyncio
+    @patch("ml4t.live.brokers.alpaca.TradingClient")
+    async def test_submit_order_passes_valid_qualification_tag(self, mock_client_class):
+        mock_client = MagicMock()
+        mock_client.submit_order.return_value = MockAlpacaOrder(id="alpaca-order-tagged")
+        broker = AlpacaBroker(api_key="PKTEST", secret_key="SECRET")
+        broker._trading_client = mock_client
+        broker._connected = True
+
+        await broker.submit_order_async("AAPL", 1, client_order_id="ml4t-qual-123")
+
+        request = mock_client.submit_order.call_args.args[0]
+        assert request.client_order_id == "ml4t-qual-123"
+
+    @pytest.mark.asyncio
+    @patch("ml4t.live.brokers.alpaca.TradingClient")
+    async def test_submit_order_rejects_invalid_tag_before_vendor_call(self, mock_client_class):
+        mock_client = MagicMock()
+        broker = AlpacaBroker(api_key="PKTEST", secret_key="SECRET")
+        broker._trading_client = mock_client
+        broker._connected = True
+
+        with pytest.raises(ValueError, match="client_order_id"):
+            await broker.submit_order_async("AAPL", 1, client_order_id="contains spaces")
+
+        mock_client.submit_order.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_replace_order_forwards_qualification_tag(self):
+        broker = AlpacaBroker(api_key="PKTEST", secret_key="SECRET")
+        original = Order(
+            asset="AAPL",
+            quantity=1,
+            side=OrderSide.BUY,
+            order_type=OrderType.LIMIT,
+            limit_price=1.0,
+            order_id="ML4T-1",
+            status=OrderStatus.PENDING,
+            created_at=datetime.now(UTC),
+        )
+        broker._pending_orders[original.order_id] = original
+        broker.cancel_order_async = AsyncMock(return_value=True)
+        broker.submit_order_async = AsyncMock(return_value=original)
+
+        await broker.replace_order_async(
+            original.order_id,
+            limit_price=1.01,
+            client_order_id="ml4t-qual-replacement",
+        )
+
+        assert broker.submit_order_async.await_args.kwargs["client_order_id"] == (
+            "ml4t-qual-replacement"
+        )
 
     @pytest.mark.asyncio
     @patch("ml4t.live.brokers.alpaca.TradingClient")

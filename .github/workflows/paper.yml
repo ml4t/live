@@ -7,6 +7,10 @@ on:
         description: Exact candidate commit to qualify
         required: true
         type: string
+      qualification-run-id:
+        description: Successful qualification run that retained dist-CANDIDATE_SHA
+        required: true
+        type: string
 
 permissions: {}
 
@@ -21,6 +25,7 @@ jobs:
     timeout-minutes: 45
     environment: paper
     permissions:
+      actions: read
       contents: read
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -31,25 +36,121 @@ jobs:
         with:
           version: ${{ env.UV_VERSION }}
       - run: uv python install 3.12
-      - run: uv sync --python 3.12 --all-extras --dev --locked
-      - run: mkdir -p paper-evidence
-      - name: Run explicit paper-account suite
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: dist-${{ inputs.candidate-sha }}
+          path: dist/
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.qualification-run-id }}
+      - name: Bind the downloaded artifact to its successful qualification run
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: >-
+          python scripts/qualification/qualify_paper.py candidate
+          --artifacts-dir dist
+          --candidate-sha "${{ inputs.candidate-sha }}"
+          --qualification-run-id "${{ inputs.qualification-run-id }}"
+          --repository "${{ github.repository }}"
+          --checkout-root "${{ github.workspace }}"
+          --output paper-evidence/candidate.json
+      - name: Install only the candidate wheel outside the checkout
+        run: |
+          uv venv --python 3.12 "${{ runner.temp }}/paper-venv"
+          uv pip install --python "${{ runner.temp }}/paper-venv/bin/python" dist/*.whl
+          mkdir -p "${{ runner.temp }}/paper-run" "${{ runner.temp }}/paper-state"
+      - name: Exercise Alpaca paper order lifecycle
+        id: alpaca-exercise
+        continue-on-error: true
         env:
           ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
           ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
-          ALPACA_PAPER: "true"
+        run: >-
+          cd "${{ runner.temp }}/paper-run" &&
+          "${{ runner.temp }}/paper-venv/bin/python"
+          "${{ github.workspace }}/scripts/qualification/qualify_paper.py" provider
+          --candidate "${{ github.workspace }}/paper-evidence/candidate.json"
+          --provider alpaca
+          --phase exercise
+          --checkout-root "${{ github.workspace }}"
+          --state-directory "${{ runner.temp }}/paper-state"
+          --tag-seed "${{ github.run_id }}"
+          --output "${{ github.workspace }}/paper-evidence/alpaca-exercise.json"
+      - name: Reconcile Alpaca in a fresh process
+        id: alpaca-restart
+        if: ${{ always() }}
+        continue-on-error: true
+        env:
+          ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
+          ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
+        run: >-
+          cd "${{ runner.temp }}/paper-run" &&
+          "${{ runner.temp }}/paper-venv/bin/python"
+          "${{ github.workspace }}/scripts/qualification/qualify_paper.py" provider
+          --candidate "${{ github.workspace }}/paper-evidence/candidate.json"
+          --provider alpaca
+          --phase restart
+          --checkout-root "${{ github.workspace }}"
+          --state-directory "${{ runner.temp }}/paper-state"
+          --tag-seed "${{ github.run_id }}"
+          --output "${{ github.workspace }}/paper-evidence/alpaca-restart.json"
+      - name: Exercise IB paper order lifecycle
+        id: ib-exercise
+        if: ${{ always() }}
+        continue-on-error: true
+        env:
+          IB_ACCOUNT: ${{ secrets.IB_ACCOUNT }}
+          IB_CLIENT_ID: ${{ secrets.IB_CLIENT_ID }}
           IB_HOST: ${{ secrets.IB_HOST }}
           IB_PORT: ${{ secrets.IB_PORT }}
-          IB_CLIENT_ID: ${{ secrets.IB_CLIENT_ID }}
         run: >-
-          uv run pytest -q --strict-markers --timeout=120
-          --run-external -m paper tests/integration
-          --junitxml=paper-evidence/paper-qualification.xml
+          cd "${{ runner.temp }}/paper-run" &&
+          "${{ runner.temp }}/paper-venv/bin/python"
+          "${{ github.workspace }}/scripts/qualification/qualify_paper.py" provider
+          --candidate "${{ github.workspace }}/paper-evidence/candidate.json"
+          --provider ib
+          --phase exercise
+          --checkout-root "${{ github.workspace }}"
+          --state-directory "${{ runner.temp }}/paper-state"
+          --tag-seed "${{ github.run_id }}"
+          --output "${{ github.workspace }}/paper-evidence/ib-exercise.json"
+      - name: Reconcile IB in a fresh process
+        id: ib-restart
+        if: ${{ always() }}
+        continue-on-error: true
+        env:
+          IB_ACCOUNT: ${{ secrets.IB_ACCOUNT }}
+          IB_CLIENT_ID: ${{ secrets.IB_CLIENT_ID }}
+          IB_HOST: ${{ secrets.IB_HOST }}
+          IB_PORT: ${{ secrets.IB_PORT }}
+        run: >-
+          cd "${{ runner.temp }}/paper-run" &&
+          "${{ runner.temp }}/paper-venv/bin/python"
+          "${{ github.workspace }}/scripts/qualification/qualify_paper.py" provider
+          --candidate "${{ github.workspace }}/paper-evidence/candidate.json"
+          --provider ib
+          --phase restart
+          --checkout-root "${{ github.workspace }}"
+          --state-directory "${{ runner.temp }}/paper-state"
+          --tag-seed "${{ github.run_id }}"
+          --output "${{ github.workspace }}/paper-evidence/ib-restart.json"
+      - name: Require complete redacted evidence for both providers
+        id: evidence
+        if: ${{ always() }}
+        run: >-
+          "${{ runner.temp }}/paper-venv/bin/python"
+          scripts/qualification/qualify_paper.py assemble
+          --candidate paper-evidence/candidate.json
+          --report paper-evidence/alpaca-exercise.json
+          --report paper-evidence/alpaca-restart.json
+          --report paper-evidence/ib-exercise.json
+          --report paper-evidence/ib-restart.json
+          --output paper-evidence/paper-qualification.json
       - name: Scan retained paper evidence for identifiers and credentials
         id: evidence-scan
         if: ${{ always() }}
         run: >-
-          uv run python scripts/qualification/scan_release_secrets.py
+          "${{ runner.temp }}/paper-venv/bin/python"
+          scripts/qualification/scan_release_secrets.py
           --evidence-root paper-evidence
           --output paper-evidence/secret-scan.json
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
