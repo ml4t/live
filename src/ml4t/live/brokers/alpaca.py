@@ -181,7 +181,7 @@ class AlpacaBroker:
             logger.error("AlpacaBroker: Connection failed: %s", detail)
             if self._stream_task is not None:
                 self._stream_task.cancel()
-            if self._trading_stream is not None:
+            if self._stream_task is not None and self._trading_stream is not None:
                 try:
                     self._trading_stream.stop()
                 except Exception as stop_error:
@@ -841,17 +841,16 @@ class AlpacaBroker:
                 current_price = float(pos.current_price) if pos.current_price else entry_price
             except (AttributeError, TypeError, ValueError) as error:
                 raise RuntimeError("Alpaca positions snapshot contains invalid values") from error
-            if (
-                not symbol
-                or not math.isfinite(quantity)
-                or quantity == 0
-                or not math.isfinite(entry_price)
-                or entry_price <= 0
-                or not math.isfinite(current_price)
-                or current_price <= 0
-                or symbol in candidate_positions
-            ):
-                raise RuntimeError("Alpaca positions snapshot contains an invalid position")
+            if not symbol:
+                raise RuntimeError("Alpaca positions snapshot contains an empty symbol")
+            if not math.isfinite(quantity) or quantity == 0:
+                raise RuntimeError("Alpaca positions snapshot contains an invalid quantity")
+            if not math.isfinite(entry_price) or entry_price <= 0:
+                raise RuntimeError("Alpaca positions snapshot contains an invalid entry price")
+            if not math.isfinite(current_price) or current_price < 0:
+                raise RuntimeError("Alpaca positions snapshot contains an invalid current price")
+            if symbol in candidate_positions:
+                raise RuntimeError("Alpaca positions snapshot contains a duplicate symbol")
             candidate_positions[symbol] = Position(
                 asset=symbol,
                 quantity=quantity,

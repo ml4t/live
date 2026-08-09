@@ -294,6 +294,7 @@ async def test_alpaca_sync_failure_aborts_connection_without_empty_state(monkeyp
 
     assert broker._connected is False
     assert broker.positions == {}
+    stream.stop.assert_not_called()
 
 
 def ib_update(order_id: int, status: str, filled: float, price: float = 0.0) -> MagicMock:
