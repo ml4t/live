@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import hashlib
 import importlib
 import json
+import os
 import sys
 import time
 import warnings
@@ -26,6 +28,9 @@ _write_json = _paper._write_json
 
 OKX_API = "https://www.okx.com/api/v5"
 OKX_SYMBOL = "BTC-USDT-SWAP"
+SOAK_DURATION_SECONDS = 6 * 60 * 60
+SOAK_SNAPSHOT_INTERVAL_SECONDS = 5 * 60
+SOAK_RSS_GROWTH_LIMIT_BYTES = 25 * 1024 * 1024
 REQUIRED_STEPS = {
     "installed_candidate",
     "public_service_identity",
@@ -342,6 +347,256 @@ def validate_okx_report(report: dict[str, Any], candidate: dict[str, Any]) -> No
         raise FeedQualificationError("OKX report did not pass fail-closed qualification")
 
 
+def _rss_bytes() -> int:
+    fields = Path("/proc/self/statm").read_text().split()
+    if len(fields) < 2:
+        raise FeedQualificationError("Linux process RSS is unavailable")
+    return int(fields[1]) * os.sysconf("SC_PAGE_SIZE")
+
+
+def _soak_snapshot(feed: Any, *, started: float, event_state: dict[str, int]) -> dict[str, int]:
+    stats = feed.stats
+    queue = stats["queue"]
+    return {
+        "elapsed_seconds": round(time.monotonic() - started),
+        "rss_bytes": _rss_bytes(),
+        "event_count": event_state["event_count"],
+        "complete_bar_count": event_state["complete_bar_count"],
+        "funding_count": event_state["funding_count"],
+        "error_count": stats["error_count"],
+        "rejected_count": stats["rejected_count"],
+        "overflow_count": queue["overflow_count"],
+        "queue_high_watermark": queue["high_watermark"],
+    }
+
+
+async def qualify_okx_soak(candidate: dict[str, Any], checkout_root: Path) -> dict[str, Any]:
+    """Run a six-hour continuous OKX session with one retained-state restart."""
+    import httpx
+    from ml4t.specs import EventCompletion, MarketEventKind
+
+    from ml4t.live import OKXFundingFeed
+    from ml4t.live.feeds.events import validate_event_timing
+
+    identity = _candidate_identity(candidate)
+    _verify_installed_candidate(identity, checkout_root)
+    started_at = datetime.now(UTC)
+    started = time.monotonic()
+    deadline = started + SOAK_DURATION_SECONDS
+    reconnect_at = started + SOAK_DURATION_SECONDS / 2
+    next_snapshot = started + SOAK_SNAPSHOT_INTERVAL_SECONDS
+    reconnected = False
+    last_complete_sequence: int | None = None
+    shutdown_seconds = 0.0
+    checksum = hashlib.sha256()
+    event_state = {"event_count": 0, "complete_bar_count": 0, "funding_count": 0}
+    snapshots: list[dict[str, int]] = []
+    feed = OKXFundingFeed([OKX_SYMBOL], timeframe="1m", poll_interval_seconds=5, queue_capacity=256)
+    await feed.start()
+    snapshots.append(_soak_snapshot(feed, started=started, event_state=event_state))
+    try:
+        while time.monotonic() < deadline:
+            now = time.monotonic()
+            if not reconnected and now >= reconnect_at:
+                shutdown_seconds = max(shutdown_seconds, await _close_within_limit(feed))
+                await feed.start()
+                reconnected = True
+                continue
+            if now >= next_snapshot:
+                snapshots.append(_soak_snapshot(feed, started=started, event_state=event_state))
+                next_snapshot += SOAK_SNAPSHOT_INTERVAL_SECONDS
+                continue
+            wait_seconds = min(
+                1.0,
+                deadline - now,
+                next_snapshot - now,
+                reconnect_at - now if not reconnected else 1.0,
+            )
+            try:
+                event = await asyncio.wait_for(anext(feed), timeout=max(wait_seconds, 0.01))
+            except TimeoutError:
+                continue
+            _validate_okx_event(event)
+            validate_event_timing(
+                event,
+                processing_time=datetime.now(UTC),
+                max_age_seconds=feed.max_event_age_seconds,
+            )
+            event_state["event_count"] += 1
+            checksum.update(
+                f"{event.kind.value}|{event.completion.value}|{_event_sequence(event)}\n".encode()
+            )
+            if event.kind is MarketEventKind.FUNDING:
+                event_state["funding_count"] += 1
+            elif event.completion is EventCompletion.COMPLETE:
+                sequence = _event_sequence(event)
+                if (
+                    last_complete_sequence is not None
+                    and sequence != last_complete_sequence + 60_000
+                ):
+                    raise FeedQualificationError("OKX soak observed a candle continuity gap")
+                if event.gap is not None and event.gap.detected:
+                    raise FeedQualificationError("OKX soak received explicit gap evidence")
+                last_complete_sequence = sequence
+                event_state["complete_bar_count"] += 1
+    finally:
+        shutdown_seconds = max(shutdown_seconds, await _close_within_limit(feed))
+
+    duration = time.monotonic() - started
+    snapshots.append(_soak_snapshot(feed, started=started, event_state=event_state))
+    async with httpx.AsyncClient(timeout=30) as client:
+        native = await _native_snapshot(client)
+    native_sequences = {int(row[0]) for row in native["candles"] if len(row) > 8}
+    native_reconciled = (
+        last_complete_sequence is not None and last_complete_sequence in native_sequences
+    )
+    rss_growth = max(snapshot["rss_bytes"] for snapshot in snapshots) - snapshots[0]["rss_bytes"]
+    final_stats = feed.stats
+    report = {
+        "schema_version": 1,
+        "provider": "okx",
+        "candidate": identity,
+        "started_at": started_at.isoformat(),
+        "completed_at": datetime.now(UTC).isoformat(),
+        "duration_seconds": round(duration, 3),
+        "snapshot_interval_seconds": SOAK_SNAPSHOT_INTERVAL_SECONDS,
+        "snapshots": snapshots,
+        **event_state,
+        "event_checksum": checksum.hexdigest(),
+        "reconnect_count": int(reconnected),
+        "continuity_gap_count": 0,
+        "native_final_reconciliation": native_reconciled,
+        "rss_growth_bytes": max(0, rss_growth),
+        "maximum_shutdown_seconds": round(shutdown_seconds, 3),
+        "error_count": final_stats["error_count"],
+        "rejected_count": final_stats["rejected_count"],
+        "overflow_count": final_stats["queue"]["overflow_count"],
+        "passed": True,
+    }
+    validate_soak_report(report, candidate)
+    return report
+
+
+def validate_soak_report(report: dict[str, Any], candidate: dict[str, Any]) -> None:
+    required = {
+        "schema_version",
+        "provider",
+        "candidate",
+        "started_at",
+        "completed_at",
+        "duration_seconds",
+        "snapshot_interval_seconds",
+        "snapshots",
+        "event_count",
+        "complete_bar_count",
+        "funding_count",
+        "event_checksum",
+        "reconnect_count",
+        "continuity_gap_count",
+        "native_final_reconciliation",
+        "rss_growth_bytes",
+        "maximum_shutdown_seconds",
+        "error_count",
+        "rejected_count",
+        "overflow_count",
+        "passed",
+    }
+    if set(report) != required or report.get("schema_version") != 1:
+        raise FeedQualificationError("OKX soak report schema is invalid")
+    if report.get("provider") != "okx" or report.get("candidate") != _candidate_identity(candidate):
+        raise FeedQualificationError("OKX soak report targets a different provider or candidate")
+    started_at = _paper._evidence_time(report.get("started_at"))
+    completed_at = _paper._evidence_time(report.get("completed_at"))
+    duration = report.get("duration_seconds")
+    shutdown = report.get("maximum_shutdown_seconds")
+    snapshots = report.get("snapshots")
+    snapshot_fields = {
+        "elapsed_seconds",
+        "rss_bytes",
+        "event_count",
+        "complete_bar_count",
+        "funding_count",
+        "error_count",
+        "rejected_count",
+        "overflow_count",
+        "queue_high_watermark",
+    }
+    minimum_snapshots = SOAK_DURATION_SECONDS // SOAK_SNAPSHOT_INTERVAL_SECONDS + 1
+    count_fields = (
+        "event_count",
+        "complete_bar_count",
+        "funding_count",
+        "reconnect_count",
+        "continuity_gap_count",
+        "rss_growth_bytes",
+        "error_count",
+        "rejected_count",
+        "overflow_count",
+    )
+    if (
+        completed_at < started_at
+        or isinstance(duration, bool)
+        or not isinstance(duration, int | float)
+        or duration < SOAK_DURATION_SECONDS
+        or report.get("snapshot_interval_seconds") != SOAK_SNAPSHOT_INTERVAL_SECONDS
+        or not isinstance(snapshots, list)
+        or len(snapshots) < minimum_snapshots
+        or any(
+            isinstance(report.get(field), bool)
+            or not isinstance(report.get(field), int)
+            or report[field] < 0
+            for field in count_fields
+        )
+        or not _paper.HASH_PATTERN.fullmatch(str(report.get("event_checksum", "")))
+        or report.get("reconnect_count") != 1
+        or report.get("continuity_gap_count") != 0
+        or report.get("native_final_reconciliation") is not True
+        or report.get("rss_growth_bytes", SOAK_RSS_GROWTH_LIMIT_BYTES)
+        >= SOAK_RSS_GROWTH_LIMIT_BYTES
+        or isinstance(shutdown, bool)
+        or not isinstance(shutdown, int | float)
+        or not 0 <= shutdown < 5
+        or any(
+            report.get(field) != 0 for field in ("error_count", "rejected_count", "overflow_count")
+        )
+        or report.get("passed") is not True
+    ):
+        raise FeedQualificationError("OKX soak did not pass the stable provider contract")
+    if any(
+        not isinstance(snapshot, dict) or set(snapshot) != snapshot_fields for snapshot in snapshots
+    ):
+        raise FeedQualificationError("OKX soak snapshot schema is invalid")
+    if any(
+        isinstance(snapshot[field], bool)
+        or not isinstance(snapshot[field], int)
+        or snapshot[field] < 0
+        for snapshot in snapshots
+        for field in snapshot_fields
+    ):
+        raise FeedQualificationError("OKX soak snapshot values are invalid")
+    if (
+        report["event_count"] < report["complete_bar_count"] + report["funding_count"]
+        or report["complete_bar_count"] < SOAK_DURATION_SECONDS // 60 - 2
+        or report["funding_count"] < 1
+    ):
+        raise FeedQualificationError("OKX soak event totals are incomplete")
+    elapsed = [snapshot["elapsed_seconds"] for snapshot in snapshots]
+    event_counts = [snapshot["event_count"] for snapshot in snapshots]
+    if (
+        elapsed != sorted(elapsed)
+        or elapsed[0] > 1
+        or elapsed[-1] < SOAK_DURATION_SECONDS
+        or event_counts != sorted(event_counts)
+        or any(snapshot["queue_high_watermark"] > 256 for snapshot in snapshots)
+        or any(
+            snapshot[field] != 0
+            for snapshot in snapshots
+            for field in ("error_count", "rejected_count", "overflow_count")
+        )
+    ):
+        raise FeedQualificationError("OKX soak snapshots are invalid")
+
+
 def _verify_experimental_opt_in() -> list[dict[str, Any]]:
     from ib_async import IB
 
@@ -413,9 +668,12 @@ def _verify_experimental_opt_in() -> list[dict[str, Any]]:
     return records
 
 
-def assemble_bundle(candidate: dict[str, Any], report: dict[str, Any]) -> dict[str, Any]:
+def assemble_bundle(
+    candidate: dict[str, Any], report: dict[str, Any], soak_report: dict[str, Any]
+) -> dict[str, Any]:
     """Combine external evidence and the installed support classification."""
     validate_okx_report(report, candidate)
+    validate_soak_report(soak_report, candidate)
     bundle = {
         "schema_version": 1,
         "candidate": _candidate_identity(candidate),
@@ -425,6 +683,8 @@ def assemble_bundle(candidate: dict[str, Any], report: dict[str, Any]) -> dict[s
                 "feed": "OKXFundingFeed",
                 "provider": "okx",
                 "external_evidence": True,
+                "continuous_session_seconds": soak_report["duration_seconds"],
+                "reconnect_count": soak_report["reconnect_count"],
                 "passed": True,
             }
         ],
@@ -460,14 +720,27 @@ def validate_feed_bundle(bundle: dict[str, Any], *, expected_commit: str) -> Non
         raise FeedQualificationError("feed bundle targets a different candidate")
     _paper._evidence_time(bundle.get("generated_at"))
     stable = bundle.get("stable_feeds")
-    if stable != [
-        {
-            "feed": "OKXFundingFeed",
-            "provider": "okx",
-            "external_evidence": True,
-            "passed": True,
+    stable_record = stable[0] if isinstance(stable, list) and len(stable) == 1 else {}
+    stable_duration = stable_record.get("continuous_session_seconds")
+    if (
+        set(stable_record)
+        != {
+            "feed",
+            "provider",
+            "external_evidence",
+            "continuous_session_seconds",
+            "reconnect_count",
+            "passed",
         }
-    ]:
+        or stable_record.get("feed") != "OKXFundingFeed"
+        or stable_record.get("provider") != "okx"
+        or stable_record.get("external_evidence") is not True
+        or isinstance(stable_duration, bool)
+        or not isinstance(stable_duration, int | float)
+        or stable_duration < SOAK_DURATION_SECONDS
+        or stable_record.get("reconnect_count") != 1
+        or stable_record.get("passed") is not True
+    ):
         raise FeedQualificationError("feed bundle does not contain exact stable OKX evidence")
     experimental = bundle.get("experimental_feeds")
     if not isinstance(experimental, list) or {
@@ -495,17 +768,28 @@ def main() -> int:
     provider.add_argument("--candidate", type=Path, required=True)
     provider.add_argument("--checkout-root", type=Path, required=True)
     provider.add_argument("--output", type=Path, required=True)
+    soak = subparsers.add_parser("soak")
+    soak.add_argument("--candidate", type=Path, required=True)
+    soak.add_argument("--checkout-root", type=Path, required=True)
+    soak.add_argument("--output", type=Path, required=True)
     assemble = subparsers.add_parser("assemble")
     assemble.add_argument("--candidate", type=Path, required=True)
     assemble.add_argument("--report", type=Path, required=True)
+    assemble.add_argument("--soak-report", type=Path, required=True)
     assemble.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
 
     candidate = _load_json(args.candidate)
     if args.command == "okx":
         result = asyncio.run(qualify_okx(candidate, args.checkout_root))
+    elif args.command == "soak":
+        result = asyncio.run(qualify_okx_soak(candidate, args.checkout_root))
     else:
-        result = assemble_bundle(candidate, _load_json(args.report))
+        result = assemble_bundle(
+            candidate,
+            _load_json(args.report),
+            _load_json(args.soak_report),
+        )
     _write_json(args.output, result)
     print(json.dumps(result, indent=2, sort_keys=True))
     return 0

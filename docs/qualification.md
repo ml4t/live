@@ -57,9 +57,13 @@ freshness interval.
 The same workflow qualifies `OKXFundingFeed` against the public OKX service. It compares adapter
 events with provider-native observations, observes consecutive complete candles across restart,
 rejects stale input, forces fail-closed overload, and requires shutdown within five seconds. The
-retained feed bundle also proves that Alpaca, IB, DataBento, and generic CCXT feed construction
-requires `experimental=True` and records each adapter's missing guarantees. The release gate
-requires the paper and feed bundles to identify the same commit and wheel.
+same installed wheel then runs for at least six continuous hours with five-minute event, queue, and
+RSS snapshots and one retained-state restart. Every complete minute must remain contiguous, final
+state must match a native OKX observation, RSS growth must remain below 25 MiB, and errors,
+rejections, or overflows fail the run. The retained feed bundle also proves that Alpaca, IB,
+DataBento, and generic CCXT feed construction requires `experimental=True` and records each
+adapter's missing guarantees. The release gate requires the paper and feed bundles to identify the
+same commit and wheel.
 
 Do not expose broker credentials to pull-request code. Do not substitute a run from another commit,
 reuse an artifact after a source or workflow change, or point IB qualification at a live port.

@@ -125,6 +125,12 @@ class PerformanceBroker:
     def execution_capabilities(self) -> frozenset:
         return frozenset()
 
+    def assert_paper_trading(self) -> None:
+        """Identify the synthetic workload as safe for paper-mode checks."""
+
+    def assert_live_trading(self) -> None:
+        """Identify the synthetic workload as safe for live-mode checks."""
+
     async def connect(self) -> None:
         self.connected = True
 
@@ -349,8 +355,8 @@ class ReconnectFeed:
             gap = GapEvidence(
                 False,
                 "provider sequence proves contiguous reconnect",
-                previous_sequence="0",
-                current_sequence="1",
+                previous_sequence=0,
+                current_sequence=1,
             )
         await self.queue.put(market_event(index, source="reconnect", symbols=1, gap=gap))
 

@@ -22,7 +22,7 @@ jobs:
   paper:
     name: IB and Alpaca paper evidence
     runs-on: [self-hosted, linux, x64, ib-paper]
-    timeout-minutes: 45
+    timeout-minutes: 390
     environment: paper
     permissions:
       actions: read
@@ -153,6 +153,14 @@ jobs:
           --candidate "${{ github.workspace }}/paper-evidence/candidate.json"
           --checkout-root "${{ github.workspace }}"
           --output "${{ github.workspace }}/feed-evidence/okx.json"
+      - name: Run the six-hour supported-provider soak
+        run: >-
+          cd "${{ runner.temp }}/paper-run" &&
+          "${{ runner.temp }}/paper-venv/bin/python"
+          "${{ github.workspace }}/scripts/qualification/qualify_feeds.py" soak
+          --candidate "${{ github.workspace }}/paper-evidence/candidate.json"
+          --checkout-root "${{ github.workspace }}"
+          --output "${{ github.workspace }}/feed-evidence/okx-soak.json"
       - name: Require the installed feed support contract and external evidence
         run: >-
           cd "${{ runner.temp }}/paper-run" &&
@@ -160,6 +168,7 @@ jobs:
           "${{ github.workspace }}/scripts/qualification/qualify_feeds.py" assemble
           --candidate "${{ github.workspace }}/paper-evidence/candidate.json"
           --report "${{ github.workspace }}/feed-evidence/okx.json"
+          --soak-report "${{ github.workspace }}/feed-evidence/okx-soak.json"
           --output "${{ github.workspace }}/feed-evidence/feed-qualification.json"
       - name: Scan retained paper evidence for identifiers and credentials
         id: evidence-scan

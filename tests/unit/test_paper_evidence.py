@@ -116,6 +116,8 @@ def _archive(commit: str = COMMIT) -> bytes:
                             "feed": "OKXFundingFeed",
                             "provider": "okx",
                             "external_evidence": True,
+                            "continuous_session_seconds": 21_600.1,
+                            "reconnect_count": 1,
                             "passed": True,
                         }
                     ],

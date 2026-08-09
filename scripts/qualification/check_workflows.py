@@ -294,8 +294,12 @@ def validate_workflows(root: Path = WORKFLOW_ROOT) -> list[str]:
         failures.append("paper qualification does not require a complete redacted evidence bundle")
     if 'qualify_feeds.py" okx' not in paper_run_text:
         failures.append("paper qualification does not run external OKX feed evidence")
+    if 'qualify_feeds.py" soak' not in paper_run_text:
+        failures.append("paper qualification does not run the six-hour provider soak")
     if 'qualify_feeds.py" assemble' not in paper_run_text:
         failures.append("paper qualification does not require the installed feed support contract")
+    if paper_job.get("timeout-minutes") != "390":
+        failures.append("paper qualification timeout cannot contain the six-hour provider soak")
     if "uv sync" in paper_run_text or "uv pip install" not in paper_run_text:
         failures.append("paper qualification does not install only the candidate wheel")
     checkouts = _action_steps(paper_job, "actions/checkout")

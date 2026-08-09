@@ -12,6 +12,7 @@ from scripts.qualification.qualify_performance import (
     QUEUE_CAPACITY,
     RSS_GROWTH_LIMIT_BYTES,
     candidate_revision,
+    run_reconnect,
     validate_report,
 )
 
@@ -84,6 +85,15 @@ def test_candidate_revision_uses_qualified_head_not_pull_request_merge_sha(
     monkeypatch.setenv("GITHUB_SHA", "b" * 40)
 
     assert candidate_revision() == candidate
+
+
+@pytest.mark.asyncio
+async def test_reconnect_workload_uses_provider_typed_continuity_evidence() -> None:
+    result = await run_reconnect()
+
+    assert result["events"] == 2
+    assert result["recovery_attempts"] == 1
+    assert result["continuity"]["violation_count"] == 0
 
 
 @pytest.mark.parametrize(

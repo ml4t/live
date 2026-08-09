@@ -9,6 +9,7 @@ from scripts.qualification.qualify_feeds import (
     FeedQualificationError,
     assemble_bundle,
     validate_okx_report,
+    validate_soak_report,
 )
 
 COMMIT = "a" * 40
@@ -58,8 +59,47 @@ def _report() -> dict:
     }
 
 
+def _soak_report() -> dict:
+    return {
+        "schema_version": 1,
+        "provider": "okx",
+        "candidate": _report()["candidate"],
+        "started_at": "2026-08-09T12:00:00+00:00",
+        "completed_at": "2026-08-09T18:00:01+00:00",
+        "duration_seconds": 21_600.1,
+        "snapshot_interval_seconds": 300,
+        "snapshots": [
+            {
+                "elapsed_seconds": index * 300,
+                "rss_bytes": 100_000_000,
+                "event_count": index + 1,
+                "complete_bar_count": index + 1,
+                "funding_count": 1,
+                "error_count": 0,
+                "rejected_count": 0,
+                "overflow_count": 0,
+                "queue_high_watermark": 2,
+            }
+            for index in range(73)
+        ],
+        "event_count": 361,
+        "complete_bar_count": 360,
+        "funding_count": 1,
+        "event_checksum": "d" * 64,
+        "reconnect_count": 1,
+        "continuity_gap_count": 0,
+        "native_final_reconciliation": True,
+        "rss_growth_bytes": 0,
+        "maximum_shutdown_seconds": 0.1,
+        "error_count": 0,
+        "rejected_count": 0,
+        "overflow_count": 0,
+        "passed": True,
+    }
+
+
 def test_bundle_binds_okx_evidence_and_requires_all_other_feeds_to_opt_in() -> None:
-    bundle = assemble_bundle(_candidate(), _report())
+    bundle = assemble_bundle(_candidate(), _report(), _soak_report())
 
     assert bundle["candidate"]["wheel_sha256"] == WHEEL_HASH
     assert bundle["stable_feeds"] == [
@@ -67,6 +107,8 @@ def test_bundle_binds_okx_evidence_and_requires_all_other_feeds_to_opt_in() -> N
             "feed": "OKXFundingFeed",
             "provider": "okx",
             "external_evidence": True,
+            "continuous_session_seconds": 21_600.1,
+            "reconnect_count": 1,
             "passed": True,
         }
     ]
@@ -105,3 +147,26 @@ def test_okx_report_rejects_non_fail_closed_overload() -> None:
 
     with pytest.raises(FeedQualificationError):
         validate_okx_report(report, _candidate())
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("duration_seconds", 21_599.9),
+        ("reconnect_count", 0),
+        ("continuity_gap_count", 1),
+        ("native_final_reconciliation", False),
+        ("rss_growth_bytes", 25 * 1024 * 1024),
+        ("maximum_shutdown_seconds", 5.0),
+        ("error_count", 1),
+        ("rejected_count", 1),
+        ("overflow_count", 1),
+        ("passed", False),
+    ],
+)
+def test_soak_report_rejects_any_stable_provider_failure(field: str, value) -> None:
+    report = deepcopy(_soak_report())
+    report[field] = value
+
+    with pytest.raises(FeedQualificationError):
+        validate_soak_report(report, _candidate())
