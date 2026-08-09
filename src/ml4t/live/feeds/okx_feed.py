@@ -206,8 +206,8 @@ class OKXFundingFeed(DataFeedProtocol):
                                     if current > expected
                                     else "OKX candle interval is continuous"
                                 ),
-                                previous_sequence=str(int(previous_bar_time.timestamp() * 1_000)),
-                                current_sequence=str(ohlcv.provider_sequence),
+                                previous_sequence=int(previous_bar_time.timestamp() * 1_000),
+                                current_sequence=ohlcv.provider_sequence,
                             ),
                         )
                     bar_key = (symbol, ohlcv.event_time, ohlcv.completion)

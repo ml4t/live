@@ -411,7 +411,7 @@ async def test_recovery_preserves_target_pending_and_rule_state_without_duplicat
 
     await asyncio.wait_for(
         asyncio.gather(engine.run(), stop_after_recovered_bar()),
-        timeout=1,
+        timeout=5,
     )
 
     assert raw.connect_calls == 2

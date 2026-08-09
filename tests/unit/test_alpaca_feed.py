@@ -554,7 +554,7 @@ class TestAlpacaDataFeedHandlers:
         assert event.kind is MarketEventKind.TRADE
         assert event.payload == TradePayload(150.05, 100.0)
         assert event.metadata["exchange"] == "XNAS"
-        assert event.metadata["conditions"] == ["@"]
+        assert event.metadata["conditions"] == ("@",)
         assert feed._trade_count == 1
 
     @pytest.mark.asyncio

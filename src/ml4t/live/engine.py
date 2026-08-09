@@ -38,7 +38,7 @@ from time import monotonic
 from typing import Any, cast
 from zoneinfo import ZoneInfo
 
-from ml4t.backtest import Strategy
+from ml4t.backtest import BacktestConfig, Strategy
 from ml4t.specs import (
     LIFECYCLE_V1,
     EventCompletion,
@@ -198,6 +198,7 @@ class LiveEngine:
         on_health_change: Callable[[str, dict[str, Any]], None] | None = None,
         lifecycle_version: LifecycleVersion | str = LifecycleVersion.V1,
         execution_policy: ExecutionPolicy | None = None,
+        strategy_config: BacktestConfig | None = None,
     ):
         """Initialize LiveEngine.
 
@@ -219,6 +220,7 @@ class LiveEngine:
             on_health_change: Optional callback invoked when runtime health changes.
             lifecycle_version: Portable strategy lifecycle version.
             execution_policy: Explicit live execution capabilities and behavior.
+            strategy_config: Backtest strategy configuration supplied to ``on_prepare``.
         """
         negotiated_version = negotiate_lifecycle_version(lifecycle_version)
         self._validate_strategy_lifecycle(strategy)
@@ -248,6 +250,7 @@ class LiveEngine:
         self.on_health_change = on_health_change
         self.lifecycle_version = negotiated_version
         self.execution_policy = execution_policy or default_live_execution_policy()
+        self.strategy_config = strategy_config or BacktestConfig()
         self.strategy_runtime = LiveStrategyRuntime(
             broker,
             self.execution_policy,
@@ -395,7 +398,7 @@ class LiveEngine:
             await self._dispatch_strategy(
                 LifecyclePhase.CAUSAL_INITIALIZATION,
                 self._wrapped_broker,
-                None,
+                self.strategy_config,
             )
             self._transition(RuntimeState.RUNNING, reason="strategy_started")
             self._watchdog_task = asyncio.create_task(

@@ -42,7 +42,8 @@ async def test_overflow_is_bounded_and_fails_before_draining_pending_events() ->
 
     assert queue.qsize() == 0
     assert raised.value.gap.detected is True
-    assert raised.value.gap.current_sequence == "3"
+    assert raised.value.gap.previous_sequence == 2
+    assert raised.value.gap.current_sequence == 3
     assert raised.value.snapshot.capacity == 2
     assert raised.value.snapshot.occupancy == 2
     assert raised.value.snapshot.high_watermark == 2

@@ -263,7 +263,7 @@ class TestIBDataFeed:
         assert feed.stats["rejected_count"] == 1
         feed.stop()
 
-    async def test_crossed_quote_is_rejected_without_dropping_valid_trade(self):
+    async def test_crossed_quote_is_preserved_with_valid_trade(self):
         mock_ib = MockIB()
         feed = IBDataFeed(mock_ib, symbols=["SPY"], tick_throttle_ms=0)
         await feed.start()
@@ -281,8 +281,12 @@ class TestIBDataFeed:
         event = feed._queue.get_nowait()
         assert event is not None
         assert event.kind is MarketEventKind.TRADE
+        quote = feed._queue.get_nowait()
+        assert quote is not None
+        assert quote.kind is MarketEventKind.QUOTE
+        assert quote.payload == QuotePayload(451.0, 450.0, 10.0, 10.0)
         assert feed._queue.empty()
-        assert feed.stats["rejected_count"] == 1
+        assert feed.stats["rejected_count"] == 0
         feed.stop()
 
     async def test_restart_does_not_consume_previous_shutdown_sentinel(self):

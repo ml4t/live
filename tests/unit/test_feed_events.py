@@ -53,9 +53,8 @@ def test_utc_datetime_rejects_naive_and_non_utc_values() -> None:
 
 def test_timing_validation_rejects_reversed_clocks_and_staleness() -> None:
     now = datetime.now(UTC)
-    future_event = quote_event(event_time=now + timedelta(seconds=10), receipt_time=now)
-    with pytest.raises(FeedContractError, match="after receipt_time"):
-        validate_event_timing(future_event, processing_time=now, max_age_seconds=None)
+    with pytest.raises(ValueError, match="receipt_time must not precede event_time"):
+        quote_event(event_time=now + timedelta(seconds=10), receipt_time=now)
 
     future_receipt = quote_event(event_time=now, receipt_time=now + timedelta(seconds=10))
     with pytest.raises(FeedContractError, match="after processing_time"):
@@ -169,8 +168,8 @@ def test_continuity_rejects_replay_explicit_gap_and_conflicting_identity() -> No
                 gap=GapEvidence(
                     True,
                     "provider reported missing sequence",
-                    previous_sequence="1",
-                    current_sequence="3",
+                    previous_sequence=1,
+                    current_sequence=3,
                 ),
             )
         )
@@ -210,8 +209,8 @@ def test_reconnect_requires_provable_continuity_but_skips_replayed_duplicate() -
                 gap=GapEvidence(
                     False,
                     "provider continuity proved",
-                    previous_sequence="10",
-                    current_sequence="11",
+                    previous_sequence=10,
+                    current_sequence=11,
                 ),
             )
         )

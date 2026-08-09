@@ -19,20 +19,20 @@ allowed_license_identifiers = [
 ]
 
 [dependencies.ml4t-backtest]
-requirement = "ml4t-backtest @ git+https://github.com/ml4t/backtest.git@f9f8dd763719afb710e571e06ba8f93ed71bd9db"
-minimum = "ml4t-backtest @ git+https://github.com/ml4t/backtest.git@f9f8dd763719afb710e571e06ba8f93ed71bd9db"
-locked = "ml4t-backtest @ git+https://github.com/ml4t/backtest.git@f9f8dd763719afb710e571e06ba8f93ed71bd9db"
-maximum = "ml4t-backtest @ git+https://github.com/ml4t/backtest.git@f9f8dd763719afb710e571e06ba8f93ed71bd9db"
+requirement = "ml4t-backtest>=0.1.0,<0.2"
+minimum = "ml4t-backtest==0.1.0"
+locked = "ml4t-backtest==0.1.0"
+maximum = "ml4t-backtest==0.1.0"
 license = "MIT"
-support = "first-party exact revision; expand only after a released compatibility line passes"
+support = "first stable release; lifecycle version 1 contract qualified across the matrix"
 
 [dependencies.ml4t-specs]
-requirement = "ml4t-specs @ git+https://github.com/ml4t/specs.git@85d3476683a70b4f17e5e8cb82dd23d05b373dc8"
-minimum = "ml4t-specs @ git+https://github.com/ml4t/specs.git@85d3476683a70b4f17e5e8cb82dd23d05b373dc8"
-locked = "ml4t-specs @ git+https://github.com/ml4t/specs.git@85d3476683a70b4f17e5e8cb82dd23d05b373dc8"
-maximum = "ml4t-specs @ git+https://github.com/ml4t/specs.git@85d3476683a70b4f17e5e8cb82dd23d05b373dc8"
+requirement = "ml4t-specs>=0.1.1,<0.2"
+minimum = "ml4t-specs==0.1.1"
+locked = "ml4t-specs==0.1.1"
+maximum = "ml4t-specs==0.1.1"
 license = "MIT"
-support = "first-party exact revision; expand only after a released compatibility line passes"
+support = "stable schema and lifecycle contract release"
 
 [dependencies.ib-async]
 requirement = "ib-async==2.1.0"

@@ -298,7 +298,7 @@ def run_backtest(
     engine = Engine(
         backtest_feed(events),
         strategy,
-        BacktestConfig(),
+        replace(BacktestConfig(), retain_lifecycle_history=True),
         execution_policy=execution_policy,
     )
     result = engine.run()
@@ -590,7 +590,12 @@ async def test_builtin_schedule_strategy_makes_equal_completed_sequence_decision
             state_file=str(tmp_path / "built-in-schedule-state.json"),
         ),
     )
-    live = LiveEngine(live_strategy, safe, DeterministicLiveFeed(events))
+    live = LiveEngine(
+        live_strategy,
+        safe,
+        DeterministicLiveFeed(events),
+        strategy_config=BacktestConfig(),
+    )
     await live.connect()
     await live.run()
 

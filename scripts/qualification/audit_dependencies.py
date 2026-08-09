@@ -14,6 +14,9 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from packaging.requirements import InvalidRequirement, Requirement
+from packaging.version import InvalidVersion, Version
+
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 PYPI_PROJECT = "https://pypi.org/pypi/{name}/json"
 OSV_BATCH = "https://api.osv.dev/v1/querybatch"
@@ -86,6 +89,13 @@ def scoped_closures(lock: dict[str, Any]) -> dict[str, set[str]]:
             [
                 dependency["name"]
                 for dependency in project.get("optional-dependencies", {}).get("experimental", [])
+            ],
+        ),
+        "documentation": dependency_closure(
+            packages,
+            [
+                dependency["name"]
+                for dependency in project.get("optional-dependencies", {}).get("docs", [])
             ],
         ),
         "build": dependency_closure(
@@ -186,6 +196,57 @@ def validate_locked_policy(
     return failures
 
 
+def release_requirement_failures(requirements: list[str]) -> list[str]:
+    failures = []
+    for raw_requirement in requirements:
+        try:
+            requirement = Requirement(raw_requirement)
+        except InvalidRequirement:
+            failures.append(f"invalid release requirement: {raw_requirement}")
+            continue
+        name = canonical_name(requirement.name)
+        if requirement.url is not None:
+            failures.append(f"dependency {name} uses a direct URL instead of a release index")
+            continue
+        specifiers = list(requirement.specifier)
+        exact_versions = [item.version for item in specifiers if item.operator in {"==", "==="}]
+        upper_bounds = [item for item in specifiers if item.operator in {"<", "<=", "==", "==="}]
+        if not upper_bounds:
+            failures.append(f"dependency {name} lacks a finite upper bound")
+        for raw_version in exact_versions:
+            try:
+                version = Version(raw_version)
+            except InvalidVersion:
+                failures.append(f"dependency {name} has an invalid exact version: {raw_version}")
+                continue
+            if version.is_prerelease:
+                failures.append(f"dependency {name} permits a prerelease: {version}")
+    return failures
+
+
+def release_lock_failures(
+    packages: dict[str, dict[str, Any]], runtime_closure: set[str]
+) -> list[str]:
+    failures = []
+    for name in sorted(runtime_closure):
+        package = packages[name]
+        source = package.get("source", {})
+        if source.get("registry") != "https://pypi.org/simple":
+            failures.append(
+                f"locked runtime dependency {name} is not resolved from the release index"
+            )
+            continue
+        raw_version = package.get("version", "")
+        try:
+            version = Version(raw_version)
+        except InvalidVersion:
+            failures.append(f"locked runtime dependency {name} has invalid version: {raw_version}")
+            continue
+        if version.is_prerelease:
+            failures.append(f"locked runtime dependency {name} is a prerelease: {version}")
+    return failures
+
+
 def validate_build_constraints(
     packages: dict[str, dict[str, Any]], build_closure: set[str], path: Path
 ) -> list[str]:
@@ -283,6 +344,8 @@ def audit(
     imported = imported_distributions(REPOSITORY_ROOT / "src" / "ml4t" / "live", import_map)
     failures = validate_policy_declarations(project, policy, imported)
     failures.extend(validate_locked_policy(packages, policy))
+    failures.extend(release_requirement_failures(list(declared_requirements(project).values())))
+    failures.extend(release_lock_failures(packages, scopes["runtime"]))
     failures.extend(
         validate_build_constraints(
             packages, scopes["build"], REPOSITORY_ROOT / "build-constraints.txt"

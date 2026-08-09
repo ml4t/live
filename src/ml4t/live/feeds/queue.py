@@ -45,9 +45,8 @@ class FeedOverflowError(RuntimeError):
         self.gap = GapEvidence(
             True,
             f"{feed} queue overflow rejected {event.kind.value} for {event.asset}",
-            current_sequence=(
-                str(event.provider_sequence) if event.provider_sequence is not None else None
-            ),
+            previous_sequence=f"retained:{feed}",
+            current_sequence=f"rejected:{event.source}:{event.asset}",
         )
         super().__init__(
             f"{feed} queue capacity {snapshot.capacity} exceeded by "
@@ -97,6 +96,7 @@ class BoundedEventQueue:
             self._overflow_count += 1
             snapshot = replace(self.snapshot(), failed=True, finished=True)
             error = FeedOverflowError(feed=self.feed, event=item, snapshot=snapshot)
+            error.gap = self._overflow_gap(self._items[-1], item)
             self.fail(error, discard=True)
             raise error
         self._items.append(item)
@@ -105,6 +105,30 @@ class BoundedEventQueue:
 
     async def put(self, item: MarketEvent | None) -> None:
         self.put_nowait(item)
+
+    def _overflow_gap(self, previous: MarketEvent, current: MarketEvent) -> GapEvidence:
+        previous_sequence = previous.provider_sequence
+        current_sequence = current.provider_sequence
+        valid_provider_pair = (
+            previous_sequence is not None
+            and current_sequence is not None
+            and type(previous_sequence) is type(current_sequence)
+            and previous_sequence != current_sequence
+            and not (
+                isinstance(previous_sequence, int)
+                and isinstance(current_sequence, int)
+                and previous_sequence >= current_sequence
+            )
+        )
+        if not valid_provider_pair:
+            previous_sequence = f"retained:{previous.source}:{previous.asset}"
+            current_sequence = f"rejected:{current.source}:{current.asset}"
+        return GapEvidence(
+            True,
+            f"{self.feed} queue overflow rejected {current.kind.value} for {current.asset}",
+            previous_sequence=previous_sequence,
+            current_sequence=current_sequence,
+        )
 
     async def get(self) -> MarketEvent | None:
         while True:

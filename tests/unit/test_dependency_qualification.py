@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import runpy
+import tomllib
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, cast
 
-QUALIFICATION = Path(__file__).parents[2] / "scripts" / "qualification"
+ROOT = Path(__file__).parents[2]
+QUALIFICATION = ROOT / "scripts" / "qualification"
 AUDIT = runpy.run_path(str(QUALIFICATION / "audit_dependencies.py"))
 MATRIX = runpy.run_path(str(QUALIFICATION / "check_dependency_matrix.py"))
 
@@ -68,6 +70,69 @@ def test_seeded_advisory_is_a_blocking_policy_failure() -> None:
     assert package_policy_failures("fixture", {"MIT"}, ["OSV-SEEDED-1"], {"MIT"}) == [
         "dependency fixture has advisories: ['OSV-SEEDED-1']"
     ]
+
+
+def test_release_requirements_reject_vcs_prerelease_and_unbounded_ranges() -> None:
+    release_requirement_failures = cast(
+        Callable[[list[str]], list[str]], AUDIT["release_requirement_failures"]
+    )
+
+    failures = release_requirement_failures(
+        [
+            "vcs @ git+https://example.invalid/project.git@abc123",
+            "preview==1.0.0b1",
+            "unbounded>=1.0",
+            "bounded>=1.0,<2",
+            "exact==3.0",
+        ]
+    )
+
+    assert any("vcs uses a direct URL" in failure for failure in failures)
+    assert any("preview permits a prerelease" in failure for failure in failures)
+    assert any("unbounded lacks a finite upper bound" in failure for failure in failures)
+    assert not any(
+        failure.startswith("dependency bounded") or failure.startswith("dependency exact")
+        for failure in failures
+    )
+
+
+def test_release_lock_rejects_non_registry_and_prerelease_packages() -> None:
+    release_lock_failures = cast(
+        Callable[[dict[str, dict[str, Any]], set[str]], list[str]],
+        AUDIT["release_lock_failures"],
+    )
+    packages = {
+        "stable": {
+            "version": "1.0.0",
+            "source": {"registry": "https://pypi.org/simple"},
+        },
+        "preview": {
+            "version": "2.0.0rc1",
+            "source": {"registry": "https://pypi.org/simple"},
+        },
+        "vcs": {
+            "version": "1.0.0",
+            "source": {"git": "https://example.invalid/project.git#abc123"},
+        },
+    }
+
+    failures = release_lock_failures(packages, set(packages))
+
+    assert failures == [
+        "locked runtime dependency preview is a prerelease: 2.0.0rc1",
+        "locked runtime dependency vcs is not resolved from the release index",
+    ]
+
+
+def test_dependency_audit_includes_documentation_closure() -> None:
+    scoped_closures = cast(
+        Callable[[dict[str, Any]], dict[str, set[str]]], AUDIT["scoped_closures"]
+    )
+    lock = tomllib.loads((ROOT / "uv.lock").read_text())
+
+    scopes = scoped_closures(lock)
+
+    assert {"mkdocs", "mkdocs-material", "mkdocstrings"} <= scopes["documentation"]
 
 
 def test_locked_profile_ignores_foreign_platform_dependencies() -> None:

@@ -67,7 +67,7 @@ def default_live_execution_policy(
         policy_id="ml4t-live-client-v1",
         market_fill_phase=LifecyclePhase.MARKET_EVENT,
         opening_auction=opening_auction,
-        moc=ExecutionBehavior.BROKER_NATIVE,
+        close_auction=ExecutionBehavior.BROKER_NATIVE,
         limit=ExecutionBehavior.BROKER_NATIVE,
         stop=ExecutionBehavior.BROKER_NATIVE,
         stop_limit=ExecutionBehavior.BROKER_NATIVE,
@@ -105,6 +105,7 @@ class LiveStrategyRuntime:
         self._order_by_child: dict[str, str] = {}
         self._processed_targets: set[str] = set()
         self._reconciliations: list[IntentReconciliation] = []
+        self._latest_reconciliation: dict[str, IntentReconciliation] = {}
         self._rules_by_policy: dict[str, PositionRule] = {}
         self._global_rules: PositionRule | None = None
         self._rules_by_asset: dict[str, PositionRule | None] = {}
@@ -297,9 +298,11 @@ class LiveStrategyRuntime:
         original_entry_time = self._as_utc(position.entry_time)
         self._rule_states[asset] = PositionRuleState(
             policy_id=policy_id,
+            rule_id=policy_id,
             asset=asset,
             activation=RuleActivation.ACTIVE,
             entry_time=timestamp,
+            entry_side=(SpecOrderSide.BUY if position.quantity > 0 else SpecOrderSide.SELL),
             entry_price=entry_price,
             entry_quantity=quantity,
             high_water_mark=entry_price,
@@ -383,7 +386,9 @@ class LiveStrategyRuntime:
                 quantity=abs(delta),
                 order_type=SpecOrderType.MARKET,
                 parameters=OrderParameters(),
-                eligibility_phase=LifecyclePhase.OPENING_AUCTION,
+                decision_session=intent.effective_session,
+                effective_session=intent.effective_session,
+                eligibility_phase=LifecyclePhase.PRE_OPEN,
                 fill_eligibility=FillEligibility.OPENING_AUCTION,
                 time_in_force=TimeInForce.OPG,
                 session_policy=SessionPolicy.REGULAR,
@@ -455,8 +460,10 @@ class LiveStrategyRuntime:
                 rule_policy_id=intent.position_rule_policy_id,
                 rule_activated_at=activation,
             )
-            if not self._reconciliations or self._reconciliations[-1] != record:
+            previous = self._latest_reconciliation.get(child.child_intent_id)
+            if previous is None or not self._same_reconciliation_state(previous, record):
                 self._reconciliations.append(record)
+                self._latest_reconciliation[child.child_intent_id] = record
 
     def _activate_rule(
         self,
@@ -489,9 +496,11 @@ class LiveStrategyRuntime:
                 remaining = min(entry_quantity, state.remaining_exit_quantity + added)
                 self._rule_states[asset] = PositionRuleState(
                     policy_id=state.policy_id,
+                    rule_id=state.rule_id,
                     asset=state.asset,
                     activation=state.activation,
                     entry_time=state.entry_time,
+                    entry_side=state.entry_side,
                     entry_price=float(position.entry_price),
                     entry_quantity=entry_quantity,
                     high_water_mark=max(state.high_water_mark, float(position.entry_price)),
@@ -503,6 +512,9 @@ class LiveStrategyRuntime:
                     action=state.action,
                     exit_reason=state.exit_reason,
                     evaluation_mode=state.evaluation_mode,
+                    action_quantity=state.action_quantity,
+                    adjusted_stop_price=state.adjusted_stop_price,
+                    lifecycle_version=state.lifecycle_version,
                 )
                 self._target_rule_filled[child.child_intent_id] = filled
             return self._rule_states[asset].entry_time
@@ -514,9 +526,11 @@ class LiveStrategyRuntime:
         quantity = abs(float(position.quantity))
         self._rule_states[asset] = PositionRuleState(
             policy_id=policy_id,
+            rule_id=policy_id,
             asset=asset,
             activation=RuleActivation.ACTIVE,
             entry_time=entry_time,
+            entry_side=child.side,
             entry_price=entry_price,
             entry_quantity=quantity,
             high_water_mark=entry_price,
@@ -664,7 +678,6 @@ class LiveStrategyRuntime:
             self._rule_states[asset] = self._rule_state_after_exit_fill(
                 state,
                 filled_delta=self._new_rule_exit_fill(exit_key, order),
-                action=typed_action,
                 reason=reason,
                 high_water=high_water,
                 low_water=low_water,
@@ -706,7 +719,6 @@ class LiveStrategyRuntime:
             self._rule_states[asset] = self._rule_state_after_exit_fill(
                 state,
                 filled_delta=filled_delta,
-                action=PositionActionType(str(metadata["action"])),
                 reason=ExitReason(str(metadata["reason"])),
                 high_water=state.high_water_mark,
                 low_water=state.low_water_mark,
@@ -731,19 +743,47 @@ class LiveStrategyRuntime:
         state: PositionRuleState,
         *,
         filled_delta: float,
-        action: PositionActionType,
         reason: ExitReason,
         high_water: float,
         low_water: float,
         favorable: float,
         adverse: float,
     ) -> PositionRuleState:
+        if filled_delta == 0:
+            return PositionRuleState(
+                policy_id=state.policy_id,
+                rule_id=state.rule_id,
+                asset=state.asset,
+                activation=state.activation,
+                entry_time=state.entry_time,
+                entry_side=state.entry_side,
+                entry_price=state.entry_price,
+                entry_quantity=state.entry_quantity,
+                high_water_mark=high_water,
+                low_water_mark=low_water,
+                max_favorable_excursion=favorable,
+                max_adverse_excursion=adverse,
+                remaining_exit_quantity=state.remaining_exit_quantity,
+                idempotency_key=state.idempotency_key,
+                action=state.action,
+                exit_reason=state.exit_reason,
+                evaluation_mode=state.evaluation_mode,
+                action_quantity=state.action_quantity,
+                adjusted_stop_price=state.adjusted_stop_price,
+                lifecycle_version=state.lifecycle_version,
+            )
         remaining = max(0.0, state.remaining_exit_quantity - filled_delta)
+        completed = remaining == 0
+        recorded_action = (
+            PositionActionType.EXIT_FULL if completed else PositionActionType.EXIT_PARTIAL
+        )
         return PositionRuleState(
             policy_id=state.policy_id,
+            rule_id=state.rule_id,
             asset=state.asset,
-            activation=RuleActivation.COMPLETE if remaining == 0 else RuleActivation.ACTIVE,
+            activation=RuleActivation.COMPLETE if completed else RuleActivation.TRIGGERED,
             entry_time=state.entry_time,
+            entry_side=state.entry_side,
             entry_price=state.entry_price,
             entry_quantity=state.entry_quantity,
             high_water_mark=high_water,
@@ -752,9 +792,11 @@ class LiveStrategyRuntime:
             max_adverse_excursion=adverse,
             remaining_exit_quantity=remaining,
             idempotency_key=state.idempotency_key,
-            action=action,
+            action=recorded_action,
             exit_reason=reason,
             evaluation_mode=EvaluationMode.CLIENT,
+            action_quantity=None if completed else filled_delta,
+            lifecycle_version=state.lifecycle_version,
         )
 
     def _halt_on_reducing_risk_failure(self) -> bool:
@@ -773,9 +815,11 @@ class LiveStrategyRuntime:
     ) -> PositionRuleState:
         return PositionRuleState(
             policy_id=state.policy_id,
+            rule_id=state.rule_id,
             asset=state.asset,
             activation=state.activation,
             entry_time=state.entry_time,
+            entry_side=state.entry_side,
             entry_price=state.entry_price,
             entry_quantity=state.entry_quantity,
             high_water_mark=high_water,
@@ -787,6 +831,9 @@ class LiveStrategyRuntime:
             action=state.action,
             exit_reason=state.exit_reason,
             evaluation_mode=state.evaluation_mode,
+            action_quantity=state.action_quantity,
+            adjusted_stop_price=state.adjusted_stop_price,
+            lifecycle_version=state.lifecycle_version,
         )
 
     def _validate_preconnect_capabilities(self) -> None:
@@ -850,6 +897,9 @@ class LiveStrategyRuntime:
         self._reconciliations = [
             IntentReconciliation.from_mapping(raw) for raw in state.get("reconciliations", ())
         ]
+        self._latest_reconciliation = {
+            record.child_intent_id: record for record in self._reconciliations
+        }
         for raw in state.get("position_rule_states", ()):
             rule_state = PositionRuleState.from_mapping(raw)
             self._rule_states[rule_state.asset] = rule_state
@@ -873,6 +923,24 @@ class LiveStrategyRuntime:
         if policy is RoundingPolicy.TOWARD_ZERO:
             return float(math.trunc(value))
         return math.copysign(float(math.floor(abs(value) + 0.5)), value)
+
+    @staticmethod
+    def _same_reconciliation_state(
+        previous: IntentReconciliation,
+        current: IntentReconciliation,
+    ) -> bool:
+        return (
+            previous.target_intent_id == current.target_intent_id
+            and previous.child_intent_id == current.child_intent_id
+            and previous.order_id == current.order_id
+            and previous.requested_quantity == current.requested_quantity
+            and previous.filled_quantity == current.filled_quantity
+            and previous.remaining_quantity == current.remaining_quantity
+            and previous.outcome is current.outcome
+            and previous.rejection_reason == current.rejection_reason
+            and previous.rule_policy_id == current.rule_policy_id
+            and previous.rule_activated_at == current.rule_activated_at
+        )
 
     @staticmethod
     def _price(data: dict[str, Any], field: str, *, default: float | None = None) -> float:

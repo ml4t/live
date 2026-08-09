@@ -604,8 +604,8 @@ class TestOKXFundingFeedEmission:
                 if detected
                 else "OKX candle interval is continuous"
             ),
-            previous_sequence=str(int(first_time.timestamp() * 1_000)),
-            current_sequence=str(int(second_time.timestamp() * 1_000)),
+            previous_sequence=int(first_time.timestamp() * 1_000),
+            current_sequence=int(second_time.timestamp() * 1_000),
         )
 
     async def test_multiple_symbols(self):

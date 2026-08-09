@@ -121,8 +121,8 @@ class EventContinuityTracker:
                 previous_sequence is not None
                 and current_sequence is not None
                 and evidence is not None
-                and evidence.previous_sequence == str(previous_sequence)
-                and evidence.current_sequence == str(current_sequence)
+                and evidence.previous_sequence == previous_sequence
+                and evidence.current_sequence == current_sequence
             )
             if not continuity_proved:
                 return self._violation("provider continuity is unavailable after reconnect", event)

@@ -7,7 +7,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
-from ml4t.backtest import Strategy
+from ml4t.backtest import BacktestConfig, Strategy
 from ml4t.backtest.types import Order, OrderSide, OrderStatus, OrderType, Position
 from ml4t.specs import (
     BarPayload,
@@ -344,6 +344,7 @@ class LifecycleStrategy(Strategy):
 
     def __init__(self) -> None:
         self.calls: list[tuple[str, int, float]] = []
+        self.prepare_config: BacktestConfig | None = None
 
     def _record(self, callback: str, broker: Any) -> None:
         assert broker.is_connected is True
@@ -364,6 +365,7 @@ class LifecycleStrategy(Strategy):
         self._record("on_start", broker)
 
     def on_prepare(self, broker: Any, config: Any | None = None) -> None:
+        self.prepare_config = config
         self._record("on_prepare", broker)
 
     def on_data(self, timestamp: datetime, data: dict, context: dict, broker: Any) -> None:
@@ -638,8 +640,8 @@ async def test_explicit_provider_gap_halts_before_callback_and_records_evidence(
         gap=GapEvidence(
             True,
             "provider sequence gap",
-            previous_sequence="1",
-            current_sequence="3",
+            previous_sequence=1,
+            current_sequence=3,
         ),
     )
     engine = LiveEngine(strategy, broker, MockDataFeed([event]))
@@ -678,7 +680,7 @@ async def test_queue_overflow_halts_before_pending_callback_and_records_gap() ->
         payload for name, payload in broker.runtime_events if name == "feed_safety_halt"
     ]
     assert safety_events[-1]["detail"]["gap"]["detected"] is True
-    assert safety_events[-1]["detail"]["gap"]["current_sequence"] == "2"
+    assert safety_events[-1]["detail"]["gap"]["current_sequence"] == 2
     assert engine.stats["feed"]["queue"]["overflow_count"] == 1
     assert [transition.current.value for transition in engine.runtime_transitions][-3:] == [
         "degraded",
@@ -722,6 +724,8 @@ async def test_shared_lifecycle_dispatches_all_callbacks_on_one_worker_thread() 
         LifecyclePhase.RUN_END,
     ]
     assert engine.stats["lifecycle_version"] == "1"
+    assert strategy.prepare_config is engine.strategy_config
+    assert isinstance(strategy.prepare_config, BacktestConfig)
     assert engine.stats["callback_counts"] == {
         "run_start": 1,
         "causal_initialization": 1,
@@ -1113,8 +1117,8 @@ async def test_recovery_skips_replay_then_accepts_monotonic_provider_sequence() 
         gap=GapEvidence(
             False,
             "fixture continuity proved",
-            previous_sequence="10",
-            current_sequence="11",
+            previous_sequence=10,
+            current_sequence=11,
         ),
     )
     feed = RecoverableFeed([[first], [first, second]], delay=0.01)
