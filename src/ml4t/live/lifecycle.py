@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Callable, Sequence
+from collections import deque
+from collections.abc import Callable, Iterable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime
@@ -11,6 +12,8 @@ from functools import partial
 from typing import Any
 
 from ml4t.specs import LIFECYCLE_V1, LifecycleContract, LifecyclePhase
+
+RETAINED_CALLBACK_TRACE_LIMIT = 4_096
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,7 +38,8 @@ class LiveLifecycleDispatcher:
         self.strategy = strategy
         self.contract = contract
         self.event_recorder = event_recorder
-        self.invocations: list[LifecycleInvocation] = []
+        self.invocations: deque[LifecycleInvocation] = deque(maxlen=RETAINED_CALLBACK_TRACE_LIMIT)
+        self._invocation_count = 0
         self._counts = dict.fromkeys(LifecyclePhase, 0)
         self._executor: ThreadPoolExecutor | None = None
 
@@ -43,6 +47,16 @@ class LiveLifecycleDispatcher:
     def callback_counts(self) -> dict[LifecyclePhase, int]:
         """Return successful and failed invocation counts."""
         return dict(self._counts)
+
+    @property
+    def invocation_count(self) -> int:
+        """Return the total invocation count, including pruned trace entries."""
+        return self._invocation_count
+
+    @property
+    def dropped_invocation_count(self) -> int:
+        """Return how many oldest trace entries were pruned from memory."""
+        return max(0, self._invocation_count - len(self.invocations))
 
     async def dispatch(
         self,
@@ -59,10 +73,12 @@ class LiveLifecycleDispatcher:
                 thread_name_prefix="ml4t-live-strategy",
             )
         self._counts[phase] += 1
+        self._invocation_count += 1
         invocation = LifecycleInvocation(phase, specification.callback, event_time)
         self.invocations.append(invocation)
         self._record(
             "strategy_callback_started",
+            forward=False,
             phase=phase.value,
             callback=specification.callback,
             event_time=event_time,
@@ -79,6 +95,7 @@ class LiveLifecycleDispatcher:
             else:
                 self._record(
                     "strategy_callback_succeeded",
+                    forward=False,
                     phase=phase.value,
                     callback=specification.callback,
                     event_time=event_time,
@@ -89,6 +106,7 @@ class LiveLifecycleDispatcher:
             raise
         self._record(
             "strategy_callback_succeeded",
+            forward=False,
             phase=phase.value,
             callback=specification.callback,
             event_time=event_time,
@@ -131,13 +149,13 @@ class LiveLifecycleDispatcher:
             error=str(error),
         )
 
-    def _record(self, event: str, **payload: Any) -> None:
+    def _record(self, event: str, *, forward: bool = True, **payload: Any) -> None:
         if self.event_recorder is not None:
-            self.event_recorder(event, **payload)
+            self.event_recorder(event, forward=forward, **payload)
 
 
 def callback_trace(
-    invocations: Sequence[LifecycleInvocation],
+    invocations: Iterable[LifecycleInvocation],
 ) -> tuple[tuple[str, str, datetime | None], ...]:
     """Return a stable trace for cross-engine comparison."""
     return tuple(

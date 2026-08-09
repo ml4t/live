@@ -19,6 +19,7 @@ MANDATORY_JOBS = {
     "deterministic",
     "dependency",
     "stress",
+    "performance",
     "documentation",
 }
 ACTION_PATTERN = re.compile(
@@ -185,6 +186,8 @@ def validate_workflows(root: Path = WORKFLOW_ROOT) -> list[str]:
         failures.append("dependency does not call the authoritative dependency group")
     if "--group stress" not in _run_text(qualification_jobs.get("stress", {})):
         failures.append("stress does not call the authoritative stress group")
+    if "--group performance" not in _run_text(qualification_jobs.get("performance", {})):
+        failures.append("performance does not call the authoritative performance group")
     if "--group documentation" not in _run_text(qualification_jobs.get("documentation", {})):
         failures.append("documentation does not call the authoritative documentation group")
     if "--artifacts-dir dist" not in _run_text(

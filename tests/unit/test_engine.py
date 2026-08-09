@@ -727,7 +727,12 @@ async def test_shared_lifecycle_dispatches_all_callbacks_on_one_worker_thread() 
         "market_event": 1,
         "run_end": 1,
     }
-    assert [event for event, _ in broker.runtime_events if event.startswith("strategy_")] == [
+    assert [event for event, _ in broker.runtime_events if event.startswith("strategy_")] == []
+    assert [
+        event["event"]
+        for event in engine.operational_events
+        if event["event"].startswith("strategy_callback_")
+    ] == [
         "strategy_callback_started",
         "strategy_callback_succeeded",
         "strategy_callback_started",
@@ -858,7 +863,12 @@ async def test_strategy_error_aborts_and_runs_cleanup_once():
     strategy_events = [
         event for event, _ in broker.runtime_events if event.startswith("strategy_callback_")
     ]
-    assert strategy_events[-3:] == [
+    assert strategy_events == ["strategy_callback_failed"]
+    assert [
+        event["event"]
+        for event in engine.operational_events
+        if event["event"].startswith("strategy_callback_")
+    ][-3:] == [
         "strategy_callback_failed",
         "strategy_callback_started",
         "strategy_callback_succeeded",
@@ -908,9 +918,9 @@ async def test_external_cancellation_runs_cleanup_once_and_propagates() -> None:
     run_task = asyncio.create_task(engine.run())
 
     while not any(
-        event == "strategy_callback_succeeded"
-        and payload.get("phase") == LifecyclePhase.CAUSAL_INITIALIZATION.value
-        for event, payload in broker.runtime_events
+        event["event"] == "strategy_callback_succeeded"
+        and event.get("phase") == LifecyclePhase.CAUSAL_INITIALIZATION.value
+        for event in engine.operational_events
     ):
         await asyncio.sleep(0)
     run_task.cancel()
@@ -924,10 +934,15 @@ async def test_external_cancellation_runs_cleanup_once_and_propagates() -> None:
     assert broker.is_connected is False
     assert feed.stop_count == 1
     assert engine.runtime_state.value == "stopped"
-    assert [event for event, _ in broker.runtime_events[-2:]] == [
+    assert [
+        event["event"]
+        for event in engine.operational_events
+        if event["event"].startswith("strategy_callback_")
+    ][-2:] == [
         "strategy_callback_started",
         "strategy_callback_succeeded",
     ]
+    assert not any(event.startswith("strategy_callback_") for event, _ in broker.runtime_events)
 
 
 @pytest.mark.asyncio

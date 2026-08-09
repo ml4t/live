@@ -20,6 +20,7 @@ STAGE_GROUPS = {
     "artifact": frozenset({"artifact-qualification"}),
     "deterministic": frozenset({"deterministic-tests-and-branch-coverage"}),
     "stress": frozenset({"stress"}),
+    "performance": frozenset({"performance"}),
     "documentation": frozenset({"public-claims", "documentation"}),
     "distribution": frozenset({"build", "distribution-metadata"}),
 }
@@ -111,6 +112,17 @@ def qualification_stages(temporary_directory: Path, repetitions: int = 5) -> lis
                 "-m",
                 "stress",
                 "tests/stress",
+            ),
+        ),
+        Stage(
+            "performance",
+            (
+                "uv",
+                "run",
+                "python",
+                "scripts/qualification/qualify_performance.py",
+                "--output",
+                str(temporary_directory / "performance-qualification.json"),
             ),
         ),
     ]
@@ -244,7 +256,14 @@ def execute_stages(
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--group", action="append", choices=sorted(STAGE_GROUPS))
+    parser.add_argument("--evidence-directory", type=Path)
     args = parser.parse_args()
+    if args.evidence_directory is not None:
+        args.evidence_directory.mkdir(parents=True, exist_ok=True)
+        stages = qualification_stages(args.evidence_directory)
+        if args.group:
+            stages = select_stage_groups(stages, args.group)
+        return execute_stages(stages)
     with tempfile.TemporaryDirectory(prefix="ml4t-live-beta-gate-") as temporary:
         stages = qualification_stages(Path(temporary))
         if args.group:

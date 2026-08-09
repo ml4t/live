@@ -19,9 +19,18 @@ uv run python scripts/qualification/run_beta_gate.py
 ```
 
 The gate must leave the worktree unchanged. It checks source quality, Python 3.12-3.14 behavior,
-dependency policy, deterministic integration, bounded stress and controlled faults, public claims,
-strict documentation, reproducible artifacts, installed wheel and source-distribution profiles,
-Python 3.15 rejection, external typing, secret scanning, and metadata.
+dependency policy, deterministic integration, bounded stress and controlled faults, sustained
+performance, public claims, strict documentation, reproducible artifacts, installed wheel and
+source-distribution profiles, Python 3.15 rejection, external typing, secret scanning, and metadata.
+
+The performance stage runs three 360,000-event dispatcher repetitions representing one hour at 100
+events per second across 32 symbols. Each run must preserve event and canonical-intent checksums,
+keep post-warmup RSS growth below 25 MiB, keep no-op dispatch p99 below 10 ms, and shut down within
+5 seconds. Separate idle, full-queue slow-strategy, burst-overload, high-order-rate, and reconnect
+workloads check their exact counts and observable outcomes. The report records every repetition,
+host load, Python and dependency identity, latency distribution, throughput, RSS, queue occupancy,
+shutdown, recovery, and checksum evidence. These limits measure credential-free framework behavior
+on Linux; they do not state venue latency or capacity.
 
 ## Qualify Paper Accounts Separately
 

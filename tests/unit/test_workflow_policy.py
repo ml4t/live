@@ -28,6 +28,7 @@ def test_every_external_action_is_immutable_and_updateable() -> None:
         ("deterministic", "every mandatory"),
         ("dependency", "every mandatory"),
         ("stress", "every mandatory"),
+        ("performance", "every mandatory"),
         ("documentation", "every mandatory"),
         ("artifact", "candidate build"),
         ("publish", "complete reusable"),
@@ -40,7 +41,14 @@ def test_seeded_mandatory_failure_cannot_reach_publish(mutation: str, expected: 
     seeded_qualification = deepcopy(qualification)
     seeded_release = deepcopy(release)
 
-    if mutation in {"source", "deterministic", "dependency", "stress", "documentation"}:
+    if mutation in {
+        "source",
+        "deterministic",
+        "dependency",
+        "stress",
+        "performance",
+        "documentation",
+    }:
         seeded_qualification["jobs"]["build"]["needs"].remove(
             "source-quality" if mutation == "source" else mutation
         )

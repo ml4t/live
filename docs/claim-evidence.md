@@ -10,7 +10,7 @@ external paper account.
 | Safety | Canonical orders fail atomically; live safety may reject or reduce an intent without redefining it | `tests/unit/test_order_contract.py`, `tests/unit/test_safe_broker.py`, `tests/unit/test_secure_persistence.py` |
 | Feeds | Alpaca, IB, OKX, and bar aggregation emit validated UTC events and halt on overload or continuity loss | feed contract, queue, continuity, recovery, and stress tests |
 | Brokers | IB and Alpaca implement the documented snapshots, state transitions, canonical order input, capabilities, and reconciliation contract | broker contract, adapter, replacement-gap, and paper-account suites |
-| Performance | Supported queues remain bounded under the retained stress workload; numerical latency and sustained-runtime claims require the candidate performance report | `tests/stress`; candidate performance qualification |
+| Performance | The credential-free Linux reference workload sustains 100 events per second for one virtual hour with less than 25 MiB post-warmup RSS growth, no-op dispatch p99 below 10 ms, shutdown below 5 seconds, bounded queues, and exact event and intent checksums | `scripts/qualification/qualify_performance.py`; `tests/stress`; candidate performance report |
 | Platform | The wheel and source distribution install on Linux with Python 3.12, 3.13, and 3.14; metadata rejects Python 3.15 | `scripts/qualification/qualify_artifacts.py` installed profiles |
 | Maturity | IB and Alpaca brokers plus Alpaca, IB, and OKX feeds are beta-supported only at these boundaries; DataBento and generic CCXT are experimental | public claim scan, experimental-feed tests, fresh paper evidence |
 

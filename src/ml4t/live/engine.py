@@ -28,6 +28,7 @@ import inspect
 import logging
 import math
 import signal
+from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -72,6 +73,7 @@ US_EASTERN = ZoneInfo("America/New_York")
 US_EQUITY_OPEN = dt_time(9, 30)
 US_EQUITY_CLOSE = dt_time(16, 0)
 RECOVERABLE_HEALTH_STATES = {"feed_silent", "broker_disconnected"}
+RETAINED_OPERATIONAL_EVENT_LIMIT = 4_096
 
 
 class RuntimeState(StrEnum):
@@ -270,7 +272,11 @@ class LiveEngine:
         self._cleanup_lock = asyncio.Lock()
         self._runtime_state = RuntimeState.STOPPED
         self._runtime_transitions: list[RuntimeTransition] = []
-        self._operational_events: list[dict[str, Any]] = []
+        self._operational_events: deque[dict[str, Any]] = deque(
+            maxlen=RETAINED_OPERATIONAL_EVENT_LIMIT
+        )
+        self._operational_event_count = 0
+        self._operational_event_forwarded_count = 0
         self._broker_connect_attempted = False
         self._feed_start_attempted = False
         self._feed_close_required = False
@@ -1178,12 +1184,14 @@ class LiveEngine:
     ) -> None:
         """Retain an operational event and forward it while the broker is acquired."""
         redacted_payload = redact_sensitive(payload)
+        self._operational_event_count += 1
         self._operational_events.append({"event": event, **redacted_payload})
         if not forward:
             return
         recorder = getattr(self.broker, "record_event", None)
         if callable(recorder):
             recorder(event, **redacted_payload)
+            self._operational_event_forwarded_count += 1
 
     def _normalize_utc(self, timestamp: datetime) -> datetime:
         if timestamp.tzinfo is None:
@@ -1325,6 +1333,20 @@ class LiveEngine:
             "callback_counts": {
                 phase.value: count
                 for phase, count in self.lifecycle_dispatcher.callback_counts.items()
+            },
+            "diagnostics": {
+                "callback_invocations_total": self.lifecycle_dispatcher.invocation_count,
+                "callback_invocations_retained": len(self.lifecycle_dispatcher.invocations),
+                "callback_invocations_dropped": (
+                    self.lifecycle_dispatcher.dropped_invocation_count
+                ),
+                "operational_events_total": self._operational_event_count,
+                "operational_events_forwarded": self._operational_event_forwarded_count,
+                "operational_events_retained": len(self._operational_events),
+                "operational_events_dropped": max(
+                    0,
+                    self._operational_event_count - len(self._operational_events),
+                ),
             },
             "last_cleanup_result": self._last_cleanup_result,
         }
