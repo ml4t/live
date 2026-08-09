@@ -30,6 +30,7 @@ from ml4t.live import StrategyCallbackTimeoutError
 from ml4t.live.engine import LiveEngine
 from ml4t.live.feeds.events import FeedContinuityError
 from ml4t.live.feeds.queue import BoundedEventQueue, FeedOverflowError
+from ml4t.live.lifecycle import LiveLifecycleDispatcher
 from ml4t.live.orders import CanonicalOrderRequest
 from ml4t.live.protocols import AsyncBrokerProtocol, DataFeedProtocol, FeedItem
 from ml4t.live.safety import LiveRiskConfig, SafeBroker
@@ -791,6 +792,19 @@ async def test_slow_callback_times_out_after_worker_becomes_quiescent() -> None:
     assert callback_events[-1] == "strategy_callback_succeeded"
 
 
+@pytest.mark.asyncio
+async def test_lifecycle_dispatcher_without_recorder_closes_before_and_after_dispatch() -> None:
+    strategy = RecordingStrategy()
+    dispatcher = LiveLifecycleDispatcher(strategy)
+
+    dispatcher.close()
+    await dispatcher.dispatch(LifecyclePhase.RUN_START, object())
+    dispatcher.close()
+
+    assert strategy.on_start_called is True
+    assert dispatcher.invocation_count == 1
+
+
 @pytest.mark.parametrize("value", [False, 0, -1, float("nan"), float("inf")])
 def test_invalid_callback_timeout_rejected_before_runtime_side_effects(value: object) -> None:
     broker = MockAsyncBroker()
@@ -1336,3 +1350,83 @@ async def test_shadow_mode_end_to_end_uses_virtual_portfolio(tmp_path):
     assert virtual_position.quantity == 10
     assert virtual_position.entry_price == 150.0
     assert virtual_position.current_price == 151.0
+
+
+@pytest.mark.parametrize(
+    ("configuration", "error_type", "message"),
+    [
+        ({"feed_silence_seconds": False}, TypeError, "feed_silence_seconds"),
+        ({"watchdog_poll_seconds": "often"}, TypeError, "watchdog_poll_seconds"),
+        ({"recovery_cooldown_seconds": float("nan")}, ValueError, "recovery_cooldown_seconds"),
+        ({"max_recovery_attempts": True}, ValueError, "max_recovery_attempts"),
+        ({"max_event_age_seconds": 0}, ValueError, "max_event_age_seconds"),
+    ],
+)
+def test_runtime_configuration_rejects_ambiguous_or_unbounded_values(
+    configuration: dict[str, Any], error_type: type[Exception], message: str
+) -> None:
+    with pytest.raises(error_type, match=message):
+        LiveEngine(RecordingStrategy(), MockAsyncBroker(), MockDataFeed([]), **configuration)
+
+
+@pytest.mark.parametrize(
+    ("item", "message"),
+    [
+        (object(), "three-item"),
+        ((datetime.now(UTC), [], {}), "data must map"),
+        ((datetime.now(UTC), {"SPY": []}, {}), "data must map"),
+        ((datetime.now(UTC), {"SPY": {}}, []), "context must be a mapping"),
+    ],
+)
+def test_legacy_feed_boundary_rejects_malformed_items(item: object, message: str) -> None:
+    with pytest.raises(TypeError, match=message):
+        LiveEngine._validate_legacy_feed_item(item)
+
+
+@pytest.mark.asyncio
+async def test_connect_is_idempotent_after_runtime_is_ready() -> None:
+    broker = MockAsyncBroker()
+    engine = LiveEngine(RecordingStrategy(), broker, MockDataFeed([]))
+
+    await engine.connect()
+    transitions = tuple(engine.runtime_transitions)
+    await engine.connect()
+
+    assert tuple(engine.runtime_transitions) == transitions
+    await engine.stop()
+
+
+def test_runtime_status_covers_equity_preopen_and_postclose_boundaries() -> None:
+    feed = MockDataFeed([])
+    feed._stock_symbols = ["spy"]
+    engine = LiveEngine(RecordingStrategy(), MockAsyncBroker(), feed)
+
+    preopen = engine.runtime_status(now=datetime(2024, 1, 2, 13, 0, tzinfo=UTC))
+    postclose = engine.runtime_status(now=datetime(2024, 1, 2, 22, 0, tzinfo=UTC))
+
+    assert preopen["session_state"] == "pre_open"
+    assert postclose["session_state"] == "closed"
+    assert preopen["tracked_symbols"] == ["SPY"]
+    assert postclose["next_session_boundary"] is not None
+
+
+def test_runtime_status_normalizes_naive_time_and_handles_unknown_broker_state() -> None:
+    broker = MockAsyncBroker()
+    broker._connected = cast(Any, "unknown")
+    engine = LiveEngine(RecordingStrategy(), broker, MockDataFeed([]))
+
+    status = engine.runtime_status(now=datetime(2024, 1, 2, 12, 0))
+
+    assert status["broker_connected"] is None
+    assert engine._normalize_utc(datetime(2024, 1, 2, 12, 0)).tzinfo is UTC
+
+
+def test_ib_named_feed_symbols_are_reported_without_private_stock_symbol_alias() -> None:
+    class IBDataFeed(MockDataFeed):
+        def __init__(self) -> None:
+            super().__init__([])
+            self.symbols = ["aapl"]
+
+    engine = LiveEngine(RecordingStrategy(), MockAsyncBroker(), IBDataFeed())
+
+    assert engine.runtime_status()["tracked_symbols"] == ["AAPL"]

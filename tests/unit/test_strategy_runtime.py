@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 from dataclasses import replace
 from datetime import UTC, date, datetime
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from ml4t.backtest import StopLoss, Strategy
@@ -15,6 +15,7 @@ from ml4t.specs import (
     ExecutionBehavior,
     IntentReason,
     LifecyclePhase,
+    LifecycleVersion,
     ResidualPolicy,
     RoundingPolicy,
     TargetMeasure,
@@ -23,7 +24,9 @@ from ml4t.specs import (
 from ml4t.live import (
     CanonicalOrderRequest,
     LiveEngine,
+    LiveIntentError,
     LiveRiskConfig,
+    LiveStrategyRuntime,
     ReducingRiskExecutionError,
     SafeBroker,
     UnsupportedLiveCapabilityError,
@@ -127,6 +130,18 @@ class RuntimeBroker:
 
     async def close_position_async(self, asset: str) -> Order | None:
         return None
+
+
+class PersistentRuntimeBroker(RuntimeBroker):
+    def __init__(self) -> None:
+        super().__init__()
+        self.portable_state: dict[str, Any] = {}
+
+    def load_portable_strategy_state(self) -> dict[str, Any]:
+        return self.portable_state
+
+    def save_portable_strategy_state(self, state: dict[str, Any]) -> None:
+        self.portable_state = state
 
 
 class FillBroker(RuntimeBroker):
@@ -766,3 +781,225 @@ async def test_strategy_facade_set_clear_and_context_apply_to_direct_fills(tmp_p
     assert state.exit_reason.value == "stop_loss"
     assert raw.positions == {}
     assert persisted["context"] == {"source": "direct"}
+
+
+def direct_runtime(
+    broker: RuntimeBroker | None = None,
+    *,
+    opening_auction: ExecutionBehavior = ExecutionBehavior.CLIENT,
+    contingent: ExecutionBehavior = ExecutionBehavior.CLIENT,
+) -> LiveStrategyRuntime:
+    policy = replace(
+        default_live_execution_policy(opening_auction=opening_auction),
+        contingent=contingent,
+    )
+    return LiveStrategyRuntime(broker or PersistentRuntimeBroker(), policy, LifecycleVersion.V1)
+
+
+def test_target_registration_requires_persistence_and_causal_phase() -> None:
+    without_persistence = direct_runtime(RuntimeBroker())
+    with pytest.raises(UnsupportedLiveCapabilityError, match="persistent strategy state"):
+        without_persistence.register_target_intent(target_intent())
+
+    runtime = direct_runtime()
+    with pytest.raises(LiveIntentError, match="causal initialization or a market event"):
+        runtime.register_target_intent(target_intent())
+
+    runtime = LiveStrategyRuntime(
+        PersistentRuntimeBroker(),
+        default_live_execution_policy(opening_auction=ExecutionBehavior.CLIENT),
+        cast(LifecycleVersion, "2"),
+    )
+    runtime.active_phase = LifecyclePhase.CAUSAL_INITIALIZATION
+    with pytest.raises(LiveIntentError, match="lifecycle version"):
+        runtime.register_target_intent(target_intent())
+
+
+def test_target_registration_rejects_phase_policy_and_rule_mismatches() -> None:
+    runtime = direct_runtime()
+    runtime.active_phase = LifecyclePhase.CAUSAL_INITIALIZATION
+    with pytest.raises(LiveIntentError, match="effective_phase must be pre_open"):
+        runtime.register_target_intent(
+            replace(target_intent(), effective_phase=LifecyclePhase.MARKET_EVENT)
+        )
+
+    disabled = direct_runtime(opening_auction=ExecutionBehavior.DISABLED)
+    disabled.active_phase = LifecyclePhase.CAUSAL_INITIALIZATION
+    with pytest.raises(UnsupportedLiveCapabilityError, match="disables opening_auction"):
+        disabled.register_target_intent(target_intent())
+
+    rules = StopLoss(0.05)
+    with pytest.raises(LiveIntentError, match="require position_rule_policy_id"):
+        runtime.register_target_intent(target_intent(), position_rules=rules)
+
+    missing_policy = target_intent(position_rule_policy_id="missing-policy")
+    with pytest.raises(UnsupportedLiveCapabilityError, match="no client implementation"):
+        runtime.register_target_intent(missing_policy)
+
+
+def test_target_registration_rejects_late_duplicate_and_overlapping_intents() -> None:
+    runtime = direct_runtime()
+    runtime.active_phase = LifecyclePhase.MARKET_EVENT
+    runtime.current_event_time = datetime(2026, 8, 10, 13, 30, tzinfo=UTC)
+    with pytest.raises(LiveIntentError, match="future effective session"):
+        runtime.register_target_intent(target_intent())
+
+    runtime.active_phase = LifecyclePhase.CAUSAL_INITIALIZATION
+    runtime.current_event_time = None
+    first = runtime.register_target_intent(target_intent())
+    with pytest.raises(LiveIntentError, match="different target"):
+        runtime.register_target_intent(
+            replace(
+                first,
+                intent_id="different-id",
+                targets=(AssetTarget("SPY", TargetMeasure.WEIGHT, 0.4),),
+            )
+        )
+    with pytest.raises(LiveIntentError, match="duplicate target intent_id"):
+        runtime.register_target_intent(replace(first, idempotency_key="different-key"))
+    with pytest.raises(LiveIntentError, match="target overlaps"):
+        runtime.register_target_intent(
+            replace(first, intent_id="overlap", idempotency_key="overlap-key")
+        )
+
+
+def test_position_rule_registration_rejects_empty_conflicting_and_native_policies() -> None:
+    runtime = direct_runtime()
+    rules = StopLoss(0.05)
+    with pytest.raises(ValueError, match="non-empty"):
+        runtime.register_position_rule_policy("", rules)
+    runtime.register_position_rule_policy("stop", rules)
+    with pytest.raises(LiveIntentError, match="already registered"):
+        runtime.register_position_rule_policy("stop", StopLoss(0.10))
+
+    native = direct_runtime()
+    native.policy = replace(native.policy, contingent=ExecutionBehavior.BROKER_NATIVE)
+    with pytest.raises(UnsupportedLiveCapabilityError, match="broker-native position rules"):
+        native.set_position_rules(rules)
+
+
+def test_target_registration_rejects_conflicting_rule_implementation() -> None:
+    runtime = direct_runtime()
+    runtime.active_phase = LifecyclePhase.CAUSAL_INITIALIZATION
+    runtime.register_target_intent(
+        target_intent(position_rule_policy_id="stop"),
+        position_rules=StopLoss(0.05),
+    )
+
+    with pytest.raises(LiveIntentError, match="already registered"):
+        runtime.register_target_intent(
+            target_intent(intent_id="second", position_rule_policy_id="stop"),
+            position_rules=StopLoss(0.10),
+        )
+
+
+@pytest.mark.asyncio
+async def test_runtime_noop_observation_context_and_repeated_target_are_stable() -> None:
+    broker = PersistentRuntimeBroker()
+    broker._positions["SPY"] = Position(
+        "SPY",
+        1,
+        100,
+        datetime(2026, 8, 9, tzinfo=UTC),
+    )
+    runtime = direct_runtime(broker)
+    runtime.observe_strategy_order(
+        Order(
+            asset="SPY",
+            quantity=1,
+            side=OrderSide.BUY,
+            order_id="pending",
+            status=OrderStatus.PENDING,
+        )
+    )
+    runtime.update_position_context("SPY", {"regime": "risk_off"})
+    assert broker.positions["SPY"].context == {"regime": "risk_off"}
+
+    runtime.active_phase = LifecyclePhase.CAUSAL_INITIALIZATION
+    runtime.register_target_intent(target_intent())
+    event_time = datetime(2026, 8, 10, 13, 30, tzinfo=UTC)
+    data = {"SPY": {"open": 100.0, "high": 100.0, "low": 100.0, "close": 100.0}}
+    await runtime.process_market_event(event_time, data, {})
+    submit_calls = broker.submit_calls
+    await runtime.process_market_event(event_time, data, {})
+
+    assert broker.submit_calls == submit_calls
+
+
+@pytest.mark.asyncio
+async def test_future_and_already_satisfied_targets_submit_no_child_orders() -> None:
+    future_broker = PersistentRuntimeBroker()
+    future = direct_runtime(future_broker)
+    future.active_phase = LifecyclePhase.CAUSAL_INITIALIZATION
+    future.register_target_intent(target_intent(session=date(2026, 8, 11)))
+    event_time = datetime(2026, 8, 10, 13, 30, tzinfo=UTC)
+    data = {"SPY": {"open": 100.0, "high": 100.0, "low": 100.0, "close": 100.0}}
+    await future.process_market_event(event_time, data, {})
+    assert future_broker.submit_calls == 0
+
+    satisfied_broker = PersistentRuntimeBroker()
+    satisfied_broker._positions["SPY"] = Position(
+        "SPY",
+        500,
+        100,
+        datetime(2026, 8, 9, tzinfo=UTC),
+    )
+    satisfied = direct_runtime(satisfied_broker)
+    satisfied.active_phase = LifecyclePhase.CAUSAL_INITIALIZATION
+    satisfied.register_target_intent(target_intent())
+    await satisfied.process_market_event(event_time, data, {})
+
+    assert satisfied.children == ()
+    assert satisfied_broker.submit_calls == 0
+
+
+@pytest.mark.asyncio
+async def test_target_processing_rejects_late_missing_data_and_rounding_residuals() -> None:
+    late = direct_runtime()
+    late.active_phase = LifecyclePhase.CAUSAL_INITIALIZATION
+    late.register_target_intent(target_intent())
+    with pytest.raises(LiveIntentError, match="missed its effective session"):
+        await late.process_market_event(
+            datetime(2026, 8, 11, 13, 30, tzinfo=UTC),
+            {"SPY": {"open": 100.0}},
+            {},
+        )
+
+    missing = direct_runtime()
+    missing.active_phase = LifecyclePhase.CAUSAL_INITIALIZATION
+    missing.register_target_intent(target_intent())
+    with pytest.raises(LiveIntentError, match="no data for SPY"):
+        await missing.process_market_event(datetime(2026, 8, 10, 13, 30, tzinfo=UTC), {}, {})
+
+    residual = direct_runtime()
+    residual.active_phase = LifecyclePhase.CAUSAL_INITIALIZATION
+    residual.register_target_intent(
+        replace(
+            target_intent(),
+            targets=(AssetTarget("SPY", TargetMeasure.WEIGHT, 0.000001),),
+            residual=ResidualPolicy.REJECT,
+        )
+    )
+    with pytest.raises(LiveIntentError, match="rounding residual"):
+        await residual.process_market_event(
+            datetime(2026, 8, 10, 13, 30, tzinfo=UTC),
+            {"SPY": {"open": 100.0}},
+            {},
+        )
+
+
+@pytest.mark.parametrize("value", [True, "100", float("nan"), 0])
+def test_runtime_price_validation_rejects_nonpositive_nonfinite_and_nonnumeric(value) -> None:
+    with pytest.raises(LiveIntentError, match="open price"):
+        LiveStrategyRuntime._price({"open": value}, "open")
+
+
+def test_runtime_rounding_exit_reason_and_naive_time_normalization() -> None:
+    assert LiveStrategyRuntime._round(1.9, RoundingPolicy.NONE) == 1.9
+    assert LiveStrategyRuntime._round(-1.9, RoundingPolicy.TOWARD_ZERO) == -1
+    assert LiveStrategyRuntime._round(-1.5, RoundingPolicy.NEAREST) == -2
+    assert LiveStrategyRuntime._exit_reason("take_profit:rule") == "take_profit"
+    assert LiveStrategyRuntime._exit_reason("trailing_stop:rule") == "trailing_stop"
+    assert LiveStrategyRuntime._exit_reason("time_exit:rule") == "time_exit"
+    assert LiveStrategyRuntime._exit_reason("signal") == "signal"
+    assert LiveStrategyRuntime._as_utc(datetime(2026, 8, 9)).tzinfo is UTC

@@ -10,6 +10,7 @@ Tests cover:
 import tempfile
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -198,6 +199,35 @@ def test_live_risk_config_validation_state_file():
     with pytest.raises(ValueError, match="must not overlap"):
         LiveRiskConfig(state_file="state.json", journal_file="state.json.lock")
 
+    with pytest.raises(ValueError, match="journal_file cannot be empty"):
+        LiveRiskConfig(journal_file="")
+
+
+@pytest.mark.parametrize(
+    ("name", "value"),
+    [
+        ("max_position_value", True),
+        ("max_position_value", "unlimited"),
+        ("max_positions", True),
+        ("max_positions", 1.5),
+    ],
+)
+def test_live_risk_config_rejects_values_that_only_look_numeric(name, value):
+    with pytest.raises(ValueError, match=name):
+        LiveRiskConfig(**{name: value})
+
+
+def test_require_execution_mode_revalidates_mutated_configuration():
+    config = LiveRiskConfig(execution_mode="paper")
+    config.shadow_mode = True
+    with pytest.raises(ExecutionModeError, match="conflicts"):
+        config.require_execution_mode()
+
+    config.shadow_mode = False
+    config.execution_mode = "external"
+    with pytest.raises(ExecutionModeError, match="must be one of"):
+        config.require_execution_mode()
+
 
 def test_live_risk_config_none_disables_limits_explicitly():
     """Test that None is the only non-finite limit representation."""
@@ -345,6 +375,97 @@ def test_risk_state_roundtrip():
     assert restored.high_water_mark == original.high_water_mark
     assert restored.kill_switch_activated == original.kill_switch_activated
     assert restored.kill_switch_reason == original.kill_switch_reason
+
+
+def valid_state_data(**overrides: Any) -> dict[str, Any]:
+    values: dict[str, Any] = {
+        "date": "2026-08-09",
+        "daily_loss": 0.0,
+        "orders_placed": 0,
+        "high_water_mark": 0.0,
+        "kill_switch_activated": False,
+        "kill_switch_reason": "",
+    }
+    values.update(overrides)
+    return values
+
+
+@pytest.mark.parametrize(
+    ("payload", "message"),
+    [
+        ([], "must be an object"),
+        (valid_state_data(unknown=True), "unsupported fields"),
+        (valid_state_data(date="not-a-date"), "ISO calendar date"),
+        (valid_state_data(daily_loss=-1), "non-negative"),
+        (valid_state_data(orders_placed=True), "orders_placed"),
+        (valid_state_data(orders_placed=-1), "orders_placed"),
+        (valid_state_data(kill_switch_activated="yes"), "kill-switch"),
+        (valid_state_data(execution_mode="external"), "execution_mode"),
+        (valid_state_data(persisted_positions=[]), "persisted_positions"),
+        (valid_state_data(persisted_positions={"": 1}), "non-empty strings"),
+        (valid_state_data(persisted_positions={"SPY": float("inf")}), "must be finite"),
+        (valid_state_data(persisted_pending_orders={}), "pending_orders must be a list"),
+        (valid_state_data(persisted_pending_orders=[None]), "must be an object"),
+        (
+            valid_state_data(persisted_pending_orders=[{"asset": "SPY"}]),
+            "fields are invalid",
+        ),
+        (
+            valid_state_data(
+                persisted_pending_orders=[
+                    {"asset": "", "side": "buy", "quantity": 1, "order_type": "market"}
+                ]
+            ),
+            "asset is invalid",
+        ),
+        (
+            valid_state_data(
+                persisted_pending_orders=[
+                    {"asset": "SPY", "side": "up", "quantity": 1, "order_type": "market"}
+                ]
+            ),
+            "enum value is invalid",
+        ),
+        (
+            valid_state_data(
+                persisted_pending_orders=[
+                    {"asset": "SPY", "side": "buy", "quantity": 0, "order_type": "market"}
+                ]
+            ),
+            "quantity must be positive",
+        ),
+        (
+            valid_state_data(
+                persisted_pending_orders=[
+                    {
+                        "asset": "SPY",
+                        "side": "buy",
+                        "quantity": 1,
+                        "order_type": "limit",
+                        "limit_price": -1,
+                    }
+                ]
+            ),
+            "limit_price must be positive",
+        ),
+        (valid_state_data(portable_strategy_state=[]), "must be an object"),
+        (valid_state_data(replacement_gaps={1: "bad"}), "non-string key"),
+        (valid_state_data(replacement_gaps={"gap": float("nan")}), "non-finite"),
+        (valid_state_data(replacement_gaps={"gap": object()}), "unsupported value"),
+        (valid_state_data(shadow_portfolio={"positions": {}}), "positions must be a list"),
+        (
+            valid_state_data(shadow_portfolio={"positions": [None]}),
+            "positions must contain objects",
+        ),
+        (
+            valid_state_data(shadow_portfolio={"positions": [{"asset": "", "quantity": 1}]}),
+            "position asset is invalid",
+        ),
+    ],
+)
+def test_risk_state_rejects_every_corrupt_public_field(payload: Any, message: str) -> None:
+    with pytest.raises(CorruptStateError, match=message):
+        RiskState.from_dict(payload)
 
 
 def test_risk_state_save_atomic():

@@ -94,6 +94,11 @@ def mode(path: Path) -> int:
     return stat.S_IMODE(path.stat().st_mode)
 
 
+def write_owner_only(path: Path, content: bytes) -> None:
+    path.write_bytes(content)
+    path.chmod(0o600)
+
+
 @pytest.mark.parametrize("mask", [0o0000, 0o0002])
 def test_state_journal_and_locks_remain_owner_only_after_replacement(tmp_path, mask):
     previous = os.umask(mask)
@@ -132,6 +137,53 @@ def test_corrupt_state_fails_closed_and_preserves_diagnostic_bytes(tmp_path):
 
     assert state_path.read_bytes() == before
     assert broker.submit_calls == 0
+
+
+@pytest.mark.parametrize(
+    ("content", "message"),
+    [
+        (b'{"date":"2026-08-09","date":"2026-08-10"}', "duplicate JSON key"),
+        (b"\xff", "UTF-8 JSON"),
+        (b"[]", "root must be an object"),
+        (
+            b'{"schema_version":1,"generation":1,"payload":{},"checksum":"x","extra":1}',
+            "unsupported fields",
+        ),
+        (
+            b'{"schema_version":1,"generation":true,"payload":{},"checksum":"x"}',
+            "generation must be a positive integer",
+        ),
+        (
+            b'{"schema_version":1,"generation":1,"payload":[],"checksum":"x"}',
+            "invalid field types",
+        ),
+    ],
+)
+def test_state_store_rejects_malformed_json_and_envelopes(tmp_path, content, message):
+    path = tmp_path / "state.json"
+    write_owner_only(path, content)
+
+    with pytest.raises(CorruptStateError, match=message):
+        SecureStateStore(path).load()
+
+
+def test_state_store_rejects_noncanonical_payload_and_stale_generation(tmp_path):
+    store = SecureStateStore(tmp_path / "state.json")
+    with pytest.raises(CorruptStateError, match="canonical JSON"):
+        store.save({"unsupported": {1, 2}}, expected_generation=0)
+
+    assert store.save({"valid": True}, expected_generation=0) == 1
+    with pytest.raises(ConcurrentStateWriterError, match="changed"):
+        store.save({"stale": True}, expected_generation=0)
+
+
+def test_state_store_writer_lease_operations_are_idempotent(tmp_path):
+    store = SecureStateStore(tmp_path / "state.json")
+    store.acquire_writer()
+    store.acquire_writer()
+    assert store.load() is None
+    store.release_writer()
+    store.release_writer()
 
 
 def test_state_integrity_tamper_fails_closed(tmp_path):
@@ -417,6 +469,50 @@ def test_journal_tamper_and_truncation_fail_closed(tmp_path):
     (tmp_path / "journal.jsonl.head").unlink()
     with pytest.raises(AuditJournalError, match="head is missing"):
         SafeBroker(PersistenceBroker(), config(tmp_path))
+
+
+@pytest.mark.parametrize(
+    ("head", "message"),
+    [
+        (b"[]", "head fields are invalid"),
+        (
+            b'{"schema_version":1,"sequence":0,"head_hash":"x","checksum":"x"}',
+            "head integrity check failed",
+        ),
+    ],
+)
+def test_journal_rejects_malformed_head(tmp_path, head, message):
+    head_path = tmp_path / "journal.jsonl.head"
+    write_owner_only(head_path, head)
+
+    with pytest.raises(AuditJournalError, match=message):
+        SecureAuditJournal(tmp_path / "journal.jsonl").validate()
+
+
+def test_journal_rejects_empty_or_nonobject_content_below_persisted_head(tmp_path):
+    journal = SecureAuditJournal(tmp_path / "journal.jsonl")
+    journal.append({"event": "valid"})
+
+    write_owner_only(journal.path, b"")
+    with pytest.raises(AuditJournalError, match="truncated below"):
+        journal.validate()
+
+    journal = SecureAuditJournal(tmp_path / "second.jsonl")
+    journal.append({"event": "valid"})
+    write_owner_only(journal.path, b"[]\n")
+    with pytest.raises(AuditJournalError, match="record must be an object"):
+        journal.validate()
+
+
+@pytest.mark.parametrize("boundary", ["before_append", "after_append", "after_journal_fsync"])
+def test_journal_write_faults_are_reported_as_audit_failures(tmp_path, boundary):
+    def inject(stage: str) -> None:
+        if stage == boundary:
+            raise OSError(f"injected {boundary}")
+
+    journal = SecureAuditJournal(tmp_path / "journal.jsonl", fault_injector=inject)
+    with pytest.raises(AuditJournalError, match="append failed"):
+        journal.append({"event": "fault"})
 
 
 def test_journal_symlink_and_wrong_mode_fail_closed(tmp_path):

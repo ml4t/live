@@ -3,7 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 from datetime import UTC, datetime
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, cast
 from unittest.mock import MagicMock
 
 import pytest
@@ -15,10 +15,12 @@ from ml4t.specs import ExecutionCapability
 from ml4t.live.brokers.alpaca import AlpacaBroker
 from ml4t.live.orders import (
     BrokerOrderContractError,
+    CanonicalOrderRequest,
     OrderValidationError,
     UnsupportedOrderCapabilityError,
 )
 from ml4t.live.safety import (
+    ExecutionModeError,
     LiveRiskConfig,
     OrderReplacementGapError,
     RiskLimitError,
@@ -475,3 +477,183 @@ async def test_cancel_and_resubmit_gap_reconciles_only_after_original_disappears
     safe.close_persistence()
     restored = SafeBroker(broker, safe.config)
     assert restored.replacement_gaps == {}
+
+
+@pytest.mark.parametrize(
+    ("order_input", "message"),
+    [
+        ({"asset": "", "quantity": 1, "side": None, "order_type": OrderType.MARKET}, "asset"),
+        (
+            {"asset": "SPY", "quantity": True, "side": None, "order_type": OrderType.MARKET},
+            "quantity must be numeric",
+        ),
+        (
+            {"asset": "SPY", "quantity": "many", "side": None, "order_type": OrderType.MARKET},
+            "quantity must be numeric",
+        ),
+        (
+            {"asset": "SPY", "quantity": 1, "side": "buy", "order_type": OrderType.MARKET},
+            "side must be an OrderSide",
+        ),
+        (
+            {"asset": "SPY", "quantity": 1, "side": None, "order_type": "market"},
+            "order_type must be an OrderType",
+        ),
+        (
+            {
+                "asset": "SPY",
+                "quantity": 1,
+                "side": None,
+                "order_type": OrderType.LIMIT,
+                "limit_price": True,
+            },
+            "limit_price must be numeric",
+        ),
+        (
+            {
+                "asset": "SPY",
+                "quantity": 1,
+                "side": None,
+                "order_type": OrderType.LIMIT,
+                "limit_price": "high",
+            },
+            "limit_price must be numeric",
+        ),
+        (
+            {
+                "asset": "SPY",
+                "quantity": 1,
+                "side": None,
+                "order_type": OrderType.LIMIT,
+                "limit_price": float("inf"),
+            },
+            "limit_price must be finite and positive",
+        ),
+        (
+            {
+                "asset": "SPY",
+                "quantity": 1,
+                "side": None,
+                "order_type": OrderType.MOC,
+                "stop_price": 100,
+            },
+            "MOC orders do not accept",
+        ),
+        (
+            {
+                "asset": "SPY",
+                "quantity": 1,
+                "side": None,
+                "order_type": OrderType.STOP_LIMIT,
+                "limit_price": 100,
+            },
+            "stop-limit orders require",
+        ),
+    ],
+)
+def test_canonical_order_rejects_malformed_requests(
+    order_input: dict[str, Any], message: str
+) -> None:
+    with pytest.raises(OrderValidationError, match=message):
+        CanonicalOrderRequest.from_input(**order_input, capabilities=ALL_CAPABILITIES)
+
+
+def test_unknown_capability_values_do_not_grant_order_support() -> None:
+    with pytest.raises(UnsupportedOrderCapabilityError, match="requires capability"):
+        CanonicalOrderRequest.from_input(
+            "SPY",
+            1,
+            OrderSide.BUY,
+            OrderType.LIMIT,
+            limit_price=100,
+            capabilities=["not-a-capability", None],
+        )
+
+
+def _canonical_market_request() -> CanonicalOrderRequest:
+    return CanonicalOrderRequest.from_input("SPY", 1, OrderSide.BUY, OrderType.MARKET)
+
+
+def _matching_order(**overrides: Any) -> Order:
+    values = {
+        "asset": "SPY",
+        "quantity": 1,
+        "side": OrderSide.BUY,
+        "order_id": "order-1",
+        "status": OrderStatus.PENDING,
+        "created_at": datetime.now(UTC),
+    }
+    values.update(overrides)
+    return Order(**values)
+
+
+@pytest.mark.parametrize(
+    ("result", "message"),
+    [
+        (object(), "did not return an Order"),
+        (_matching_order(order_id=""), "no identifier"),
+        (_matching_order(created_at=datetime.now()), "timezone-aware"),
+        (_matching_order(filled_quantity=float("nan")), "invalid cumulative fill"),
+        (_matching_order(filled_quantity=2), "invalid cumulative fill"),
+        (
+            _matching_order(
+                status=OrderStatus.FILLED,
+                filled_quantity=1,
+                filled_price=None,
+                filled_at=datetime.now(UTC),
+            ),
+            "incomplete fill evidence",
+        ),
+    ],
+)
+def test_canonical_order_rejects_malformed_broker_results(result: Any, message: str) -> None:
+    with pytest.raises(BrokerOrderContractError, match=message):
+        _canonical_market_request().validate_result(result)
+
+
+@pytest.mark.asyncio
+async def test_safe_broker_rejects_invalid_mode_specific_order_operations(tmp_path) -> None:
+    paper = safe_broker(tmp_path / "paper")
+    with pytest.raises(ExecutionModeError, match="not configured for live"):
+        paper.assert_live_trading()
+    assert paper.get_positions() == {}
+    assert await paper.close_position_async("NONE") is None
+    with pytest.raises(RiskLimitError, match="no open position"):
+        await paper.reduce_position_async(
+            "NONE",
+            1,
+            reason="test",
+            idempotency_key="missing-position",
+        )
+    with pytest.raises(RiskLimitError, match="not found"):
+        await paper.replace_order_async("missing")
+
+    broker = RecordingBroker()
+    broker._positions["SPY"] = Position("SPY", 1, 100, datetime.now(UTC))
+    paper_with_position = safe_broker(tmp_path / "position", broker)
+    with pytest.raises(RiskLimitError, match="exceeds the open position"):
+        await paper_with_position.reduce_position_async(
+            "SPY",
+            2,
+            reason="test",
+            idempotency_key="excess-reduction",
+        )
+
+    shadow = safe_broker(
+        tmp_path / "shadow",
+        shadow_mode=True,
+        execution_mode="shadow",
+    )
+    with pytest.raises(ExecutionModeError, match="not configured for paper"):
+        shadow.assert_paper_trading()
+    assert await shadow.cancel_order_async("filled-immediately") is False
+    with pytest.raises(ExecutionModeError, match="cannot be replaced"):
+        await shadow.replace_order_async("filled-immediately")
+
+
+def test_external_identity_requires_a_broker_assertion(tmp_path) -> None:
+    safe = safe_broker(tmp_path)
+    safe._broker = cast(Any, object())
+
+    with pytest.raises(ExecutionModeError, match="does not implement assert_paper_trading"):
+        safe._validate_execution_identity()

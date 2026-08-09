@@ -13,13 +13,15 @@ from pathlib import Path
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 SOURCE_SCOPES = ("src", "tests", "examples", "scripts")
-COVERAGE_MINIMUM = "80"
+COVERAGE_MINIMUM = "85"
 CANDIDATE_ENVIRONMENT = {"SETUPTOOLS_SCM_PRETEND_VERSION": "0.1.0b4"}
 STAGE_GROUPS = {
     "source": frozenset({"ruff-format", "ruff", "types", "pre-commit", "workflow-policy"}),
     "dependency": frozenset({"dependency-audit", "dependency-compatibility"}),
     "artifact": frozenset({"artifact-qualification"}),
-    "deterministic": frozenset({"deterministic-tests-and-branch-coverage"}),
+    "deterministic": frozenset(
+        {"deterministic-tests-and-branch-coverage", "stable-coverage-policy"}
+    ),
     "stress": frozenset({"stress"}),
     "performance": frozenset({"performance"}),
     "documentation": frozenset({"public-claims", "documentation"}),
@@ -101,6 +103,16 @@ def qualification_stages(temporary_directory: Path, repetitions: int = 5) -> lis
                 f"--cov-fail-under={COVERAGE_MINIMUM}",
             ),
             {"COVERAGE_FILE": str(coverage_file)},
+        ),
+        Stage(
+            "stable-coverage-policy",
+            (
+                "uv",
+                "run",
+                "python",
+                "scripts/qualification/check_coverage.py",
+                str(coverage_json),
+            ),
         ),
         Stage(
             "stress",

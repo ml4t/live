@@ -2,6 +2,8 @@
 
 import time
 from datetime import UTC, datetime
+from types import SimpleNamespace
+from typing import cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -1196,3 +1198,181 @@ class TestAlpacaBrokerStatusMapping:
         result = broker._map_order_status(AlpacaOrderStatus.EXPIRED)
 
         assert result == OrderStatus.CANCELLED
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("account", "message"),
+    [
+        (SimpleNamespace(account_number="", equity="1"), "identity is unavailable"),
+        (SimpleNamespace(account_number="PA-OTHER", equity="1"), "identity changed"),
+        (SimpleNamespace(account_number="PA-TEST", equity="many"), "is not numeric"),
+        (SimpleNamespace(account_number="PA-TEST", equity="nan"), "must be finite"),
+        (SimpleNamespace(account_number="PA-TEST", equity="-1"), "non-negative"),
+    ],
+)
+async def test_account_snapshot_rejects_untrusted_identity_and_values(account, message):
+    broker = AlpacaBroker(api_key="PKTEST", secret_key="SECRET")
+    broker._connected = True
+    broker._account_id = "PA-TEST"
+    broker._trading_client = MagicMock()
+    broker._trading_client.get_account.return_value = account
+
+    with pytest.raises(RuntimeError, match=message):
+        await broker.get_account_value_async()
+
+
+@pytest.mark.asyncio
+async def test_pending_order_snapshot_filters_case_insensitively_and_fails_when_poisoned():
+    broker = AlpacaBroker(api_key="PKTEST", secret_key="SECRET")
+    broker._pending_orders = {
+        "ML4T-1": Order(
+            asset="SPY",
+            quantity=1,
+            side=OrderSide.BUY,
+            order_id="ML4T-1",
+            status=OrderStatus.PENDING,
+        ),
+        "ML4T-2": Order(
+            asset="MSFT",
+            quantity=1,
+            side=OrderSide.BUY,
+            order_id="ML4T-2",
+            status=OrderStatus.PENDING,
+        ),
+    }
+
+    assert [order.order_id for order in await broker.get_pending_orders_async("spy")] == ["ML4T-1"]
+
+    broker._snapshot_error = RuntimeError("snapshot poisoned")
+    with pytest.raises(RuntimeError, match="snapshot poisoned"):
+        await broker.get_position_async("SPY")
+
+
+@pytest.mark.asyncio
+async def test_cancel_and_replace_failures_are_explicit_and_side_effect_free():
+    broker = AlpacaBroker(api_key="PKTEST", secret_key="SECRET")
+    broker._trading_client = MagicMock()
+    broker._trading_client.cancel_order_by_id.side_effect = RuntimeError("venue unavailable")
+    broker._alpaca_order_map["venue-1"] = ("ML4T-1", time.time())
+
+    assert await broker.cancel_order_async("ML4T-1") is False
+    with pytest.raises(RuntimeError, match="not found"):
+        await broker.replace_order_async("missing")
+
+    broker._pending_orders["ML4T-1"] = Order(
+        asset="SPY",
+        quantity=1,
+        side=OrderSide.BUY,
+        order_id="ML4T-1",
+        status=OrderStatus.PENDING,
+    )
+    with pytest.raises(RuntimeError, match="Failed to cancel"):
+        await broker.replace_order_async("ML4T-1")
+
+
+def test_unknown_vendor_order_status_is_rejected():
+    broker = AlpacaBroker(api_key="PKTEST", secret_key="SECRET")
+    with pytest.raises(RuntimeError, match="Unsupported Alpaca order status"):
+        broker._map_order_status(cast(AlpacaOrderStatus, object()))
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("positions", "message"),
+    [
+        ({}, "must be a list"),
+        ([SimpleNamespace()], "invalid values"),
+        ([MockAlpacaPosition("", "1", "1")], "empty symbol"),
+        ([MockAlpacaPosition("SPY", "0", "1")], "invalid quantity"),
+        ([MockAlpacaPosition("SPY", "1", "-1")], "invalid entry price"),
+        ([MockAlpacaPosition("SPY", "1", "1", current_price="-1")], "invalid current price"),
+        (
+            [MockAlpacaPosition("SPY", "1", "1"), MockAlpacaPosition("spy", "2", "1")],
+            "duplicate symbol",
+        ),
+    ],
+)
+async def test_position_sync_rejects_malformed_or_ambiguous_snapshots(positions, message):
+    broker = AlpacaBroker(api_key="PKTEST", secret_key="SECRET")
+    broker._trading_client = MagicMock()
+    broker._trading_client.get_all_positions.return_value = positions
+
+    with pytest.raises(RuntimeError, match=message):
+        await broker._sync_positions()
+
+    assert broker.positions == {}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("orders", "message"),
+    [
+        ({}, "must be a list"),
+        (
+            [SimpleNamespace(limit_price=None, stop_price=None, time_in_force=None)],
+            "invalid values",
+        ),
+        ([MockAlpacaOrder(qty=cast(str, None))], "invalid values"),
+        ([MockAlpacaOrder(qty="0")], "invalid order"),
+        ([MockAlpacaOrder(side="hold")], "invalid side"),
+    ],
+)
+async def test_order_sync_rejects_malformed_snapshots_without_partial_commit(orders, message):
+    broker = AlpacaBroker(api_key="PKTEST", secret_key="SECRET")
+    broker._trading_client = MagicMock()
+    broker._trading_client.get_orders.return_value = orders
+
+    with pytest.raises(RuntimeError, match=message):
+        await broker._sync_orders()
+
+    assert broker.pending_orders == []
+
+
+def tracked_order_broker() -> AlpacaBroker:
+    broker = AlpacaBroker(api_key="PKTEST", secret_key="SECRET")
+    broker._connected = True
+    broker._pending_orders["ML4T-1"] = Order(
+        asset="SPY",
+        quantity=10,
+        side=OrderSide.BUY,
+        order_id="ML4T-1",
+        status=OrderStatus.PENDING,
+    )
+    broker._alpaca_order_map["venue-1"] = ("ML4T-1", time.time())
+    return broker
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("event", "filled_quantity", "filled_price", "message"),
+    [
+        ("partial_fill", "many", "1", "non-numeric fill data"),
+        ("partial_fill", "11", "1", "invalid cumulative fill"),
+        ("partial_fill", "10", "1", "cannot equal"),
+        ("fill", "9", "1", "incomplete or invalid"),
+        ("unknown", "0", "0", "unsupported Alpaca order event"),
+    ],
+)
+async def test_trade_update_faults_poison_the_snapshot(
+    event, filled_quantity, filled_price, message
+):
+    broker = tracked_order_broker()
+    vendor_order = MockAlpacaOrder(id="venue-1", filled_qty=filled_quantity)
+    vendor_order.filled_avg_price = filled_price
+
+    await broker._on_trade_update(MockTradeUpdate(event, vendor_order))
+
+    assert broker.is_connected is False
+    assert broker._snapshot_error is not None
+    assert message in str(broker._snapshot_error)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("event", ["replaced", "done_for_day"])
+async def test_terminal_trade_updates_remove_all_tracking(event):
+    broker = tracked_order_broker()
+    await broker._on_trade_update(MockTradeUpdate(event, MockAlpacaOrder(id="venue-1")))
+
+    assert broker.pending_orders == []
+    assert broker._alpaca_order_map == {}
