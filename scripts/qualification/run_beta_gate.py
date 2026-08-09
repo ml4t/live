@@ -175,7 +175,10 @@ def qualification_stages(temporary_directory: Path, repetitions: int = 5) -> lis
                     "--build-constraints",
                     "build-constraints.txt",
                 ),
-                CANDIDATE_ENVIRONMENT,
+                {
+                    **CANDIDATE_ENVIRONMENT,
+                    "SOURCE_DATE_EPOCH": source_date_epoch(),
+                },
             ),
             Stage(
                 "distribution-metadata",
@@ -212,6 +215,17 @@ def repository_status() -> str:
         text=True,
     )
     return result.stdout
+
+
+def source_date_epoch() -> str:
+    result = subprocess.run(
+        ["git", "show", "-s", "--format=%ct", "HEAD"],
+        cwd=REPOSITORY_ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return result.stdout.strip()
 
 
 def resolve_command(command: Sequence[str]) -> list[str]:
