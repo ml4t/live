@@ -78,6 +78,7 @@ def qualification_stages(temporary_directory: Path, repetitions: int = 5) -> lis
         Stage(
             "dependency-compatibility",
             ("uv", "run", "python", "scripts/qualification/check_dependency_matrix.py"),
+            CANDIDATE_ENVIRONMENT,
         ),
         Stage(
             "artifact-qualification",
