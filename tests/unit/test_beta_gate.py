@@ -64,6 +64,11 @@ def test_gate_has_explicit_topology_and_rotates_critical_fault_order(tmp_path: P
     assert names[-3:] == ["documentation", "build", "distribution-metadata"]
     assert len(critical) == 5
     assert len({stage.command[6] for stage in critical}) == 5
+    by_name = {stage.name: stage for stage in stages}
+    assert by_name["artifact-qualification"].environment == {
+        "SETUPTOOLS_SCM_PRETEND_VERSION": "0.1.0b4"
+    }
+    assert by_name["build"].environment == {"SETUPTOOLS_SCM_PRETEND_VERSION": "0.1.0b4"}
 
 
 def test_gate_groups_partition_every_stage(tmp_path: Path) -> None:

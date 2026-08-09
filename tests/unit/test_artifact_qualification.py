@@ -85,6 +85,25 @@ def test_metadata_contract_accepts_declared_beta_candidate() -> None:
     assert validate_metadata(message, project) == "0.1.0b4"
 
 
+def test_metadata_contract_rejects_development_build_of_beta_candidate() -> None:
+    with (REPOSITORY_ROOT / "pyproject.toml").open("rb") as stream:
+        project = tomllib.load(stream)["project"]
+    message = email.message.Message()
+    message["Name"] = "ml4t-live"
+    message["Version"] = "0.1.0b4.dev1"
+    message["Requires-Python"] = ">=3.12,<3.15"
+    message["License-Expression"] = "MIT"
+    for classifier in EXPECTED_CLASSIFIERS:
+        message["Classifier"] = classifier
+    for label, url in EXPECTED_URLS.items():
+        message["Project-URL"] = f"{label}, {url}"
+    for dependency in project["dependencies"]:
+        message["Requires-Dist"] = dependency
+
+    with pytest.raises(QualificationError, match="Version"):
+        validate_metadata(message, project)
+
+
 def test_metadata_contract_rejects_unbounded_python() -> None:
     message = email.message.Message()
     message["Name"] = "ml4t-live"

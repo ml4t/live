@@ -181,6 +181,8 @@ def validate_workflows(root: Path = WORKFLOW_ROOT) -> list[str]:
             failures.append(f"{name} executes pull_request_target code")
 
     qualification_jobs = qualification["jobs"]
+    if qualification.get("env", {}).get("SETUPTOOLS_SCM_PRETEND_VERSION") != "0.1.0b4":
+        failures.append("qualification does not build the exact 0.1.0b4 candidate version")
     for name in ("source-quality", "deterministic"):
         if _matrix_pythons(qualification_jobs.get(name, {})) != SUPPORTED_PYTHONS:
             failures.append(f"{name} does not cover the supported Python matrix")

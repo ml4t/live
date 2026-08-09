@@ -36,6 +36,7 @@ BUILD_CONSTRAINTS = REPOSITORY_ROOT / "build-constraints.txt"
 INSTALLED_SMOKE = Path(__file__).with_name("installed_smoke.py")
 SUPPORTED_PYTHONS = ("3.12", "3.13", "3.14")
 REJECTED_PYTHON = "3.15"
+CANDIDATE_VERSION = "0.1.0b4"
 EXPECTED_URLS = {
     "Homepage": "https://www.ml4trading.io/docs/live/",
     "Documentation": "https://www.ml4trading.io/docs/live/",
@@ -105,7 +106,10 @@ def build_distributions(destination: Path, source_date_epoch: str) -> tuple[Path
             str(BUILD_CONSTRAINTS),
         ),
         cwd=REPOSITORY_ROOT,
-        environment={"SOURCE_DATE_EPOCH": source_date_epoch},
+        environment={
+            "SETUPTOOLS_SCM_PRETEND_VERSION": CANDIDATE_VERSION,
+            "SOURCE_DATE_EPOCH": source_date_epoch,
+        },
     )
     wheels = sorted(destination.glob("*.whl"))
     sdists = sorted(destination.glob("*.tar.gz"))
@@ -222,7 +226,7 @@ def validate_metadata(message: Message, project: dict[str, object]) -> str:
         version = Version(version_text)
     except Exception as error:
         raise QualificationError("artifact version is not PEP 440 compliant") from error
-    if version.release != (0, 1, 0) or version.pre != ("b", 4):
+    if version != Version(CANDIDATE_VERSION):
         failures.append("Version")
 
     classifiers = set(message.get_all("Classifier", []))

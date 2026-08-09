@@ -14,6 +14,7 @@ from pathlib import Path
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 SOURCE_SCOPES = ("src", "tests", "examples", "scripts")
 COVERAGE_MINIMUM = "80"
+CANDIDATE_ENVIRONMENT = {"SETUPTOOLS_SCM_PRETEND_VERSION": "0.1.0b4"}
 STAGE_GROUPS = {
     "source": frozenset({"ruff-format", "ruff", "types", "pre-commit", "workflow-policy"}),
     "dependency": frozenset({"dependency-audit", "dependency-compatibility"}),
@@ -81,6 +82,7 @@ def qualification_stages(temporary_directory: Path, repetitions: int = 5) -> lis
         Stage(
             "artifact-qualification",
             ("uv", "run", "python", "scripts/qualification/qualify_artifacts.py"),
+            CANDIDATE_ENVIRONMENT,
         ),
         Stage(
             "deterministic-tests-and-branch-coverage",
@@ -172,6 +174,7 @@ def qualification_stages(temporary_directory: Path, repetitions: int = 5) -> lis
                     "--build-constraints",
                     "build-constraints.txt",
                 ),
+                CANDIDATE_ENVIRONMENT,
             ),
             Stage(
                 "distribution-metadata",
