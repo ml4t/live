@@ -1,0 +1,61 @@
+name: Paper qualification
+
+on:
+  workflow_dispatch:
+    inputs:
+      candidate-sha:
+        description: Exact candidate commit to qualify
+        required: true
+        type: string
+
+permissions: {}
+
+env:
+  UV_NO_SOURCES: "1"
+  UV_VERSION: "0.10.9"
+
+jobs:
+  paper:
+    name: IB and Alpaca paper evidence
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: paper
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.candidate-sha }}
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
+        with:
+          version: ${{ env.UV_VERSION }}
+      - run: uv python install 3.12
+      - run: uv sync --python 3.12 --all-extras --dev --locked
+      - run: mkdir -p paper-evidence
+      - name: Run explicit paper-account suite
+        env:
+          ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
+          ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
+          ALPACA_PAPER: "true"
+          IB_HOST: ${{ secrets.IB_HOST }}
+          IB_PORT: ${{ secrets.IB_PORT }}
+          IB_CLIENT_ID: ${{ secrets.IB_CLIENT_ID }}
+        run: >-
+          uv run pytest -q --strict-markers --timeout=120
+          --run-external -m paper tests/integration
+          --junitxml=paper-evidence/paper-qualification.xml
+      - name: Scan retained paper evidence for identifiers and credentials
+        id: evidence-scan
+        if: ${{ always() }}
+        run: >-
+          uv run python scripts/qualification/scan_release_secrets.py
+          --evidence-root paper-evidence
+          --output paper-evidence/secret-scan.json
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: ${{ always() && steps.evidence-scan.outcome == 'success' }}
+        with:
+          name: paper-${{ inputs.candidate-sha }}-${{ github.run_id }}
+          path: paper-evidence/
+          if-no-files-found: error
+          retention-days: 30

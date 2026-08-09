@@ -111,6 +111,14 @@ def build_distributions(destination: Path, source_date_epoch: str) -> tuple[Path
     return wheels[0], sdists[0]
 
 
+def distribution_pair(directory: Path) -> tuple[Path, Path]:
+    wheels = sorted(directory.glob("*.whl"))
+    sdists = sorted(directory.glob("*.tar.gz"))
+    if len(wheels) != 1 or len(sdists) != 1:
+        raise QualificationError("artifact input must contain exactly one wheel and one sdist")
+    return wheels[0], sdists[0]
+
+
 def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as stream:
@@ -414,6 +422,7 @@ def _default_evidence_root() -> Path | None:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--allow-dirty", action="store_true")
+    parser.add_argument("--artifacts-dir", type=Path)
     parser.add_argument("--output", type=Path)
     parser.add_argument("--evidence-root", type=Path)
     args = parser.parse_args()
@@ -426,8 +435,12 @@ def main() -> int:
     epoch = _source_date_epoch()
     with tempfile.TemporaryDirectory(prefix="ml4t-live-artifact-qualification-") as temporary:
         root = Path(temporary)
-        first = build_distributions(root / "build-one", epoch)
-        second = build_distributions(root / "build-two", epoch)
+        if args.artifacts_dir:
+            first = distribution_pair(args.artifacts_dir.resolve())
+            second = build_distributions(root / "reproduction", epoch)
+        else:
+            first = build_distributions(root / "build-one", epoch)
+            second = build_distributions(root / "build-two", epoch)
         assert_reproducible(first, second)
         wheel, sdist = first
         validate_manifests(wheel, sdist)

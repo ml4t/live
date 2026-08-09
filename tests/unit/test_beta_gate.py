@@ -48,11 +48,12 @@ def test_gate_has_explicit_topology_and_rotates_critical_fault_order(tmp_path: P
     names = [stage.name for stage in stages]
     critical = [stage for stage in stages if stage.name.startswith("critical-faults-")]
 
-    assert names[:9] == [
+    assert names[:10] == [
         "ruff-format",
         "ruff",
         "types",
         "pre-commit",
+        "workflow-policy",
         "dependency-audit",
         "dependency-compatibility",
         "artifact-qualification",
@@ -62,3 +63,21 @@ def test_gate_has_explicit_topology_and_rotates_critical_fault_order(tmp_path: P
     assert names[-3:] == ["documentation", "build", "distribution-metadata"]
     assert len(critical) == 5
     assert len({stage.command[6] for stage in critical}) == 5
+
+
+def test_gate_groups_partition_every_stage(tmp_path: Path) -> None:
+    qualification_stages = cast(
+        Callable[[Path, int], Sequence[Any]], NAMESPACE["qualification_stages"]
+    )
+    select_stage_groups = cast(Callable[..., Sequence[Any]], NAMESPACE["select_stage_groups"])
+    stage_groups = cast(dict[str, frozenset[str]], NAMESPACE["STAGE_GROUPS"])
+    stages = qualification_stages(tmp_path, 2)
+
+    selected = select_stage_groups(stages, list(stage_groups))
+
+    assert [stage.name for stage in selected] == [stage.name for stage in stages]
+    assert [stage.name for stage in select_stage_groups(stages, ["stress"])] == [
+        "stress",
+        "critical-faults-1",
+        "critical-faults-2",
+    ]

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import glob
 import os
 import subprocess
@@ -13,6 +14,15 @@ from pathlib import Path
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 SOURCE_SCOPES = ("src", "tests", "examples", "scripts")
 COVERAGE_MINIMUM = "80"
+STAGE_GROUPS = {
+    "source": frozenset({"ruff-format", "ruff", "types", "pre-commit", "workflow-policy"}),
+    "dependency": frozenset({"dependency-audit", "dependency-compatibility"}),
+    "artifact": frozenset({"artifact-qualification"}),
+    "deterministic": frozenset({"deterministic-tests-and-branch-coverage"}),
+    "stress": frozenset({"stress"}),
+    "documentation": frozenset({"documentation"}),
+    "distribution": frozenset({"build", "distribution-metadata"}),
+}
 
 CRITICAL_FAULT_TESTS = (
     "tests/contracts/test_causal_strategy_parity.py::"
@@ -55,6 +65,10 @@ def qualification_stages(temporary_directory: Path, repetitions: int = 5) -> lis
         Stage("ruff", ("uv", "run", "ruff", "check", *SOURCE_SCOPES)),
         Stage("types", ("uv", "run", "ty", "check")),
         Stage("pre-commit", ("uv", "run", "pre-commit", "run", "--all-files")),
+        Stage(
+            "workflow-policy",
+            ("uv", "run", "python", "scripts/qualification/check_workflows.py"),
+        ),
         Stage(
             "dependency-audit",
             ("uv", "run", "python", "scripts/qualification/audit_dependencies.py"),
@@ -159,6 +173,16 @@ def qualification_stages(temporary_directory: Path, repetitions: int = 5) -> lis
     return stages
 
 
+def select_stage_groups(stages: Sequence[Stage], groups: Sequence[str]) -> list[Stage]:
+    selected = set().union(*(STAGE_GROUPS[group] for group in groups))
+    include_faults = "stress" in groups
+    return [
+        stage
+        for stage in stages
+        if stage.name in selected or (include_faults and stage.name.startswith("critical-faults-"))
+    ]
+
+
 def repository_status() -> str:
     result = subprocess.run(
         ["git", "status", "--porcelain=v1", "--untracked-files=all"],
@@ -214,8 +238,14 @@ def execute_stages(
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--group", action="append", choices=sorted(STAGE_GROUPS))
+    args = parser.parse_args()
     with tempfile.TemporaryDirectory(prefix="ml4t-live-beta-gate-") as temporary:
-        return execute_stages(qualification_stages(Path(temporary)))
+        stages = qualification_stages(Path(temporary))
+        if args.group:
+            stages = select_stage_groups(stages, args.group)
+        return execute_stages(stages)
 
 
 if __name__ == "__main__":

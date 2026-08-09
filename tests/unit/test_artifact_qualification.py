@@ -14,6 +14,7 @@ from scripts.qualification.qualify_artifacts import (
     EXPECTED_CLASSIFIERS,
     EXPECTED_URLS,
     QualificationError,
+    distribution_pair,
     load_expected_manifests,
     normalized_sdist_manifest,
     normalized_wheel_manifest,
@@ -51,6 +52,18 @@ def test_artifact_manifest_normalization(tmp_path: Path) -> None:
         "<dist-info>/METADATA",
     }
     assert normalized_sdist_manifest(sdist_path) == {"src/ml4t/live/__init__.py"}
+
+
+def test_external_artifact_input_requires_one_pair(tmp_path: Path) -> None:
+    wheel = tmp_path / "candidate.whl"
+    sdist = tmp_path / "candidate.tar.gz"
+    wheel.touch()
+    sdist.touch()
+
+    assert distribution_pair(tmp_path) == (wheel, sdist)
+    (tmp_path / "unexpected.whl").touch()
+    with pytest.raises(QualificationError, match="exactly one wheel"):
+        distribution_pair(tmp_path)
 
 
 def test_metadata_contract_accepts_declared_beta_candidate() -> None:

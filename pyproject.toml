@@ -42,6 +42,7 @@ dev = [
     "ruff>=0.8",
     "ty",
     "pre-commit>=3.0",
+    "pyyaml==6.0.3",
 ]
 docs = [
     "mkdocs>=1.6,<2",
@@ -93,6 +94,7 @@ dev = [
     "ruff>=0.8.0",
     "ty",
     "pre-commit>=3.0",
+    "pyyaml==6.0.3",
     "twine>=6.0.0",
 ]
 

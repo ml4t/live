@@ -30,10 +30,10 @@ Example Real-time:
 import asyncio
 import logging
 import math
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterator
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import Any, ClassVar, Protocol, cast
 
 from ml4t.specs import (
     BarPayload,
@@ -54,7 +54,7 @@ logger = logging.getLogger(__name__)
 # DataBento is an optional dependency.
 db: Any = None
 try:
-    import databento as db  # ty: ignore[unresolved-import]
+    import databento as db
 
     DATABENTO_AVAILABLE = True
 except ImportError:
@@ -66,6 +66,14 @@ DATABENTO_MISSING_GUARANTEES = (
     "schema-wide causal qualification",
     "credentialed live-service qualification",
 )
+
+
+class _HistoricalRecordSource(Protocol):
+    def __iter__(self) -> Iterator[Any]: ...
+
+
+class _LiveRecordSource(Protocol):
+    def __aiter__(self) -> AsyncIterator[Any]: ...
 
 
 def _validate_symbols(symbols: list[str]) -> None:
@@ -123,7 +131,7 @@ class DataBentoFeed(DataFeedProtocol):
 
     def __init__(
         self,
-        client: "db.Historical | db.Live",
+        client: _HistoricalRecordSource | _LiveRecordSource,
         symbols: list[str],
         *,
         mode: str = "historical",
@@ -299,7 +307,7 @@ class DataBentoFeed(DataFeedProtocol):
         last_timestamp: datetime | None = None
 
         try:
-            for record in self.client:
+            for record in cast(_HistoricalRecordSource, self.client):
                 if not self._running:
                     break
 
@@ -331,7 +339,7 @@ class DataBentoFeed(DataFeedProtocol):
     async def _stream_live(self) -> None:
         """Stream real-time data from DataBento."""
         try:
-            async for record in self.client:
+            async for record in cast(_LiveRecordSource, self.client):
                 if not self._running:
                     break
 
