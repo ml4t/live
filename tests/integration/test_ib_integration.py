@@ -21,6 +21,8 @@ from ml4t.backtest.types import Position
 
 from ml4t.live.brokers.ib import IBBroker
 
+pytestmark = [pytest.mark.integration, pytest.mark.external, pytest.mark.paper]
+
 
 @pytest.fixture
 def ib_config():

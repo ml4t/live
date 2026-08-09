@@ -7,7 +7,7 @@ import pytest
 
 from ml4t.live.feeds.okx_feed import OKXFundingFeed
 
-pytestmark = pytest.mark.integration
+pytestmark = [pytest.mark.integration, pytest.mark.external]
 
 
 @pytest.mark.asyncio

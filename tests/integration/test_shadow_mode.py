@@ -23,7 +23,7 @@ from ml4t.live.feeds.aggregator import BarAggregator
 from ml4t.live.safety import LiveRiskConfig, SafeBroker
 
 # Mark all tests in this file as integration tests
-pytestmark = pytest.mark.integration
+pytestmark = [pytest.mark.integration, pytest.mark.external, pytest.mark.paper]
 
 
 # Client ID counter to ensure unique IDs per test

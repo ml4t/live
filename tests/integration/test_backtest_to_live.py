@@ -15,10 +15,20 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 from ml4t.backtest import OrderSide, Strategy
+from ml4t.specs import (
+    BarPayload,
+    EventCompletion,
+    LifecycleVersion,
+    MarketEvent,
+    MarketEventKind,
+)
 
 from ml4t.live import LiveRiskConfig
+from ml4t.live.feeds.events import strategy_input
 from ml4t.live.safety import SafeBroker
 from ml4t.live.wrappers import ThreadSafeBrokerWrapper
+
+pytestmark = [pytest.mark.integration, pytest.mark.deterministic]
 
 # =============================================================================
 # STRATEGY DEFINITIONS (Same for backtest and live)
@@ -185,20 +195,18 @@ class MockBarFeed:
         bar_data = self._bars[self._index]
         self._index += 1
 
-        # Return (timestamp, data, context) tuple matching DataFeedProtocol
         timestamp = bar_data[0]
-        data = {
-            "SPY": {
-                "open": bar_data[1],
-                "high": bar_data[2],
-                "low": bar_data[3],
-                "close": bar_data[4],
-                "volume": bar_data[5],
-            }
-        }
-        context = {}
-
-        return (timestamp, data, context)
+        return MarketEvent(
+            version=LifecycleVersion.V1,
+            event_time=timestamp,
+            receipt_time=timestamp,
+            kind=MarketEventKind.BAR,
+            completion=EventCompletion.COMPLETE,
+            source="deterministic-integration",
+            asset="SPY",
+            payload=BarPayload(*bar_data[1:]),
+            provider_sequence=self._index,
+        )
 
 
 # =============================================================================
@@ -262,6 +270,9 @@ class MockLiveBroker:
             order_id=f"TEST-{self._order_counter}",
             status=OrderStatus.FILLED,
             created_at=datetime.now(UTC),
+            filled_at=datetime.now(UTC),
+            filled_quantity=quantity,
+            filled_price=100.0,
         )
         self._orders.append(order)
 
@@ -317,13 +328,14 @@ async def _run_strategy_against_feed(
     loop = asyncio.get_event_loop()
     wrapped_broker = ThreadSafeBrokerWrapper(safe_broker, loop)
 
-    async for timestamp, data, context in bar_feed:
+    async for event in bar_feed:
+        timestamp, data, context = strategy_input(event, processing_time=event.receipt_time)
         safe_broker._record_market_data(timestamp, data, context)
         await asyncio.to_thread(strategy.on_data, timestamp, data, context, wrapped_broker)
 
 
 @pytest.mark.asyncio
-async def test_ma_strategy_no_repeat_signals():
+async def test_ma_strategy_no_repeat_signals(tmp_path):
     """
     Test that MA strategy doesn't generate repeat orders.
 
@@ -351,7 +363,11 @@ async def test_ma_strategy_no_repeat_signals():
     mock_broker = MockLiveBroker()
     await mock_broker.connect()
 
-    config = LiveRiskConfig(shadow_mode=False, dedup_window_seconds=0)  # Test real order logic
+    config = LiveRiskConfig(
+        shadow_mode=False,
+        dedup_window_seconds=0,
+        state_file=tmp_path / "risk.json",
+    )
     safe_broker = SafeBroker(mock_broker, config)
 
     bar_feed = MockBarFeed(bars)
@@ -362,7 +378,7 @@ async def test_ma_strategy_no_repeat_signals():
     await _run_strategy_against_feed(strategy, safe_broker, bar_feed)
 
     await bar_feed.stop()
-    await mock_broker.disconnect()
+    await safe_broker.disconnect()
 
     # Verify
     orders = mock_broker._orders
@@ -382,7 +398,7 @@ async def test_ma_strategy_no_repeat_signals():
 
 
 @pytest.mark.asyncio
-async def test_simple_exit_strategy():
+async def test_simple_exit_strategy(tmp_path):
     """Test clean position exit logic."""
     print("\n" + "=" * 70)
     print("TEST: Simple Exit Strategy")
@@ -394,7 +410,11 @@ async def test_simple_exit_strategy():
     mock_broker = MockLiveBroker()
     await mock_broker.connect()
 
-    config = LiveRiskConfig(shadow_mode=False, dedup_window_seconds=0)
+    config = LiveRiskConfig(
+        shadow_mode=False,
+        dedup_window_seconds=0,
+        state_file=tmp_path / "risk.json",
+    )
     safe_broker = SafeBroker(mock_broker, config)
 
     bar_feed = MockBarFeed(bars)
@@ -405,7 +425,7 @@ async def test_simple_exit_strategy():
     await _run_strategy_against_feed(strategy, safe_broker, bar_feed)
 
     await bar_feed.stop()
-    await mock_broker.disconnect()
+    await safe_broker.disconnect()
 
     # Verify
     orders = mock_broker._orders
@@ -426,7 +446,7 @@ async def test_simple_exit_strategy():
 
 
 @pytest.mark.asyncio
-async def test_flip_position_strategy():
+async def test_flip_position_strategy(tmp_path):
     """Test flipping between long and short positions."""
     print("\n" + "=" * 70)
     print("TEST: Flip Position Strategy")
@@ -438,7 +458,11 @@ async def test_flip_position_strategy():
     mock_broker = MockLiveBroker()
     await mock_broker.connect()
 
-    config = LiveRiskConfig(shadow_mode=False, dedup_window_seconds=0)
+    config = LiveRiskConfig(
+        shadow_mode=False,
+        dedup_window_seconds=0,
+        state_file=tmp_path / "risk.json",
+    )
     safe_broker = SafeBroker(mock_broker, config)
 
     bar_feed = MockBarFeed(bars)
@@ -449,7 +473,7 @@ async def test_flip_position_strategy():
     await _run_strategy_against_feed(strategy, safe_broker, bar_feed)
 
     await bar_feed.stop()
-    await mock_broker.disconnect()
+    await safe_broker.disconnect()
 
     # Verify
     orders = mock_broker._orders
@@ -476,7 +500,7 @@ async def test_flip_position_strategy():
 
 
 @pytest.mark.asyncio
-async def test_shadow_mode_prevents_real_orders():
+async def test_shadow_mode_prevents_real_orders(tmp_path):
     """Verify shadow mode doesn't place real orders but tracks virtual positions."""
     print("\n" + "=" * 70)
     print("TEST: Shadow Mode - Virtual Position Tracking")
@@ -488,7 +512,11 @@ async def test_shadow_mode_prevents_real_orders():
     mock_broker = MockLiveBroker()
     await mock_broker.connect()
 
-    config = LiveRiskConfig(shadow_mode=True)  # SHADOW MODE
+    config = LiveRiskConfig(
+        shadow_mode=True,
+        dedup_window_seconds=0,
+        state_file=tmp_path / "risk.json",
+    )
     safe_broker = SafeBroker(mock_broker, config)
 
     bar_feed = MockBarFeed(bars)
@@ -499,7 +527,7 @@ async def test_shadow_mode_prevents_real_orders():
     await _run_strategy_against_feed(strategy, safe_broker, bar_feed)
 
     await bar_feed.stop()
-    await mock_broker.disconnect()
+    await safe_broker.disconnect()
 
     # Verify NO real orders placed
     real_orders = mock_broker._orders

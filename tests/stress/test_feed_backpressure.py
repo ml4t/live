@@ -4,6 +4,7 @@ import gc
 from datetime import UTC, datetime
 
 import psutil
+import pytest
 from ml4t.specs import (
     BarPayload,
     EventCompletion,
@@ -16,6 +17,8 @@ from ml4t.specs import (
 )
 
 from ml4t.live.feeds.queue import BoundedEventQueue, FeedOverflowError
+
+pytestmark = pytest.mark.stress
 
 
 def event(kind: MarketEventKind, sequence: int) -> MarketEvent:

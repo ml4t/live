@@ -324,9 +324,8 @@ await LiveEngine(MyStrategy(), safe_broker, live_feed).run()
 ```bash
 git clone https://github.com/ml4t/live.git
 cd ml4t-live
-uv sync
-uv run pytest tests/ -q
-uv run ty check
+uv sync --all-extras --dev
+uv run python scripts/qualification/run_beta_gate.py
 ```
 
 ## Safety Notice

@@ -2,6 +2,7 @@
 name = "ml4t-live"
 dynamic = ["version"]
 description = "Live trading platform for ML4T strategies"
+readme = "README.md"
 license = { text = "MIT" }
 classifiers = [
     "License :: OSI Approved :: MIT License",
@@ -73,13 +74,18 @@ dev = [
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
-addopts = ["-m", "not integration"]
-testpaths = ["tests/unit", "tests/contracts"]
+testpaths = ["tests"]
 filterwarnings = [
+    "error",
     "ignore:websockets\\.legacy is deprecated.*:DeprecationWarning",
 ]
 markers = [
-    "integration: marks tests as integration tests (deselect with '-m \"not integration\"')",
+    "deterministic: requires no network, credentials, or external process",
+    "integration: exercises multiple package components",
+    "external: requires a network service or external process and explicit --run-external",
+    "paper: requires an authenticated paper-trading account and explicit --run-external",
+    "stress: sustained resource test requiring explicit --run-stress",
+    "benchmark: performance measurement requiring explicit --run-benchmarks",
 ]
 
 [tool.ruff]

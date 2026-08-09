@@ -9,18 +9,20 @@ repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
     hooks:
-      - id: trailing-whitespace
-      - id: end-of-file-fixer
       - id: check-yaml
         args: [--unsafe]
       - id: check-added-large-files
       - id: check-merge-conflict
       - id: check-toml
       - id: debug-statements
-      - id: mixed-line-ending
 
   - repo: local
     hooks:
+      - id: text-hygiene
+        name: non-mutating text hygiene
+        entry: uv run python scripts/qualification/check_text_hygiene.py
+        language: system
+        types: [text]
       - id: ty
         name: ty type check
         entry: uv run ty check

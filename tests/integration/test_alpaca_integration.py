@@ -15,7 +15,7 @@ import pytest
 from ml4t.backtest.types import OrderSide, OrderType
 
 # Skip all tests if credentials not set
-pytestmark = pytest.mark.integration
+pytestmark = [pytest.mark.integration, pytest.mark.external, pytest.mark.paper]
 
 
 @pytest.fixture
