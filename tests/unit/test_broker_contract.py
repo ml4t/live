@@ -28,6 +28,10 @@ REQUIRED_CONCRETE_METHODS = {
     "cancel_order_async",
     "replace_order_async",
     "close_position_async",
+    "positions",
+    "pending_orders",
+    "is_connected",
+    "execution_capabilities",
 }
 
 
