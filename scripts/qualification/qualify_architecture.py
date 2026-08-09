@@ -18,7 +18,13 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 SOURCE_ROOT = REPOSITORY_ROOT / "src" / "ml4t" / "live"
 BUILD_CONSTRAINTS = REPOSITORY_ROOT / "build-constraints.txt"
 SUPPORTED_PYTHONS = ("3.12", "3.13", "3.14")
-FORBIDDEN_SUPPRESSIONS = ("type: ignore", "# noqa", "pragma: no cover")
+FORBIDDEN_SUPPRESSIONS = (
+    "type: ignore",
+    "# noqa",
+    "pragma: no cover",
+    "pyright: ignore",
+    "ty: ignore",
+)
 EXTERNAL_CONSUMER = """\
 import asyncio
 

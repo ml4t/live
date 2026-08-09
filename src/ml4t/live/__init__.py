@@ -26,7 +26,12 @@ from .feeds.experimental import ExperimentalFeedError, ExperimentalFeedWarning
 from .feeds.ib_feed import IBDataFeed
 from .feeds.okx_feed import OKXFundingFeed
 from .feeds.queue import FeedOverflowError, FeedQueueSnapshot
-from .lifecycle import LifecycleInvocation, LiveLifecycleDispatcher, callback_trace
+from .lifecycle import (
+    LifecycleInvocation,
+    LiveLifecycleDispatcher,
+    StrategyCallbackTimeoutError,
+    callback_trace,
+)
 from .orders import (
     BrokerOrderContractError,
     CanonicalOrderRequest,
@@ -95,6 +100,7 @@ __all__ = [
     "OrderValidationError",
     "UnsupportedOrderCapabilityError",
     "LiveLifecycleDispatcher",
+    "StrategyCallbackTimeoutError",
     "callback_trace",
     "LiveIntentError",
     "LiveStrategyRuntime",

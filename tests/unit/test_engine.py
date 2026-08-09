@@ -2,9 +2,10 @@
 
 import asyncio
 import threading
+import time
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from ml4t.backtest import BacktestConfig, Strategy
@@ -25,6 +26,7 @@ from ml4t.specs import (
     UnsupportedLifecycleVersionError,
 )
 
+from ml4t.live import StrategyCallbackTimeoutError
 from ml4t.live.engine import LiveEngine
 from ml4t.live.feeds.events import FeedContinuityError
 from ml4t.live.feeds.queue import BoundedEventQueue, FeedOverflowError
@@ -756,6 +758,54 @@ async def test_shared_lifecycle_dispatches_all_callbacks_on_one_worker_thread() 
         "strategy_callback_started",
         "strategy_callback_succeeded",
     ]
+
+
+@pytest.mark.asyncio
+async def test_slow_callback_times_out_after_worker_becomes_quiescent() -> None:
+    class SlowStrategy(RecordingStrategy):
+        def on_data(self, timestamp, data, context, broker) -> None:
+            time.sleep(0.08)
+            super().on_data(timestamp, data, context, broker)
+
+    strategy = SlowStrategy()
+    broker = MockAsyncBroker()
+    feed = MockDataFeed(
+        [(datetime(2024, 1, 2, 14, 30, tzinfo=UTC), {"AAPL": {"close": 100.0}}, {})]
+    )
+    engine = LiveEngine(strategy, broker, feed, strategy_callback_timeout_seconds=0.03)
+    await engine.connect()
+
+    with pytest.raises(StrategyCallbackTimeoutError, match="on_data exceeded") as raised:
+        await engine.run()
+
+    assert raised.value.elapsed_seconds >= 0.08
+    assert strategy.on_data_calls
+    assert strategy.on_end_called is True
+    assert not any(thread.name.startswith("ml4t-live-strategy") for thread in threading.enumerate())
+    callback_events = [
+        event["event"]
+        for event in engine.operational_events
+        if event["event"].startswith("strategy_callback_")
+    ]
+    assert "strategy_callback_failed" in callback_events
+    assert callback_events[-1] == "strategy_callback_succeeded"
+
+
+@pytest.mark.parametrize("value", [False, 0, -1, float("nan"), float("inf")])
+def test_invalid_callback_timeout_rejected_before_runtime_side_effects(value: object) -> None:
+    broker = MockAsyncBroker()
+    feed = MockDataFeed([])
+
+    with pytest.raises(ValueError, match="callback_timeout_seconds"):
+        LiveEngine(
+            RecordingStrategy(),
+            broker,
+            feed,
+            strategy_callback_timeout_seconds=cast(Any, value),
+        )
+
+    assert broker.is_connected is False
+    assert feed._started is False
 
 
 def test_unsupported_lifecycle_rejected_before_runtime_side_effects() -> None:

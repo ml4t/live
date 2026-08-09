@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+import math
 from collections import deque
 from collections.abc import Callable, Iterable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime
 from functools import partial
+from time import monotonic
 from typing import Any
 
 from ml4t.specs import LIFECYCLE_V1, LifecycleContract, LifecyclePhase
@@ -25,6 +27,19 @@ class LifecycleInvocation:
     event_time: datetime | None
 
 
+class StrategyCallbackTimeoutError(TimeoutError):
+    """Raised after an over-deadline callback becomes quiescent."""
+
+    def __init__(self, callback: str, timeout_seconds: float, elapsed_seconds: float) -> None:
+        self.callback = callback
+        self.timeout_seconds = timeout_seconds
+        self.elapsed_seconds = elapsed_seconds
+        super().__init__(
+            f"strategy callback {callback} exceeded {timeout_seconds:g}s "
+            f"({elapsed_seconds:.3f}s elapsed)"
+        )
+
+
 class LiveLifecycleDispatcher:
     """Run every synchronous strategy callback on one dedicated worker thread."""
 
@@ -33,10 +48,19 @@ class LiveLifecycleDispatcher:
         strategy: Any,
         contract: LifecycleContract = LIFECYCLE_V1,
         *,
+        callback_timeout_seconds: float = 5.0,
         event_recorder: Callable[..., None] | None = None,
     ) -> None:
+        if (
+            isinstance(callback_timeout_seconds, bool)
+            or not isinstance(callback_timeout_seconds, int | float)
+            or not math.isfinite(callback_timeout_seconds)
+            or callback_timeout_seconds <= 0
+        ):
+            raise ValueError("callback_timeout_seconds must be finite and positive")
         self.strategy = strategy
         self.contract = contract
+        self.callback_timeout_seconds = float(callback_timeout_seconds)
         self.event_recorder = event_recorder
         self.invocations: deque[LifecycleInvocation] = deque(maxlen=RETAINED_CALLBACK_TRACE_LIMIT)
         self._invocation_count = 0
@@ -85,8 +109,12 @@ class LiveLifecycleDispatcher:
         )
         loop = asyncio.get_running_loop()
         future = loop.run_in_executor(self._executor, partial(callback, *args))
+        started_at = monotonic()
         try:
-            result = await asyncio.shield(future)
+            result = await asyncio.wait_for(
+                asyncio.shield(future),
+                timeout=self.callback_timeout_seconds,
+            )
         except asyncio.CancelledError:
             try:
                 await future
@@ -101,6 +129,19 @@ class LiveLifecycleDispatcher:
                     event_time=event_time,
                 )
             raise
+        except TimeoutError:
+            try:
+                await asyncio.shield(future)
+            except BaseException as error:
+                self._record_failure(invocation, error)
+                raise
+            timeout_error = StrategyCallbackTimeoutError(
+                specification.callback,
+                self.callback_timeout_seconds,
+                monotonic() - started_at,
+            )
+            self._record_failure(invocation, timeout_error)
+            raise timeout_error from None
         except BaseException as error:
             self._record_failure(invocation, error)
             raise
@@ -164,4 +205,9 @@ def callback_trace(
     )
 
 
-__all__ = ["LifecycleInvocation", "LiveLifecycleDispatcher", "callback_trace"]
+__all__ = [
+    "LifecycleInvocation",
+    "LiveLifecycleDispatcher",
+    "StrategyCallbackTimeoutError",
+    "callback_trace",
+]

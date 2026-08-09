@@ -195,6 +195,7 @@ class LiveEngine:
         max_recovery_attempts: int = 3,
         max_event_age_seconds: float | None = None,
         on_health_change: Callable[[str, dict[str, Any]], None] | None = None,
+        strategy_callback_timeout_seconds: float = 5.0,
         lifecycle_version: LifecycleVersion | str = LifecycleVersion.V1,
         execution_policy: ExecutionPolicy | None = None,
         strategy_config: BacktestConfig | None = None,
@@ -215,6 +216,8 @@ class LiveEngine:
             max_event_age_seconds: Maximum provider-event age before dispatch. When omitted, use
                 the supported feed's declared limit if present.
             on_health_change: Optional callback invoked when runtime health changes.
+            strategy_callback_timeout_seconds: Maximum callback duration. A callback that exceeds
+                this duration is allowed to become quiescent before a typed timeout aborts the run.
             lifecycle_version: Portable strategy lifecycle version.
             execution_policy: Explicit live execution capabilities and behavior.
             strategy_config: Backtest strategy configuration supplied to ``on_prepare``.
@@ -244,6 +247,7 @@ class LiveEngine:
         )
         self._validate_event_age(self.max_event_age_seconds)
         self.on_health_change = on_health_change
+        self.strategy_callback_timeout_seconds = strategy_callback_timeout_seconds
         self.lifecycle_version = negotiated_version
         self.execution_policy = execution_policy or default_live_execution_policy()
         self.strategy_config = strategy_config or BacktestConfig()
@@ -255,6 +259,7 @@ class LiveEngine:
         self.lifecycle_dispatcher = LiveLifecycleDispatcher(
             strategy,
             LIFECYCLE_V1,
+            callback_timeout_seconds=strategy_callback_timeout_seconds,
             event_recorder=self._record_runtime_event,
         )
 

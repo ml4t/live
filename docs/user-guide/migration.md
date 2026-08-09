@@ -90,6 +90,10 @@ candidate removes no root export from that release, but the following changes re
   recovery controls.
 - `LiveEngine` accepts lifecycle, execution-policy, and maximum-event-age inputs and exposes typed
   runtime state and retained operational transitions.
+- Synchronous lifecycle callbacks have a five-second default deadline. An over-deadline callback
+  is allowed to finish so it cannot continue mutating state during cleanup, then
+  `StrategyCallbackTimeoutError` aborts the run. Set `strategy_callback_timeout_seconds` to an
+  explicit positive duration when a reviewed callback legitimately needs longer.
 - Remove the beta `halt_on_error` argument. Lifecycle version 1 always stops, finalizes, and
   reraises a strategy exception; the beta flag was ignored and could imply unsupported recovery.
 - `LiveRiskConfig` requires an explicit `execution_mode`. The old `shadow_mode=True` form remains a
