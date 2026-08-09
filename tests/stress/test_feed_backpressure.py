@@ -46,11 +46,7 @@ def event(kind: MarketEventKind, sequence: int) -> MarketEvent:
     )
 
 
-def test_sustained_overload_keeps_every_event_kind_and_rss_bounded() -> None:
-    process = psutil.Process()
-    gc.collect()
-    baseline_rss = process.memory_info().rss
-
+def exercise_sustained_overload() -> None:
     for kind in MarketEventKind:
         queue = BoundedEventQueue(capacity=64, feed=f"stress-{kind.value}")
         for sequence in range(25_000):
@@ -66,6 +62,14 @@ def test_sustained_overload_keeps_every_event_kind_and_rss_bounded() -> None:
         assert snapshot.overflow_count == 1
         assert snapshot.failed is True
 
+
+def test_sustained_overload_keeps_every_event_kind_and_rss_bounded() -> None:
+    process = psutil.Process()
+    exercise_sustained_overload()
+    gc.collect()
+    baseline_rss = process.memory_info().rss
+
+    exercise_sustained_overload()
     gc.collect()
     rss_growth = process.memory_info().rss - baseline_rss
-    assert rss_growth < 20 * 1024 * 1024
+    assert rss_growth < 8 * 1024 * 1024
