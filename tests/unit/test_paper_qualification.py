@@ -15,6 +15,7 @@ from scripts.qualification.qualify_paper import (
     PaperQualificationError,
     _assert_atomic_rejections,
     _cleanup_tags,
+    _raw_tagged_orders,
     assemble_bundle,
     build_candidate_manifest,
     validate_bundle,
@@ -92,6 +93,18 @@ def _write_wheel(path: Path, version: str = "0.1.0b4") -> None:
             f"ml4t_live-{version}.dist-info/METADATA",
             f"Metadata-Version: 2.4\nName: ml4t-live\nVersion: {version}\n",
         )
+
+
+def test_ib_validation_warning_remains_a_tagged_working_order() -> None:
+    trade = MagicMock()
+    trade.order.orderRef = "ml4tq-12345678-a"
+    trade.orderStatus.status = "ValidationError"
+    broker = MagicMock()
+    broker.ib.openTrades.return_value = [trade]
+
+    matches = _raw_tagged_orders("ib", broker, {"ml4tq-12345678-a"})
+
+    assert matches == [trade]
 
 
 def test_candidate_manifest_binds_successful_run_and_artifact_hashes(tmp_path: Path) -> None:

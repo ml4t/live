@@ -1,5 +1,6 @@
 """Unit tests for IBBroker connection and setup (TASK-011, TASK-013, TASK-014)."""
 
+import logging
 import time
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -59,6 +60,20 @@ class TestIBBrokerSetup:
         assert broker._port == 4002
         assert broker._client_id == 5
         assert broker._account == "DU99999"
+
+    def test_ib_async_logs_redact_account_identifiers(self, caplog):
+        dependency_logger = logging.getLogger("ib_async.wrapper")
+
+        with caplog.at_level(logging.WARNING, logger="ib_async.wrapper"):
+            dependency_logger.warning(
+                "IBKR API validation warning: Trade(permId=987654, "
+                "account='DU1234567', errorCode=0, errorCode=399)"
+            )
+
+        assert "DU1234567" not in caplog.text
+        assert "987654" not in caplog.text
+        assert "code=399" in caplog.text
+        assert "details redacted" in caplog.text
 
     @pytest.mark.asyncio
     @patch("ml4t.live.brokers.ib.IB")
@@ -801,6 +816,28 @@ class TestOrderSubmission:
 
     @pytest.mark.asyncio
     @patch("ml4t.live.brokers.ib.IB")
+    async def test_sync_orders_retains_ib_async_validation_warning(self, mock_ib_class):
+        mock_ib = MagicMock()
+        mock_trade = MagicMock()
+        mock_trade.order.action = "BUY"
+        mock_trade.order.totalQuantity = 1
+        mock_trade.order.orderId = 202
+        mock_trade.order.orderType = "LMT"
+        mock_trade.order.lmtPrice = 1.0
+        mock_trade.orderStatus.status = "ValidationError"
+        mock_trade.contract.symbol = "AAPL"
+        mock_ib.openTrades.return_value = [mock_trade]
+
+        broker = IBBroker()
+        broker.ib = mock_ib
+
+        await broker._sync_orders()
+
+        assert len(broker._pending_orders) == 1
+        assert broker._ib_order_map[202][0] in broker._pending_orders
+
+    @pytest.mark.asyncio
+    @patch("ml4t.live.brokers.ib.IB")
     async def test_sync_orders_detects_moc(self, mock_ib_class):
         """Test _sync_orders preserves MOC orders from IB."""
         mock_ib = MagicMock()
@@ -1032,6 +1069,35 @@ class TestOrderStatusCallbacks:
         assert order.status == OrderStatus.PENDING
         assert "ML4T-4" in broker._pending_orders
         assert 126 in broker._ib_order_map
+
+    @pytest.mark.parametrize("status", ["ValidationError", "ApiUpdate"])
+    def test_on_order_status_retains_ib_async_active_warning_status(self, status):
+        broker = IBBroker()
+        order = Order(
+            asset="AAPL",
+            side=OrderSide.BUY,
+            quantity=1,
+            order_type=OrderType.LIMIT,
+            limit_price=1.0,
+            order_id="ML4T-5",
+            status=OrderStatus.PENDING,
+            created_at=datetime.now(UTC),
+        )
+        broker._connected = True
+        broker._pending_orders[order.order_id] = order
+        broker._ib_order_map[127] = (order.order_id, time.time())
+        trade = MagicMock()
+        trade.order.orderId = 127
+        trade.orderStatus.status = status
+        trade.orderStatus.filled = 0
+        trade.orderStatus.avgFillPrice = 0
+
+        broker._on_order_status(trade)
+
+        assert broker._snapshot_error is None
+        assert broker._connected is True
+        assert broker._pending_orders[order.order_id] is order
+        assert broker._ib_order_map[127][0] == order.order_id
 
     def test_on_order_status_multiple_orders(self):
         """Test _on_order_status handles multiple orders correctly."""

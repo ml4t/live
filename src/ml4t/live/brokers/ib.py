@@ -32,6 +32,9 @@ from ib_async import (
     Order as IBOrder,
 )
 from ib_async import (
+    OrderStatus as IBOrderStatus,
+)
+from ib_async import (
     Trade as IBTrade,
 )
 from ml4t.backtest.types import Order, OrderSide, OrderStatus, OrderType, Position
@@ -41,6 +44,33 @@ from ml4t.live.orders import CanonicalOrderRequest
 from ml4t.live.persistence import redact_sensitive
 
 logger = logging.getLogger(__name__)
+
+IB_PENDING_ORDER_STATUSES = frozenset(
+    {*IBOrderStatus.ActiveStates, IBOrderStatus.PendingCancel, "PartiallyFilled"}
+)
+
+
+class _IBAsyncRedactionFilter(logging.Filter):
+    _ml4t_ib_redaction = True
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        message = record.getMessage()
+        if message.startswith("IBKR API validation warning:"):
+            codes = re.findall(r"(?:errorCode=|Warning )(\d+)", message)
+            code = codes[-1] if codes else "unknown"
+            record.msg = f"IBKR API validation warning (code={code}; details redacted)"
+        else:
+            record.msg = str(redact_sensitive(message))
+        record.args = ()
+        return True
+
+
+_ib_async_logger = logging.getLogger("ib_async.wrapper")
+if not any(
+    getattr(existing_filter, "_ml4t_ib_redaction", False)
+    for existing_filter in _ib_async_logger.filters
+):
+    _ib_async_logger.addFilter(_IBAsyncRedactionFilter())
 
 
 class IBBroker:
@@ -700,14 +730,7 @@ class IBBroker:
             self._pending_orders.pop(order_id, None)
             self._ib_order_map.pop(ib_order_id, None)
             logger.info("IBBroker: Order %s REJECTED", order_id)
-        elif status_str in (
-            "PendingSubmit",
-            "ApiPending",
-            "PreSubmitted",
-            "Submitted",
-            "PartiallyFilled",
-            "PendingCancel",
-        ):
+        elif status_str in IB_PENDING_ORDER_STATUSES:
             if filled_quantity > order.filled_quantity:
                 order.filled_quantity = filled_quantity
                 if filled_price > 0 and math.isfinite(filled_price):
@@ -780,13 +803,7 @@ class IBBroker:
         candidate_orders: dict[str, Order] = {}
         candidate_map: dict[int, tuple[str, float]] = {}
         for trade in trades:
-            if trade.orderStatus.status in (
-                "PendingSubmit",
-                "ApiPending",
-                "PreSubmitted",
-                "Submitted",
-                "PendingCancel",
-            ):
+            if str(trade.orderStatus.status) in IB_PENDING_ORDER_STATUSES:
                 # Generate order ID for existing order
                 self._order_counter += 1
                 order_id = f"ML4T-{self._order_counter}"

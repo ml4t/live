@@ -29,13 +29,6 @@ ASSET = "AAPL"
 QUANTITY = 1.0
 INITIAL_LIMIT = 1.00
 REPLACEMENT_LIMIT = 1.01
-PENDING_IB_STATUSES = {
-    "PendingSubmit",
-    "ApiPending",
-    "PreSubmitted",
-    "Submitted",
-    "PendingCancel",
-}
 
 
 class PaperQualificationError(RuntimeError):
@@ -233,6 +226,12 @@ def _number(value: Any) -> float:
     return number
 
 
+def _pending_ib_statuses() -> frozenset[str]:
+    from ml4t.live.brokers.ib import IB_PENDING_ORDER_STATUSES
+
+    return IB_PENDING_ORDER_STATUSES
+
+
 def _order_type(limit_price: Any, stop_price: Any, time_in_force: Any = None) -> str:
     if str(getattr(time_in_force, "value", time_in_force)).lower() == "cls":
         return "moc"
@@ -299,7 +298,7 @@ def _vendor_snapshot(
     }
     orders = Counter()
     for trade in broker.ib.openTrades():
-        if str(trade.orderStatus.status) not in PENDING_IB_STATUSES:
+        if str(trade.orderStatus.status) not in _pending_ib_statuses():
             continue
         limit_price = getattr(trade.order, "lmtPrice", None)
         stop_price = getattr(trade.order, "auxPrice", None)
@@ -374,7 +373,7 @@ def _raw_tagged_orders(provider: str, broker: Any, tags: set[str]) -> list[Any]:
         trade
         for trade in broker.ib.openTrades()
         if str(getattr(trade.order, "orderRef", "")) in tags
-        and str(trade.orderStatus.status) in PENDING_IB_STATUSES
+        and str(trade.orderStatus.status) in _pending_ib_statuses()
     ]
 
 
