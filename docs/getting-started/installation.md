@@ -14,11 +14,11 @@ uv add ml4t-live
 
 ## Optional Add-Ons
 
-`ml4t-live` installs the beta-supported broker/feed stack used by the package. DataBento is optional
-and must be installed separately for deliberate experimental `DataBentoFeed` evaluation:
+`ml4t-live` installs the beta-supported broker/feed stack used by the package. The DataBento SDK is
+available only through the bounded optional extra for deliberate experimental evaluation:
 
 ```bash
-uv add databento
+uv add 'ml4t-live[experimental]'
 ```
 
 ## Install From Source
@@ -26,7 +26,7 @@ uv add databento
 ```bash
 git clone https://github.com/ml4t/live.git
 cd live
-uv sync --dev
+uv sync --all-extras --dev
 ```
 
 ## Broker Setup

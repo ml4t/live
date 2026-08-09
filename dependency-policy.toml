@@ -1,0 +1,95 @@
+schema_version = 1
+evidence_max_age_days = 7
+vulnerability_policy = "block every known advisory in the locked runtime closure"
+abandonment_threshold_days = 1095
+allowed_license_identifiers = [
+    "Apache-2.0",
+    "0BSD",
+    "APSL-2.0",
+    "BSD",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "MIT",
+    "MIT-0",
+    "MPL-2.0",
+    "PSF-2.0",
+    "CC0-1.0",
+    "Zlib",
+]
+
+[dependencies.ml4t-backtest]
+requirement = "ml4t-backtest @ git+https://github.com/ml4t/backtest.git@12bcbc5684112a6137b0778350d7f44588544164"
+minimum = "ml4t-backtest @ git+https://github.com/ml4t/backtest.git@12bcbc5684112a6137b0778350d7f44588544164"
+locked = "ml4t-backtest @ git+https://github.com/ml4t/backtest.git@12bcbc5684112a6137b0778350d7f44588544164"
+maximum = "ml4t-backtest @ git+https://github.com/ml4t/backtest.git@12bcbc5684112a6137b0778350d7f44588544164"
+license = "MIT"
+support = "first-party exact revision; expand only after a released compatibility line passes"
+
+[dependencies.ml4t-specs]
+requirement = "ml4t-specs @ git+https://github.com/ml4t/specs.git@85d3476683a70b4f17e5e8cb82dd23d05b373dc8"
+minimum = "ml4t-specs @ git+https://github.com/ml4t/specs.git@85d3476683a70b4f17e5e8cb82dd23d05b373dc8"
+locked = "ml4t-specs @ git+https://github.com/ml4t/specs.git@85d3476683a70b4f17e5e8cb82dd23d05b373dc8"
+maximum = "ml4t-specs @ git+https://github.com/ml4t/specs.git@85d3476683a70b4f17e5e8cb82dd23d05b373dc8"
+license = "MIT"
+support = "first-party exact revision; expand only after a released compatibility line passes"
+
+[dependencies.ib-async]
+requirement = "ib-async==2.1.0"
+minimum = "ib-async==2.1.0"
+locked = "ib-async==2.1.0"
+maximum = "ib-async==2.1.0"
+license = "BSD"
+support = "active upstream; exact SDK version because broker behavior is release-sensitive"
+
+[dependencies.alpaca-py]
+requirement = "alpaca-py==0.43.5"
+minimum = "alpaca-py==0.43.5"
+locked = "alpaca-py==0.43.5"
+maximum = "alpaca-py==0.43.5"
+license = "Apache-2.0"
+support = "active upstream; exact version because 0.43.2 omits a required runtime dependency"
+
+[dependencies.httpx]
+requirement = "httpx==0.28.1"
+minimum = "httpx==0.28.1"
+locked = "httpx==0.28.1"
+maximum = "httpx==0.28.1"
+license = "BSD-3-Clause"
+support = "active upstream; exact pre-1.0 transport API"
+
+[dependencies.ccxt]
+requirement = "ccxt>=4.5.31,<=4.5.71"
+minimum = "ccxt==4.5.31"
+locked = "ccxt==4.5.71"
+maximum = "ccxt==4.5.71"
+license = "MIT"
+support = "active upstream; accepted patch interval is exercised at both endpoints"
+
+[dependencies.databento]
+requirement = "databento==0.83.0"
+minimum = "databento==0.83.0"
+locked = "databento==0.83.0"
+maximum = "databento==0.83.0"
+license = "Apache-2.0"
+support = "experimental optional adapter; exact SDK version"
+matrix = false
+
+[imports]
+alpaca = "alpaca-py"
+ccxt = "ccxt"
+databento = "databento"
+httpx = "httpx"
+ib_async = "ib-async"
+"ml4t.backtest" = "ml4t-backtest"
+"ml4t.specs" = "ml4t-specs"
+
+[build-dependencies.hatchling]
+requirement = "hatchling==1.31.0"
+license = "MIT"
+support = "active upstream; exact isolated-build backend"
+
+[build-dependencies.hatch-vcs]
+requirement = "hatch-vcs==0.5.0"
+license = "MIT"
+support = "active upstream; exact VCS version plugin"

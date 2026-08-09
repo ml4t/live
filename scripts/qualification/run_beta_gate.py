@@ -56,6 +56,14 @@ def qualification_stages(temporary_directory: Path, repetitions: int = 5) -> lis
         Stage("types", ("uv", "run", "ty", "check")),
         Stage("pre-commit", ("uv", "run", "pre-commit", "run", "--all-files")),
         Stage(
+            "dependency-audit",
+            ("uv", "run", "python", "scripts/qualification/audit_dependencies.py"),
+        ),
+        Stage(
+            "dependency-compatibility",
+            ("uv", "run", "python", "scripts/qualification/check_dependency_matrix.py"),
+        ),
+        Stage(
             "deterministic-tests-and-branch-coverage",
             (
                 "uv",
@@ -122,7 +130,14 @@ def qualification_stages(temporary_directory: Path, repetitions: int = 5) -> lis
             ),
             Stage(
                 "build",
-                ("uv", "build", "--out-dir", str(distribution_directory)),
+                (
+                    "uv",
+                    "build",
+                    "--out-dir",
+                    str(distribution_directory),
+                    "--build-constraints",
+                    "build-constraints.txt",
+                ),
             ),
             Stage(
                 "distribution-metadata",

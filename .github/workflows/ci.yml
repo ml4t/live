@@ -57,7 +57,7 @@ jobs:
         run: uv python install ${{ env.PYTHON_VERSION }}
 
       - name: Build package
-        run: uv build
+        run: uv build --build-constraints build-constraints.txt
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v7.0.1

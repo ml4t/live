@@ -32,7 +32,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from datetime import time as dt_time
-from enum import Enum
+from enum import StrEnum
 from time import monotonic
 from typing import Any, cast
 from zoneinfo import ZoneInfo
@@ -74,7 +74,7 @@ US_EQUITY_CLOSE = dt_time(16, 0)
 RECOVERABLE_HEALTH_STATES = {"feed_silent", "broker_disconnected"}
 
 
-class RuntimeState(str, Enum):
+class RuntimeState(StrEnum):
     """One explicit phase of engine resource and strategy ownership."""
 
     STOPPED = "stopped"

@@ -105,7 +105,7 @@ def test_missing_dependency_is_explicit_after_opt_in() -> None:
     with (
         patch("ml4t.live.feeds.databento_feed.DATABENTO_AVAILABLE", False),
         pytest.warns(ExperimentalFeedWarning),
-        pytest.raises(ImportError, match="databento package required"),
+        pytest.raises(ImportError, match=r"ml4t-live\[experimental\]"),
     ):
         DataBentoFeed(None, symbols=["SPY"], experimental=True)
 

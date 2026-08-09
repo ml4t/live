@@ -54,7 +54,7 @@ logger = logging.getLogger(__name__)
 # DataBento is an optional dependency.
 db: Any = None
 try:
-    import databento as db  # type: ignore[import-unresolved]
+    import databento as db  # ty: ignore[unresolved-import]
 
     DATABENTO_AVAILABLE = True
 except ImportError:
@@ -146,7 +146,7 @@ class DataBentoFeed(DataFeedProtocol):
             missing_guarantees=DATABENTO_MISSING_GUARANTEES,
         )
         if not DATABENTO_AVAILABLE:
-            raise ImportError("databento package required. Install with: pip install databento")
+            raise ImportError("DataBentoFeed requires the ml4t-live[experimental] package extra")
         _validate_symbols(symbols)
         if mode not in {"historical", "live"}:
             raise ValueError("mode must be 'historical' or 'live'")
@@ -193,7 +193,7 @@ class DataBentoFeed(DataFeedProtocol):
                 missing_guarantees=DATABENTO_MISSING_GUARANTEES,
             )
         if not DATABENTO_AVAILABLE:
-            raise ImportError("databento package not installed")
+            raise ImportError("DataBentoFeed requires the ml4t-live[experimental] package extra")
         _validate_symbols(symbols)
         _validate_replay_speed(replay_speed)
 
@@ -237,7 +237,7 @@ class DataBentoFeed(DataFeedProtocol):
                 missing_guarantees=DATABENTO_MISSING_GUARANTEES,
             )
         if not DATABENTO_AVAILABLE:
-            raise ImportError("databento package not installed")
+            raise ImportError("DataBentoFeed requires the ml4t-live[experimental] package extra")
         _validate_symbols(symbols)
 
         client = db.Live(key=api_key)

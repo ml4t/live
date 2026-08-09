@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime, timedelta
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from ml4t.specs import EventCompletion, GapEvidence, MarketEvent, MarketEventKind
@@ -15,7 +15,7 @@ class FeedContractError(ValueError):
     """Raised when provider data cannot cross the portable feed boundary."""
 
 
-class ContinuityDisposition(str, Enum):
+class ContinuityDisposition(StrEnum):
     """Decision for one structurally valid market event."""
 
     ACCEPT = "accept"

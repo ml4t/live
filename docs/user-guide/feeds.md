@@ -121,8 +121,9 @@ feed = DataBentoFeed.from_live(
 )
 ```
 
-`DataBentoFeed` requires the optional `databento` package. Its deterministic tests cover only typed
-OHLCV, trade, and top-of-book records; this does not qualify the service or its other schemas.
+`DataBentoFeed` requires the `ml4t-live[experimental]` package extra. Its deterministic tests cover
+only typed OHLCV, trade, and top-of-book records; this does not qualify the service or its other
+schemas.
 
 ### CryptoFeed
 

@@ -38,6 +38,12 @@ The goal is gradual deployment: shadow mode first, then paper trading, then live
 uv add ml4t-live
 ```
 
+Add the optional DataBento SDK only for deliberate experimental evaluation:
+
+```bash
+uv add 'ml4t-live[experimental]'
+```
+
 ## Quick Start
 
 ```python
@@ -143,7 +149,8 @@ feed = CryptoFeed(
 
 The experimental adapters require explicit opt-in and report their missing guarantees on first
 use. They do not currently promise bounded overload behavior, reconnect continuity, performance,
-or credentialed service qualification.
+or credentialed service qualification. The `experimental` package extra installs the DataBento
+SDK; generic CCXT support is already present in the default environment.
 
 ## Risk Configuration
 

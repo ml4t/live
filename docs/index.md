@@ -268,7 +268,7 @@ Or:
 pip install ml4t-live
 ```
 
-Install `databento` separately if you deliberately opt in to experimental `DataBentoFeed` use.
+Install `ml4t-live[experimental]` if you deliberately opt in to experimental `DataBentoFeed` use.
 
 ## Documentation Map
 

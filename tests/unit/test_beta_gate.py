@@ -48,11 +48,13 @@ def test_gate_has_explicit_topology_and_rotates_critical_fault_order(tmp_path: P
     names = [stage.name for stage in stages]
     critical = [stage for stage in stages if stage.name.startswith("critical-faults-")]
 
-    assert names[:6] == [
+    assert names[:8] == [
         "ruff-format",
         "ruff",
         "types",
         "pre-commit",
+        "dependency-audit",
+        "dependency-compatibility",
         "deterministic-tests-and-branch-coverage",
         "stress",
     ]
