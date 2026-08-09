@@ -283,6 +283,7 @@
     },
     "portable_strategy_state": {
       "fields": [
+        "schema_version",
         "targets",
         "children",
         "order_by_child",
@@ -5596,6 +5597,21 @@
       "module": "ml4t.live.safety",
       "name": "VirtualPortfolio",
       "signature": "(initial_cash: float = 100000.0)"
+    },
+    {
+      "classification": "internal",
+      "defined_in": "ml4t.live.state_migration",
+      "kind": "constant",
+      "module": "ml4t.live.state_migration",
+      "name": "PORTABLE_STRATEGY_STATE_SCHEMA_VERSION"
+    },
+    {
+      "classification": "internal",
+      "defined_in": "ml4t.live.state_migration",
+      "kind": "function",
+      "module": "ml4t.live.state_migration",
+      "name": "migrate_portable_strategy_state",
+      "signature": "(value: 'dict[str, Any]', *, position_quantities: 'dict[str, float]') -> 'tuple[dict[str, Any], bool]'"
     },
     {
       "bases": [

@@ -39,6 +39,7 @@ from .persistence import (
     redact_sensitive,
 )
 from .protocols import AsyncBrokerProtocol
+from .state_migration import migrate_portable_strategy_state
 
 logger = logging.getLogger(__name__)
 
@@ -314,7 +315,30 @@ class RiskState:
             )
         state = cls(**data)
         state.validate()
+        state.portable_strategy_state, _ = migrate_portable_strategy_state(
+            state.portable_strategy_state,
+            position_quantities=state._persisted_position_quantities(),
+        )
         return state
+
+    def _persisted_position_quantities(self) -> dict[str, float]:
+        quantities = {
+            asset: self._finite_number(quantity, "persisted position quantity")
+            for asset, quantity in self.persisted_positions.items()
+        }
+        positions = self.shadow_portfolio.get("positions", [])
+        if not isinstance(positions, list):
+            raise CorruptStateError("shadow portfolio positions must be a list")
+        for position in positions:
+            if not isinstance(position, dict):
+                raise CorruptStateError("shadow portfolio positions must contain objects")
+            asset = position.get("asset")
+            if not isinstance(asset, str) or not asset:
+                raise CorruptStateError("shadow portfolio position asset is invalid")
+            quantities[asset] = self._finite_number(
+                position.get("quantity"), "shadow portfolio position quantity"
+            )
+        return quantities
 
     def validate(self) -> None:
         """Validate persisted field types and numeric boundaries."""
@@ -786,6 +810,8 @@ class SafeBroker:
         self._state_generation = 0
         self._state_error: PersistenceSafetyError | None = None
         self._journal_error: AuditJournalError | None = None
+        self._state_migration_required = False
+        self._virtual_portfolio = VirtualPortfolio(initial_cash=100_000.0)
         self._state_store.acquire_writer()
 
         try:
@@ -798,8 +824,13 @@ class SafeBroker:
                     "persisted execution mode does not match the configured execution_mode"
                 )
             self._state.execution_mode = self.execution_mode.value
+            if config.shadow_mode and self._state.shadow_portfolio:
+                self._virtual_portfolio.restore_state(self._state.shadow_portfolio)
             self._audit_journal = SecureAuditJournal(self._journal_path())
             self._validate_journal()
+            if self._state_migration_required:
+                self._save_state()
+                self._state_migration_required = False
         except BaseException:
             self._state_store.release_writer()
             raise
@@ -814,11 +845,6 @@ class SafeBroker:
         # Latest market reference per asset, populated by LiveEngine
         self._latest_market_data: dict[str, MarketSnapshot] = {}
         self._last_reconciliation_report: dict[str, Any] | None = None
-
-        # NEW: VirtualPortfolio for shadow mode (Gemini v2 fix)
-        self._virtual_portfolio = VirtualPortfolio(initial_cash=100_000.0)
-        if config.shadow_mode and self._state.shadow_portfolio:
-            self._virtual_portfolio.restore_state(self._state.shadow_portfolio)
 
         # Initialize high water mark if not set
         if self._state.high_water_mark == 0.0:
@@ -2039,7 +2065,9 @@ class SafeBroker:
             return RiskState(date=today)
         state = RiskState.from_dict(snapshot.payload)
         self._state_generation = snapshot.generation
-        changed = snapshot.legacy
+        self._state_migration_required = (
+            snapshot.legacy or state.to_dict() != snapshot.payload or state.execution_mode is None
+        )
 
         if state.date != today:
             logger.info("New trading day - resetting daily counters")
@@ -2047,12 +2075,7 @@ class SafeBroker:
             state.daily_loss = 0.0
             state.orders_placed = 0
             state.session_start_equity = None
-            changed = True
-
-        if changed:
-            self._state_generation = self._state_store.save(
-                state.to_dict(), expected_generation=self._state_generation
-            )
+            self._state_migration_required = True
         return state
 
     def _save_state(self) -> None:

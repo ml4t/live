@@ -31,6 +31,7 @@ wheel = [
     "ml4t/live/py.typed",
     "ml4t/live/runtime.py",
     "ml4t/live/safety.py",
+    "ml4t/live/state_migration.py",
     "ml4t/live/wrappers.py",
 ]
 
@@ -65,5 +66,6 @@ sdist = [
     "src/ml4t/live/py.typed",
     "src/ml4t/live/runtime.py",
     "src/ml4t/live/safety.py",
+    "src/ml4t/live/state_migration.py",
     "src/ml4t/live/wrappers.py",
 ]

@@ -35,6 +35,10 @@ from ml4t.specs import OrderSide as SpecOrderSide
 from ml4t.specs import OrderType as SpecOrderType
 
 from .persistence import redact_sensitive
+from .state_migration import (
+    PORTABLE_STRATEGY_STATE_SCHEMA_VERSION,
+    migrate_portable_strategy_state,
+)
 
 if TYPE_CHECKING:
     from ml4t.backtest.risk.position import PositionRule
@@ -861,6 +865,7 @@ class LiveStrategyRuntime:
 
     def to_state(self) -> dict[str, Any]:
         return {
+            "schema_version": PORTABLE_STRATEGY_STATE_SCHEMA_VERSION,
             "targets": [intent.to_dict() for intent in self.targets],
             "children": [child.to_dict() for child in self.children],
             "order_by_child": dict(self._order_by_child),
@@ -884,7 +889,13 @@ class LiveStrategyRuntime:
         load = getattr(self.broker, "load_portable_strategy_state", None)
         if not callable(load):
             return
-        state = load()
+        state, migrated = migrate_portable_strategy_state(
+            load(),
+            position_quantities={
+                asset: float(position.quantity)
+                for asset, position in getattr(self.broker, "positions", {}).items()
+            },
+        )
         for raw in state.get("targets", ()):
             intent = CanonicalTargetIntent.from_mapping(raw)
             self._targets[intent.intent_id] = intent
@@ -915,6 +926,8 @@ class LiveStrategyRuntime:
         self._target_rule_filled = {
             str(key): float(value) for key, value in state.get("target_rule_filled", {}).items()
         }
+        if migrated:
+            self._persist()
 
     @staticmethod
     def _round(value: float, policy: RoundingPolicy) -> float:

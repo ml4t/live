@@ -1,0 +1,22 @@
+{
+  "date": "2026-08-09",
+  "daily_loss": 75.25,
+  "orders_placed": 4,
+  "high_water_mark": 100500.0,
+  "session_start_equity": 100000.0,
+  "persisted_positions": {
+    "SPY": 50.0
+  },
+  "persisted_pending_orders": [
+    {
+      "asset": "SPY",
+      "side": "sell",
+      "quantity": 10.0,
+      "order_type": "limit",
+      "limit_price": 105.0,
+      "stop_price": null
+    }
+  ],
+  "kill_switch_activated": true,
+  "kill_switch_reason": "published beta operator halt"
+}

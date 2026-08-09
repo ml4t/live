@@ -90,10 +90,37 @@ candidate removes no root export from that release, but the following changes re
   recovery controls.
 - `LiveEngine` accepts lifecycle, execution-policy, and maximum-event-age inputs and exposes typed
   runtime state and retained operational transitions.
-- The beta risk-state JSON is unversioned. Do not edit or replace it during migration. The stable
-  candidate must qualify its pre-connection upgrade or rejection path before release.
+- `LiveRiskConfig` requires an explicit `execution_mode`. The old `shadow_mode=True` form remains a
+  compatibility alias. Replace `shadow_mode=False` with either `execution_mode="paper"` or
+  `execution_mode="live"`; the library cannot infer the intended account safely.
+- `LiveEngine.strategy_config` is a stable backtest configuration passed to `on_prepare`. Code that
+  reads the instance attribute should treat it as configuration owned by the engine.
+- Crossed quote events now include `crossed` and `crossed_policy` metadata. Consumers that validate
+  exact feed metadata objects must accept these documented keys.
 - Generic CCXT and DataBento feeds require an explicit experimental opt-in. They are not part of the
   stable feed contract.
+
+### Upgrade Persisted Beta State
+
+Keep the state file and its journal files together. Construct `SafeBroker` with the same state and
+journal paths and the intended execution mode. Construction validates the complete state and the
+journal chain before replacing any file or connecting to a provider.
+
+The supported upgrade paths are:
+
+- The unversioned `0.1.0b3` risk-state object is written as the checksummed version-1 envelope.
+  Daily loss, order count, equity watermarks, positions, pending orders, and kill-switch state are
+  retained. The selected execution mode is added during this one-time replacement.
+- A qualified `0.1.0b4` envelope retains the audit journal and upgrades its unversioned portable
+  strategy state to schema version 1. Target and reconciliation records are validated. Child
+  decision and effective sessions are derived from their target. Position-rule identifiers and
+  entry side are restored from the policy and persisted position, while watermarks, exit reason,
+  duration, context, filled quantities, and idempotency records remain unchanged.
+
+An invalid journal, corrupt field, ambiguous legacy position side, or unsupported future schema
+raises `AuditJournalError` or `CorruptStateError`. The state and journal remain byte-for-byte
+unchanged, and no broker method or strategy callback runs. Do not retry after editing the state by
+hand. Restore the original files and resolve the reported incompatibility first.
 
 ## Compatibility After The First Stable Release
 

@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "fixtures": {
+    "0.1.0b3-risk-state.json": {
+      "distribution": "ml4t-live",
+      "version": "0.1.0b3",
+      "artifact": "ml4t_live-0.1.0b3-py3-none-any.whl",
+      "artifact_sha256": "53cfed9e1d3a92dbc61e7d7cbe2a48a70e1b3f230acfb7ff061f5104caa7139d",
+      "source": "https://pypi.org/project/ml4t-live/0.1.0b3/",
+      "generator": "ml4t.live.safety.RiskState.to_dict"
+    },
+    "0.1.0b4-risk-state.json": {
+      "distribution": "ml4t-live",
+      "version": "0.1.0b4",
+      "artifact": "ml4t_live-0.1.0b4-py3-none-any.whl",
+      "artifact_sha256": "3fd9061f8bff4a1697178f7e07473f49e87e7278024765d4ffdfd5d4285233ad",
+      "source_revision": "37a1e3a92c52135ae03456445894b897889b30d1",
+      "generator": "ml4t.live.safety.RiskState.save_atomic"
+    },
+    "0.1.0b4-journal.jsonl": {
+      "distribution": "ml4t-live",
+      "version": "0.1.0b4",
+      "artifact_sha256": "3fd9061f8bff4a1697178f7e07473f49e87e7278024765d4ffdfd5d4285233ad",
+      "source_revision": "37a1e3a92c52135ae03456445894b897889b30d1",
+      "generator": "ml4t.live.persistence.SecureAuditJournal.append"
+    }
+  }
+}
