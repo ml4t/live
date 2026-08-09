@@ -207,6 +207,7 @@ When drawdown exceeds `max_drawdown_pct`, the kill switch activates and blocks a
 
 ```python
 config = LiveRiskConfig(
+    execution_mode="shadow",
     kill_switch_enabled=True,
     max_drawdown_pct=0.05,
     state_file=".ml4t_risk_state.json",  # Atomic JSON writes
@@ -221,7 +222,7 @@ Shadow mode tracks positions internally without broker interaction:
 from ml4t.live import VirtualPortfolio
 
 portfolio = VirtualPortfolio(initial_cash=100_000)
-# SafeBroker uses this automatically when shadow_mode=True
+# SafeBroker uses this automatically when execution_mode="shadow"
 ```
 
 ### State Persistence

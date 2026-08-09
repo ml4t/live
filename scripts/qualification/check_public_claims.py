@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import ast
 import json
 from pathlib import Path
 
@@ -39,7 +40,10 @@ PROHIBITED_CLAIMS = (
     "same strategy class works in backtest and live",
     "identical outputs in backtest and live modes",
     "same code for backtest and live",
+    "this strategy is **identical** to what we use in backtesting",
 )
+
+OBSOLETE_ADOPTION_ARGUMENTS = ("shadow_mode=True", "shadow_mode=False")
 
 REQUIRED_TEXT = {
     "README.md": (
@@ -145,6 +149,45 @@ def unsupported_claims(paths: tuple[Path, ...], *, prefix: str = "") -> list[str
     return failures
 
 
+def obsolete_adoption_arguments(paths: tuple[Path, ...], *, prefix: str = "") -> list[str]:
+    """Return prerelease configuration arguments taught by maintained adoption material."""
+    failures: list[str] = []
+    for path in paths:
+        if not path.is_file():
+            continue
+        text = path.read_text()
+        for argument in OBSOLETE_ADOPTION_ARGUMENTS:
+            if argument in text:
+                failures.append(f"{prefix}obsolete adoption argument in {path}: {argument}")
+    return failures
+
+
+def ambiguous_execution_configurations(paths: tuple[Path, ...], *, prefix: str = "") -> list[str]:
+    """Return Python examples that construct risk configuration without an execution mode."""
+    failures: list[str] = []
+    for path in paths:
+        if not path.is_file() or path.suffix != ".py":
+            continue
+        try:
+            tree = ast.parse(path.read_text(), filename=str(path))
+        except SyntaxError as error:
+            failures.append(f"{prefix}unparseable adoption source {path}:{error.lineno}")
+            continue
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            name = node.func.id if isinstance(node.func, ast.Name) else None
+            if isinstance(node.func, ast.Attribute):
+                name = node.func.attr
+            if name == "LiveRiskConfig" and not any(
+                keyword.arg == "execution_mode" for keyword in node.keywords
+            ):
+                failures.append(
+                    f"{prefix}ambiguous execution configuration in {path}:{node.lineno}"
+                )
+    return failures
+
+
 def check_public_claims(root: Path = REPOSITORY_ROOT) -> list[str]:
     """Return claim and example-policy failures for one source tree."""
     failures: list[str] = []
@@ -157,6 +200,16 @@ def check_public_claims(root: Path = REPOSITORY_ROOT) -> list[str]:
         texts[relative] = path.read_text()
 
     failures.extend(unsupported_claims(public_surface_paths(root)))
+    adoption_paths = (
+        root / "README.md",
+        *((root / "docs").rglob("*.md")),
+        *((root / "examples").glob("*.py")),
+    )
+    adoption_paths = tuple(
+        path for path in adoption_paths if path != root / "docs/user-guide/migration.md"
+    )
+    failures.extend(obsolete_adoption_arguments(adoption_paths))
+    failures.extend(ambiguous_execution_configurations(adoption_paths))
 
     for relative, required in REQUIRED_TEXT.items():
         text = texts.get(relative, "")
@@ -205,6 +258,8 @@ def check_chapter_claims(book_root: Path, code_root: Path) -> list[str]:
     code_text = "\n".join(path.read_text() for path in code_paths if path.is_file())
     combined = f"{book_text}\n{code_text}".casefold()
     failures.extend(unsupported_claims((*book_paths, *code_paths), prefix="chapter "))
+    failures.extend(obsolete_adoption_arguments(code_paths, prefix="chapter "))
+    failures.extend(ambiguous_execution_configurations(code_paths, prefix="chapter "))
     for phrase in ("lifecycle version 1", "canonical intent", "outcome parity"):
         if phrase.casefold() not in combined:
             failures.append(f"chapter does not state: {phrase}")

@@ -5,8 +5,10 @@ from pathlib import Path
 from scripts.qualification.check_public_claims import (
     DETERMINISTIC_EXAMPLES,
     EXTERNAL_EXAMPLES,
+    ambiguous_execution_configurations,
     check_chapter_claims,
     check_public_claims,
+    obsolete_adoption_arguments,
     public_surface_paths,
     unsupported_claims,
 )
@@ -55,6 +57,24 @@ def test_unsupported_claims_identify_the_source_file(tmp_path: Path) -> None:
     failures = unsupported_claims((path,))
 
     assert failures == [f"unsupported absolute claim in {path}: works unchanged in production"]
+
+
+def test_obsolete_adoption_arguments_identify_the_source_file(tmp_path: Path) -> None:
+    path = tmp_path / "chapter.py"
+    path.write_text("LiveRiskConfig(shadow_mode=True)\n")
+
+    failures = obsolete_adoption_arguments((path,))
+
+    assert failures == [f"obsolete adoption argument in {path}: shadow_mode=True"]
+
+
+def test_ambiguous_execution_configuration_identifies_the_source_line(tmp_path: Path) -> None:
+    path = tmp_path / "chapter.py"
+    path.write_text("config = LiveRiskConfig(max_order_value=1)\n")
+
+    failures = ambiguous_execution_configurations((path,))
+
+    assert failures == [f"ambiguous execution configuration in {path}:1"]
 
 
 def test_chapter_scan_requires_both_engines_lifecycle_and_intents(tmp_path: Path) -> None:
