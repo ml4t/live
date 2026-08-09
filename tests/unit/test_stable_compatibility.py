@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import json
 import runpy
 import tomllib
 from collections.abc import Callable
@@ -11,9 +12,17 @@ from typing import Any, cast
 
 ROOT = Path(__file__).parents[2]
 CHECKER = runpy.run_path(str(ROOT / "scripts" / "qualification" / "check_stable_compatibility.py"))
+CAPTURE = runpy.run_path(str(ROOT / "scripts" / "qualification" / "capture_stable_surface.py"))
 compare_surfaces = cast(
     Callable[[dict[str, Any], dict[str, Any]], list[str]], CHECKER["compare_surfaces"]
 )
+
+
+def test_committed_baseline_matches_source_contract() -> None:
+    capture_surface = cast(Callable[[Path], dict[str, Any]], CAPTURE["capture_surface"])
+    baseline = json.loads((ROOT / "stable-api-baseline.json").read_text())
+
+    assert compare_surfaces(baseline, capture_surface(ROOT / "src")) == []
 
 
 def test_compatibility_policy_requires_installed_semver_contract() -> None:
@@ -31,7 +40,7 @@ def surface() -> dict[str, Any]:
     return {
         "schema_version": 1,
         "distribution": {"name": "ml4t-live", "version": "0.1.0"},
-        "root_exports": ["Config", "Failure"],
+        "root_exports": ["Config", "Failure", "Mode"],
         "symbols": [
             {
                 "module": "ml4t.live",
@@ -53,6 +62,17 @@ def surface() -> dict[str, Any]:
                 "signature": "()",
                 "bases": ["builtins.RuntimeError"],
                 "methods": [],
+            },
+            {
+                "module": "ml4t.live",
+                "name": "Mode",
+                "classification": "stable",
+                "kind": "enum",
+                "defined_in": "ml4t.live.mode",
+                "signature": "(*values)",
+                "bases": ["builtins.str", "enum.Enum"],
+                "methods": [],
+                "enum_members": [{"name": "SHADOW", "value": "'shadow'"}],
             },
             {
                 "module": "ml4t.live",
@@ -118,6 +138,17 @@ def test_default_change_and_unbaselined_stable_symbol_fail() -> None:
 
     assert any("ml4t.live:Config.dataclass_fields" in item for item in failures)
     assert any("unbaselined stable symbol ml4t.live:NewStable" in item for item in failures)
+
+
+def test_enum_value_change_fails() -> None:
+    baseline = surface()
+    candidate = copy.deepcopy(baseline)
+    mode = next(item for item in candidate["symbols"] if item["name"] == "Mode")
+    mode["enum_members"][0]["value"] = "'paper'"
+
+    assert any(
+        "ml4t.live:Mode.enum_members" in item for item in compare_surfaces(baseline, candidate)
+    )
 
 
 def test_experimental_changes_do_not_create_stable_failures() -> None:

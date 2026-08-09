@@ -1,0 +1,5541 @@
+{
+  "classification_rules": {
+    "experimental_exports": [
+      "CryptoFeed",
+      "DataBentoFeed",
+      "ExperimentalFeedError",
+      "ExperimentalFeedWarning"
+    ],
+    "module_exports": "same classification as the root object when root-exported",
+    "root_exports": "stable unless named in experimental_exports",
+    "source_definitions_not_exported": "internal"
+  },
+  "cli": {
+    "preflight": {
+      "arguments": [
+        {
+          "choices": [
+            "alpaca",
+            "ib"
+          ],
+          "default": "None",
+          "dest": "broker",
+          "options": [],
+          "required": true,
+          "type": null
+        },
+        {
+          "choices": null,
+          "default": "'.ml4t_risk_state.json'",
+          "dest": "state_file",
+          "options": [
+            "--state-file"
+          ],
+          "required": false,
+          "type": null
+        },
+        {
+          "choices": null,
+          "default": "False",
+          "dest": "strict",
+          "options": [
+            "--strict"
+          ],
+          "required": false,
+          "type": null
+        },
+        {
+          "choices": null,
+          "default": "False",
+          "dest": "require_market_open",
+          "options": [
+            "--require-market-open"
+          ],
+          "required": false,
+          "type": null
+        }
+      ],
+      "classification": "stable"
+    },
+    "shadow": {
+      "arguments": [
+        {
+          "choices": null,
+          "default": "None",
+          "dest": "strategy",
+          "options": [],
+          "required": true,
+          "type": "Path"
+        },
+        {
+          "choices": [
+            "alpaca",
+            "okx"
+          ],
+          "default": "'okx'",
+          "dest": "feed",
+          "options": [
+            "--feed"
+          ],
+          "required": false,
+          "type": null
+        },
+        {
+          "choices": null,
+          "default": "60",
+          "dest": "duration",
+          "options": [
+            "--duration"
+          ],
+          "required": false,
+          "type": "int"
+        },
+        {
+          "choices": null,
+          "default": "None",
+          "dest": "feed_silence_seconds",
+          "options": [
+            "--feed-silence-seconds"
+          ],
+          "required": false,
+          "type": "float"
+        },
+        {
+          "choices": null,
+          "default": "'.ml4t_risk_state.json'",
+          "dest": "state_file",
+          "options": [
+            "--state-file"
+          ],
+          "required": false,
+          "type": null
+        }
+      ],
+      "classification": "stable"
+    },
+    "status": {
+      "arguments": [
+        {
+          "choices": null,
+          "default": "'.ml4t_risk_state.json'",
+          "dest": "state_file",
+          "options": [
+            "--state-file"
+          ],
+          "required": false,
+          "type": null
+        }
+      ],
+      "classification": "stable"
+    }
+  },
+  "distribution": {
+    "name": "ml4t-live",
+    "version": "0.1.0b4.dev53+g00034d542"
+  },
+  "entry_points": {
+    "ml4t-live": "ml4t.live.cli.main:app"
+  },
+  "module_exports": {
+    "ml4t.live": [
+      "AcceptedOrderPersistenceError",
+      "AlpacaBroker",
+      "AlpacaDataFeed",
+      "AsyncBrokerProtocol",
+      "AuditJournalError",
+      "BarAggregator",
+      "BarBuffer",
+      "BrokerOrderContractError",
+      "BrokerProtocol",
+      "BrokerSnapshotError",
+      "CanonicalOrderRequest",
+      "ConcurrentStateWriterError",
+      "CorruptStateError",
+      "CryptoFeed",
+      "DataBentoFeed",
+      "DataFeedProtocol",
+      "ExperimentalFeedError",
+      "ExperimentalFeedWarning",
+      "FeedContinuityError",
+      "FeedContractError",
+      "FeedOverflowError",
+      "FeedQueueSnapshot",
+      "IBBroker",
+      "IBDataFeed",
+      "LifecycleInvocation",
+      "LiveEngine",
+      "LiveIntentError",
+      "LiveLifecycleDispatcher",
+      "LiveRiskConfig",
+      "LiveStrategyRuntime",
+      "LiveStrategyRuntimeError",
+      "OKXFundingFeed",
+      "OrderReplacementGapError",
+      "OrderValidationError",
+      "PersistenceSafetyError",
+      "ReconciliationMismatchError",
+      "ReducingRiskExecutionError",
+      "RiskLimitError",
+      "RiskState",
+      "RuntimeCleanupError",
+      "RuntimeFailureError",
+      "RuntimeState",
+      "RuntimeTransition",
+      "SafeBroker",
+      "ThreadSafeBrokerWrapper",
+      "UnsafePersistencePathError",
+      "UnsupportedLiveCapabilityError",
+      "UnsupportedOrderCapabilityError",
+      "VirtualPortfolio",
+      "callback_trace",
+      "default_live_execution_policy"
+    ],
+    "ml4t.live.brokers": [
+      "AlpacaBroker",
+      "IBBroker"
+    ],
+    "ml4t.live.feeds": [
+      "AlpacaDataFeed",
+      "BarAggregator",
+      "BarBuffer",
+      "CryptoFeed",
+      "DataBentoFeed",
+      "ExperimentalFeedError",
+      "ExperimentalFeedWarning",
+      "FeedContinuityError",
+      "FeedContractError",
+      "FeedOverflowError",
+      "FeedQueueSnapshot",
+      "IBDataFeed",
+      "OKXFundingFeed"
+    ],
+    "ml4t.live.feeds.events": [
+      "ContinuityDisposition",
+      "EventContinuityTracker",
+      "FeedContinuityError",
+      "FeedContractError",
+      "sequence_unavailable",
+      "strategy_input",
+      "utc_datetime",
+      "validate_event_timing"
+    ],
+    "ml4t.live.feeds.experimental": [
+      "ExperimentalFeedError",
+      "ExperimentalFeedWarning"
+    ],
+    "ml4t.live.feeds.queue": [
+      "BoundedEventQueue",
+      "FeedOverflowError",
+      "FeedQueueSnapshot"
+    ],
+    "ml4t.live.lifecycle": [
+      "LifecycleInvocation",
+      "LiveLifecycleDispatcher",
+      "callback_trace"
+    ],
+    "ml4t.live.orders": [
+      "BrokerOrderContractError",
+      "CanonicalOrderRequest",
+      "OrderValidationError",
+      "UnsupportedOrderCapabilityError"
+    ],
+    "ml4t.live.persistence": [
+      "AcceptedOrderPersistenceError",
+      "AuditJournalError",
+      "ConcurrentStateWriterError",
+      "CorruptStateError",
+      "PersistenceSafetyError",
+      "SecureAuditJournal",
+      "SecureStateStore",
+      "StateSnapshot",
+      "UnsafePersistencePathError",
+      "redact_sensitive"
+    ],
+    "ml4t.live.runtime": [
+      "LiveIntentError",
+      "LiveStrategyRuntime",
+      "LiveStrategyRuntimeError",
+      "ReducingRiskExecutionError",
+      "UnsupportedLiveCapabilityError",
+      "default_live_execution_policy"
+    ]
+  },
+  "persisted_schemas": {
+    "audit_journal": {
+      "head_fields": [
+        "schema_version",
+        "sequence",
+        "head_hash",
+        "checksum"
+      ],
+      "record_fields": [
+        "schema_version",
+        "sequence",
+        "timestamp",
+        "event",
+        "payload",
+        "previous_hash",
+        "entry_hash"
+      ],
+      "version": 1
+    },
+    "portable_strategy_state": {
+      "fields": [
+        "targets",
+        "children",
+        "order_by_child",
+        "processed_targets",
+        "reconciliations",
+        "position_rule_states",
+        "exit_idempotency",
+        "rule_exit_orders",
+        "rule_exit_filled",
+        "target_rule_filled"
+      ],
+      "version": 1
+    },
+    "risk_state": {
+      "envelope_fields": [
+        "schema_version",
+        "generation",
+        "payload",
+        "checksum"
+      ],
+      "fields": [
+        "date",
+        "daily_loss",
+        "orders_placed",
+        "high_water_mark",
+        "session_start_equity",
+        "persisted_positions",
+        "persisted_pending_orders",
+        "portable_strategy_state",
+        "replacement_gaps",
+        "shadow_portfolio",
+        "kill_switch_activated",
+        "kill_switch_reason"
+      ],
+      "version": 1
+    }
+  },
+  "root_exports": [
+    "AcceptedOrderPersistenceError",
+    "AlpacaBroker",
+    "AlpacaDataFeed",
+    "AsyncBrokerProtocol",
+    "AuditJournalError",
+    "BarAggregator",
+    "BarBuffer",
+    "BrokerOrderContractError",
+    "BrokerProtocol",
+    "BrokerSnapshotError",
+    "CanonicalOrderRequest",
+    "ConcurrentStateWriterError",
+    "CorruptStateError",
+    "CryptoFeed",
+    "DataBentoFeed",
+    "DataFeedProtocol",
+    "ExperimentalFeedError",
+    "ExperimentalFeedWarning",
+    "FeedContinuityError",
+    "FeedContractError",
+    "FeedOverflowError",
+    "FeedQueueSnapshot",
+    "IBBroker",
+    "IBDataFeed",
+    "LifecycleInvocation",
+    "LiveEngine",
+    "LiveIntentError",
+    "LiveLifecycleDispatcher",
+    "LiveRiskConfig",
+    "LiveStrategyRuntime",
+    "LiveStrategyRuntimeError",
+    "OKXFundingFeed",
+    "OrderReplacementGapError",
+    "OrderValidationError",
+    "PersistenceSafetyError",
+    "ReconciliationMismatchError",
+    "ReducingRiskExecutionError",
+    "RiskLimitError",
+    "RiskState",
+    "RuntimeCleanupError",
+    "RuntimeFailureError",
+    "RuntimeState",
+    "RuntimeTransition",
+    "SafeBroker",
+    "ThreadSafeBrokerWrapper",
+    "UnsafePersistencePathError",
+    "UnsupportedLiveCapabilityError",
+    "UnsupportedOrderCapabilityError",
+    "VirtualPortfolio",
+    "callback_trace",
+    "default_live_execution_policy"
+  ],
+  "schema_version": 1,
+  "source_runtime_mismatches": [],
+  "symbols": [
+    {
+      "bases": [
+        "ml4t.live.persistence.PersistenceSafetyError"
+      ],
+      "classification": "stable",
+      "defined_in": "ml4t.live.persistence",
+      "kind": "exception",
+      "methods": [],
+      "module": "ml4t.live",
+      "name": "AcceptedOrderPersistenceError",
+      "signature": null
+    },
+    {
+      "bases": [
+        "builtins.object"
+      ],
+      "classification": "stable",
+      "defined_in": "ml4t.live.brokers.alpaca",
+      "kind": "class",
+      "methods": [
+        {
+          "kind": "method",
+          "name": "assert_paper_trading",
+          "signature": "(self) -> None"
+        },
+        {
+          "kind": "method",
+          "name": "cancel_order_async",
+          "signature": "(self, order_id: str) -> bool"
+        },
+        {
+          "kind": "method",
+          "name": "close_position_async",
+          "signature": "(self, asset: str) -> ml4t.backtest.types.Order | None"
+        },
+        {
+          "kind": "method",
+          "name": "connect",
+          "signature": "(self) -> None"
+        },
+        {
+          "kind": "method",
+          "name": "disconnect",
+          "signature": "(self) -> None"
+        },
+        {
+          "kind": "property",
+          "name": "execution_capabilities",
+          "signature": "(self) -> frozenset[ml4t.specs.intents.ExecutionCapability]"
+        },
+        {
+          "kind": "method",
+          "name": "get_account_value_async",
+          "signature": "(self) -> float"
+        },
+        {
+          "kind": "method",
+          "name": "get_cash_async",
+          "signature": "(self) -> float"
+        },
+        {
+          "kind": "method",
+          "name": "get_pending_orders_async",
+          "signature": "(self, asset: str | None = None) -> list[ml4t.backtest.types.Order]"
+        },
+        {
+          "kind": "method",
+          "name": "get_position",
+          "signature": "(self, asset: str) -> ml4t.backtest.types.Position | None"
+        },
+        {
+          "kind": "method",
+          "name": "get_position_async",
+          "signature": "(self, asset: str) -> ml4t.backtest.types.Position | None"
+        },
+        {
+          "kind": "method",
+          "name": "get_positions_async",
+          "signature": "(self) -> dict[str, ml4t.backtest.types.Position]"
+        },
+        {
+          "kind": "property",
+          "name": "is_connected",
+          "signature": "(self) -> bool"
+        },
+        {
+          "kind": "method",
+          "name": "is_connected_async",
+          "signature": "(self) -> bool"
+        },
+        {
+          "kind": "property",
+          "name": "pending_orders",
+          "signature": "(self) -> list[ml4t.backtest.types.Order]"
+        },
+        {
+          "kind": "property",
+          "name": "positions",
+          "signature": "(self) -> dict[str, ml4t.backtest.types.Position]"
+        },
+        {
+          "kind": "method",
+          "name": "replace_order_async",
+          "signature": "(self, order_id: str, *, quantity: float | None = None, limit_price: float | None = None, stop_price: float | None = None, **kwargs: Any) -> ml4t.backtest.types.Order"
+        },
+        {
+          "kind": "method",
+          "name": "submit_order_async",
+          "signature": "(self, asset: str, quantity: float, side: ml4t.backtest.types.OrderSide | None = None, order_type: ml4t.backtest.types.OrderType = <OrderType.MARKET: 'market'>, limit_price: float | None = None, stop_price: float | None = None, **kwargs: Any) -> ml4t.backtest.types.Order"
+        }
+      ],
+      "module": "ml4t.live",
+      "name": "AlpacaBroker",
+      "signature": "(api_key: str, secret_key: str, paper: bool = True)"
+    },
+    {
+      "bases": [
+        "ml4t.live.protocols.DataFeedProtocol"
+      ],
+      "classification": "stable",
+      "defined_in": "ml4t.live.feeds.alpaca_feed",
+      "kind": "class",
+      "methods": [
+        {
+          "kind": "method",
+          "name": "start",
+          "signature": "(self) -> None"
+        },
+        {
+          "kind": "property",
+          "name": "stats",
+          "signature": "(self) -> dict[str, Any]"
+        },
+        {
+          "kind": "method",
+          "name": "stop",
+          "signature": "(self) -> None"
+        }
+      ],
+      "module": "ml4t.live",
+      "name": "AlpacaDataFeed",
+      "signature": "(api_key: str, secret_key: str, symbols: list[str], *, data_type: str = 'bars', feed: str = 'iex', queue_capacity: int = 1024)"
+    },
+    {
+      "bases": [
+        "typing.Protocol"
+      ],
+      "classification": "stable",
+      "defined_in": "ml4t.live.protocols",
+      "kind": "protocol",
+      "methods": [
+        {
+          "kind": "method",
+          "name": "cancel_order_async",
+          "signature": "(self, order_id: 'str') -> 'bool'"
+        },
+        {
+          "kind": "method",
+          "name": "close_position_async",
+          "signature": "(self, asset: 'str') -> 'Order | None'"
+        },
+        {
+          "kind": "method",
+          "name": "connect",
+          "signature": "(self) -> 'None'"
+        },
+        {
+          "kind": "method",
+          "name": "disconnect",
+          "signature": "(self) -> 'None'"
+        },
+        {
+          "kind": "method",
+          "name": "get_account_value_async",
+          "signature": "(self) -> 'float'"
+        },
+        {
+          "kind": "method",
+          "name": "get_cash_async",
+          "signature": "(self) -> 'float'"
+        },
+        {
+          "kind": "method",
+          "name": "get_pending_orders_async",
+          "signature": "(self, asset: 'str | None' = None) -> 'list[Order]'"
+        },
+        {
+          "kind": "method",
+          "name": "get_position_async",
+          "signature": "(self, asset: 'str') -> 'Position | None'"
+        },
+        {
+          "kind": "method",
+          "name": "get_positions_async",
+          "signature": "(self) -> 'dict[str, Position]'"
+        },
+        {
+          "kind": "method",
+          "name": "is_connected_async",
+          "signature": "(self) -> 'bool'"
+        },
+        {
+          "kind": "method",
+          "name": "replace_order_async",
+          "signature": "(self, order_id: 'str', *, quantity: 'float | None' = None, limit_price: 'float | None' = None, stop_price: 'float | None' = None) -> 'Order'"
+        },
+        {
+          "kind": "method",
+          "name": "submit_order_async",
+          "signature": "(self, asset: 'str', quantity: 'float', side: 'OrderSide | None' = None, order_type: 'OrderType' = <OrderType.MARKET: 'market'>, limit_price: 'float | None' = None, stop_price: 'float | None' = None, **kwargs: 'Any') -> 'Order'"
+        }
+      ],
+      "module": "ml4t.live",
+      "name": "AsyncBrokerProtocol",
+      "signature": "(*args, **kwargs)"
+    },
+    {
+      "bases": [
+        "ml4t.live.persistence.PersistenceSafetyError"
+      ],
+      "classification": "stable",
+      "defined_in": "ml4t.live.persistence",
+      "kind": "exception",
+      "methods": [],
+      "module": "ml4t.live",
+      "name": "AuditJournalError",
+      "signature": null
+    },
+    {
+      "bases": [
+        "builtins.object"
+      ],
+      "classification": "stable",
+      "defined_in": "ml4t.live.feeds.aggregator",
+      "kind": "class",
+      "methods": [
+        {
+          "kind": "method",
+          "name": "start",
+          "signature": "(self) -> None"
+        },
+        {
+          "kind": "property",
+          "name": "stats",
+          "signature": "(self) -> dict[str, Any]"
+        },
+        {
+          "kind": "method",
+          "name": "stop",
+          "signature": "(self) -> None"
+        }
+      ],
+      "module": "ml4t.live",
+      "name": "BarAggregator",
+      "signature": "(source_feed: 'DataFeedProtocol', bar_size_minutes: int = 1, assets: list[str] | None = None, flush_timeout_seconds: float = 2.0, queue_capacity: int = 256)"
+    },
+    {
+      "bases": [
+        "builtins.object"
+      ],
+      "classification": "stable",
+      "dataclass_fields": [
+        {
+          "default": "None",
+          "name": "open",
+          "type": "float | None"
+        },
+        {
+          "default": "-inf",
+          "name": "high",
+          "type": "<class 'float'>"
+        },
+        {
+          "default": "inf",
+          "name": "low",
+          "type": "<class 'float'>"
+        },
+        {
+          "default": "0.0",
+          "name": "close",
+          "type": "<class 'float'>"
+        },
+        {
+          "default": "0.0",
+          "name": "volume",
+          "type": "<class 'float'>"
+        }
+      ],
+      "defined_in": "ml4t.live.feeds.aggregator",
+      "kind": "dataclass",
+      "methods": [
+        {
+          "kind": "method",
+          "name": "reset",
+          "signature": "(self) -> None"
+        },
+        {
+          "kind": "method",
+          "name": "to_dict",
+          "signature": "(self) -> dict[str, Any]"
+        },
+        {
+          "kind": "method",
+          "name": "update",
+          "signature": "(self, price: float, size: float = 0) -> None"
+        },
+        {
+          "kind": "method",
+          "name": "update_bar",
+          "signature": "(self, payload: dict[str, Any]) -> None"
+        }
+      ],
+      "module": "ml4t.live",
+      "name": "BarBuffer",
+      "signature": "(open: float | None = None, high: float = -inf, low: float = inf, close: float = 0.0, volume: float = 0.0) -> None"
+    },
+    {
+      "bases": [
+        "builtins.RuntimeError"
+      ],
+      "classification": "stable",
+      "defined_in": "ml4t.live.orders",
+      "kind": "exception",
+      "methods": [],
+      "module": "ml4t.live",
+      "name": "BrokerOrderContractError",
+      "signature": null
+    },
+    {
+      "bases": [
+        "typing.Protocol"
+      ],
+      "classification": "stable",
+      "defined_in": "ml4t.live.protocols",
+      "kind": "protocol",
+      "methods": [
+        {
+          "kind": "method",
+          "name": "cancel_order",
+          "signature": "(self, order_id: 'str') -> 'bool'"
+        },
+        {
+          "kind": "method",
+          "name": "clear_position_rules",
+          "signature": "(self, asset: 'str | None' = None) -> 'None'"
+        },
+        {
+          "kind": "method",
+          "name": "close_position",
+          "signature": "(self, asset: 'str') -> 'Order | None'"
+        },
+        {
+          "kind": "method",
+          "name": "export_target_intent_state",
+          "signature": "(self) -> 'dict[str, Any]'"
+        },
+        {
+          "kind": "method",
+          "name": "get_account_value",
+          "signature": "(self) -> 'float'"
+        },
+        {
+          "kind": "method",
+          "name": "get_cash",
+          "signature": "(self) -> 'float'"
+        },
+        {
+          "kind": "method",
+          "name": "get_child_order_intents",
+          "signature": "(self) -> 'tuple[CanonicalChildOrderIntent, ...]'"
+        },
+        {
+          "kind": "method",
+          "name": "get_intent_reconciliations",
+          "signature": "(self) -> 'tuple[IntentReconciliation, ...]'"
+        },
+        {
+          "kind": "method",
+          "name": "get_pending_orders",
+          "signature": "(self, asset: 'str | None' = None) -> 'list[Order]'"
+        },
+        {
+          "kind": "method",
+          "name": "get_position",
+          "signature": "(self, asset: 'str') -> 'Position | None'"
+        },
+        {
+          "kind": "method",
+          "name": "get_positions",
+          "signature": "(self) -> 'dict[str, Position]'"
+        },
+        {
+          "kind": "method",
+          "name": "get_target_intents",
+          "signature": "(self) -> 'tuple[CanonicalTargetIntent, ...]'"
+        },
+        {
+          "kind": "property",
+          "name": "is_connected",
+          "signature": "(self) -> 'bool'"
+        },
+        {
+          "kind": "property",
+          "name": "pending_orders",
+          "signature": "(self) -> 'list[Order]'"
+        },
+        {
+          "kind": "property",
+          "name": "positions",
+          "signature": "(self) -> 'dict[str, Position]'"
+        },
+        {
+          "kind": "method",
+          "name": "register_position_rule_policy",
+          "signature": "(self, policy_id: 'str', rules: 'PositionRule') -> 'None'"
+        },
+        {
+          "kind": "method",
+          "name": "register_target_intent",
+          "signature": "(self, intent: 'CanonicalTargetIntent', *, position_rules: 'PositionRule | None' = None) -> 'CanonicalTargetIntent'"
+        },
+        {
+          "kind": "method",
+          "name": "replace_order",
+          "signature": "(self, order_id: 'str', *, quantity: 'float | None' = None, limit_price: 'float | None' = None, stop_price: 'float | None' = None) -> 'Order'"
+        },
+        {
+          "kind": "method",
+          "name": "set_position_rules",
+          "signature": "(self, rules: 'PositionRule | None', asset: 'str | None' = None) -> 'None'"
+        },
+        {
+          "kind": "method",
+          "name": "submit_order",
+          "signature": "(self, asset: 'str', quantity: 'float', side: 'OrderSide | None' = None, order_type: 'OrderType' = <OrderType.MARKET: 'market'>, limit_price: 'float | None' = None, stop_price: 'float | None' = None, **kwargs: 'Any') -> 'Order'"
+        },
+        {
+          "kind": "method",
+          "name": "update_position_context",
+          "signature": "(self, asset: 'str', context: 'dict[str, Any]') -> 'None'"
+        }
+      ],
+      "module": "ml4t.live",
+      "name": "BrokerProtocol",
+      "signature": "(*args, **kwargs)"
+    },
+    {
+      "bases": [
+        "builtins.RuntimeError"
+      ],
+      "classification": "stable",
+      "defined_in": "ml4t.live.safety",
+      "kind": "exception",
+      "methods": [],
+      "module": "ml4t.live",
+      "name": "BrokerSnapshotError",
+      "signature": null
+    },
+    {
+      "bases": [
+        "builtins.object"
+      ],
+      "classification": "stable",
+      "dataclass_fields": [
+        {
+          "default": "<required>",
+          "name": "asset",
+          "type": "str"
+        },
+        {
+          "default": "<required>",
+          "name": "quantity",
+          "type": "float"
+        },
+        {
+          "default": "<required>",
+          "name": "side",
+          "type": "OrderSide"
+        },
+        {
+          "default": "<required>",
+          "name": "order_type",
+          "type": "OrderType"
+        },
+        {
+          "default": "None",
+          "name": "limit_price",
+          "type": "float | None"
+        },
+        {
+          "default": "None",
+          "name": "stop_price",
+          "type": "float | None"
+        }
+      ],
+      "defined_in": "ml4t.live.orders",
+      "kind": "dataclass",
+      "methods": [
+        {
+          "kind": "classmethod",
+          "name": "from_input",
+          "signature": "(cls, asset: 'str', quantity: 'Any', side: 'OrderSide | None', order_type: 'OrderType', limit_price: 'Any' = None, stop_price: 'Any' = None, *, capabilities: 'Iterable[Any]' = ()) -> 'CanonicalOrderRequest'"
+        },
+        {
+          "kind": "method",
+          "name": "validate_result",
+          "signature": "(self, order: 'Order') -> 'None'"
+        }
+      ],
+      "module": "ml4t.live",
+      "name": "CanonicalOrderRequest",
+      "signature": "(asset: 'str', quantity: 'float', side: 'OrderSide', order_type: 'OrderType', limit_price: 'float | None' = None, stop_price: 'float | None' = None) -> None"
+    },
+    {
+      "bases": [
+        "ml4t.live.persistence.PersistenceSafetyError"
+      ],
+      "classification": "stable",
+      "defined_in": "ml4t.live.persistence",
+      "kind": "exception",
+      "methods": [],
+      "module": "ml4t.live",
+      "name": "ConcurrentStateWriterError",
+      "signature": null
+    },
+    {
+      "bases": [
+        "ml4t.live.persistence.PersistenceSafetyError"
+      ],
+      "classification": "stable",
+      "defined_in": "ml4t.live.persistence",
+      "kind": "exception",
+      "methods": [],
+      "module": "ml4t.live",
+      "name": "CorruptStateError",
+      "signature": null
+    },
+    {
+      "bases": [
+        "ml4t.live.protocols.DataFeedProtocol"
+      ],
+      "classification": "experimental",
+      "defined_in": "ml4t.live.feeds.crypto_feed",
+      "kind": "class",
+      "methods": [
+        {
+          "kind": "method",
+          "name": "close",
+          "signature": "(self) -> None"
+        },
+        {
+          "kind": "method",
+          "name": "start",
+          "signature": "(self) -> None"
+        },
+        {
+          "kind": "property",
+          "name": "stats",
+          "signature": "(self) -> dict[str, Any]"
+        },
+        {
+          "kind": "method",
+          "name": "stop",
+          "signature": "(self) -> None"
+        }
+      ],
+      "module": "ml4t.live",
+      "name": "CryptoFeed",
+      "signature": "(exchange: str, symbols: list[str], *, timeframe: str = '1m', stream_trades: bool = False, stream_ohlcv: bool = True, api_key: str | None = None, api_secret: str | None = None, api_passphrase: str | None = None, experimental: bool = False)"
+    },
+    {
+      "bases": [
+        "ml4t.live.protocols.DataFeedProtocol"
+      ],
+      "classification": "experimental",
+      "defined_in": "ml4t.live.feeds.databento_feed",
+      "kind": "class",
+      "methods": [
+        {
+          "kind": "classmethod",
+          "name": "from_file",
+          "signature": "(cls, file_path: str | pathlib.Path, symbols: list[str], *, replay_speed: float = 1.0, experimental: bool = False) -> 'DataBentoFeed'"
+        },
+        {
+          "kind": "classmethod",
+          "name": "from_live",
+          "signature": "(cls, api_key: str, dataset: str, schema: str, symbols: list[str], *, experimental: bool = False) -> 'DataBentoFeed'"
+        },
+        {
+          "kind": "method",
+          "name": "start",
+          "signature": "(self) -> None"
+        },
+        {
+          "kind": "property",
+          "name": "stats",
+          "signature": "(self) -> dict[str, Any]"
+        },
+        {
+          "kind": "method",
+          "name": "stop",
+          "signature": "(self) -> None"
+        }
+      ],
+      "module": "ml4t.live",
+      "name": "DataBentoFeed",
+      "signature": "(client: ml4t.live.feeds.databento_feed._HistoricalRecordSource | ml4t.live.feeds.databento_feed._LiveRecordSource, symbols: list[str], *, mode: str = 'historical', replay_speed: float = 1.0, experimental: bool = False)"
+    },
+    {
+      "bases": [
+        "typing.Protocol"
+      ],
+      "classification": "stable",
+      "defined_in": "ml4t.live.protocols",
+      "kind": "protocol",
+      "methods": [
+        {
+          "kind": "method",
+          "name": "start",
+          "signature": "(self) -> 'None'"
+        },
+        {
+          "kind": "method",
+          "name": "stop",
+          "signature": "(self) -> 'None'"
+        }
+      ],
+      "module": "ml4t.live",
+      "name": "DataFeedProtocol",
+      "signature": "(*args, **kwargs)"
+    },
+    {
+      "bases": [
+        "builtins.RuntimeError"
+      ],
+      "classification": "experimental",
+      "defined_in": "ml4t.live.feeds.experimental",
+      "kind": "exception",
+      "methods": [],
+      "module": "ml4t.live",
+      "name": "ExperimentalFeedError",
+      "signature": null
+    },
+    {
+      "bases": [
+        "builtins.UserWarning"
+      ],
+      "classification": "experimental",
+      "defined_in": "ml4t.live.feeds.experimental",
+      "kind": "exception",
+      "methods": [],
+      "module": "ml4t.live",
+      "name": "ExperimentalFeedWarning",
+      "signature": null
+    },
+    {
+      "bases": [
+        "ml4t.live.feeds.events.FeedContractError"
+      ],
+      "classification": "stable",
+      "defined_in": "ml4t.live.feeds.events",
+      "kind": "exception",
+      "methods": [
+        {
+          "kind": "method",
+          "name": "to_dict",
+          "signature": "(self) -> 'dict[str, Any]'"
+        }
+      ],
+      "module": "ml4t.live",
+      "name": "FeedContinuityError",
+      "signature": "(reason: 'str', event: 'MarketEvent') -> 'None'"
+    },
+    {
+      "bases": [
+        "builtins.ValueError"
+      ],
+      "classification": "stable",
+      "defined_in": "ml4t.live.feeds.events",
+      "kind": "exception",
+      "methods": [],
+      "module": "ml4t.live",
+      "name": "FeedContractError",
+      "signature": null
+    },
+    {
+      "bases": [
+        "builtins.RuntimeError"
+      ],
+      "classification": "stable",
+      "defined_in": "ml4t.live.feeds.queue",
+      "kind": "exception",
+      "methods": [
+        {
+          "kind": "method",
+          "name": "to_dict",
+          "signature": "(self) -> 'dict[str, Any]'"
+        }
+      ],
+      "module": "ml4t.live",
+      "name": "FeedOverflowError",
+      "signature": "(*, feed: 'str', event: 'MarketEvent', snapshot: 'FeedQueueSnapshot') -> 'None'"
+    },
+    {
+      "bases": [
+        "builtins.object"
+      ],
+      "classification": "stable",
+      "dataclass_fields": [
+        {
+          "default": "<required>",
+          "name": "capacity",
+          "type": "int"
+        },
+        {
+          "default": "<required>",
+          "name": "occupancy",
+          "type": "int"
+        },
+        {
+          "default": "<required>",
+          "name": "high_watermark",
+          "type": "int"
+        },
+        {
+          "default": "<required>",
+          "name": "overflow_count",
+          "type": "int"
+        },
+        {
+          "default": "<required>",
+          "name": "oldest_event_lag_seconds",
+          "type": "float | None"
+        },
+        {
+          "default": "<required>",
+          "name": "failed",
+          "type": "bool"
+        },
+        {
+          "default": "<required>",
+          "name": "finished",
+          "type": "bool"
+        }
+      ],
+      "defined_in": "ml4t.live.feeds.queue",
+      "kind": "dataclass",
+      "methods": [
+        {
+          "kind": "method",
+          "name": "to_dict",
+          "signature": "(self) -> 'dict[str, Any]'"
+        }
+      ],
+      "module": "ml4t.live",
+      "name": "FeedQueueSnapshot",
+      "signature": "(capacity: 'int', occupancy: 'int', high_watermark: 'int', overflow_count: 'int', oldest_event_lag_seconds: 'float | None', failed: 'bool', finished: 'bool') -> None"
+    },
+    {
+      "bases": [
+        "builtins.object"
+      ],
+      "classification": "stable",
+      "defined_in": "ml4t.live.brokers.ib",
+      "kind": "class",
+      "methods": [
+        {
+          "kind": "method",
+          "name": "assert_paper_trading",
+          "signature": "(self) -> None"
+        },
+        {
+          "kind": "method",
+          "name": "cancel_order_async",
+          "signature": "(self, order_id: str) -> bool"
+        },
+        {
+          "kind": "method",
+          "name": "close_position_async",
+          "signature": "(self, asset: str) -> ml4t.backtest.types.Order | None"
+        },
+        {
+          "kind": "method",
+          "name": "connect",
+          "signature": "(self) -> None"
+        },
+        {
+          "kind": "method",
+          "name": "disconnect",
+          "signature": "(self) -> None"
+        },
+        {
+          "kind": "property",
+          "name": "execution_capabilities",
+          "signature": "(self) -> frozenset[ml4t.specs.intents.ExecutionCapability]"
+        },
+        {
+          "kind": "method",
+          "name": "get_account_value_async",
+          "signature": "(self) -> float"
+        },
+        {
+          "kind": "method",
+          "name": "get_cash_async",
+          "signature": "(self) -> float"
+        },
+        {
+          "kind": "method",
+          "name": "get_pending_orders_async",
+          "signature": "(self, asset: str | None = None) -> list[ml4t.backtest.types.Order]"
+        },
+        {
+          "kind": "method",
+          "name": "get_position",
+          "signature": "(self, asset: str) -> ml4t.backtest.types.Position | None"
+        },
+        {
+          "kind": "method",
+          "name": "get_position_async",
+          "signature": "(self, asset: str) -> ml4t.backtest.types.Position | None"
+        },
+        {
+          "kind": "method",
+          "name": "get_positions_async",
+          "signature": "(self) -> dict[str, ml4t.backtest.types.Position]"
+        },
+        {
+          "kind": "property",
+          "name": "is_connected",
+          "signature": "(self) -> bool"
+        },
+        {
+          "kind": "method",
+          "name": "is_connected_async",
+          "signature": "(self) -> bool"
+        },
+        {
+          "kind": "property",
+          "name": "pending_orders",
+          "signature": "(self) -> list[ml4t.backtest.types.Order]"
+        },
+        {
+          "kind": "property",
+          "name": "positions",
+          "signature": "(self) -> dict[str, ml4t.backtest.types.Position]"
+        },
+        {
+          "kind": "method",
+          "name": "replace_order_async",
+          "signature": "(self, order_id: str, *, quantity: float | None = None, limit_price: float | None = None, stop_price: float | None = None, **kwargs: Any) -> ml4t.backtest.types.Order"
+        },
+        {
+          "kind": "method",
+          "name": "submit_order_async",
+          "signature": "(self, asset: str, quantity: float, side: ml4t.backtest.types.OrderSide | None = None, order_type: ml4t.backtest.types.OrderType = <OrderType.MARKET: 'market'>, limit_price: float | None = None, stop_price: float | None = None, **kwargs: Any) -> ml4t.backtest.types.Order"
+        }
+      ],
+      "module": "ml4t.live",
+      "name": "IBBroker",
+      "signature": "(host: str = '127.0.0.1', port: int = 7497, client_id: int = 1, account: str | None = None, market_data_type: int | None = None)"
+    },
+    {
+      "bases": [
+        "ml4t.live.protocols.DataFeedProtocol"
+      ],
+      "classification": "stable",
+      "defined_in": "ml4t.live.feeds.ib_feed",
+      "kind": "class",
+      "methods": [
+        {
+          "kind": "method",
+          "name": "start",
+          "signature": "(self) -> None"
+        },
+        {
+          "kind": "property",
+          "name": "stats",
+          "signature": "(self) -> dict[str, Any]"
+        },
+        {
+          "kind": "method",
+          "name": "stop",
+          "signature": "(self) -> None"
+        }
+      ],
+      "module": "ml4t.live",
+      "name": "IBDataFeed",
+      "signature": "(ib: ib_async.ib.IB, symbols: list[str], *, exchange: str = 'SMART', currency: str = 'USD', tick_throttle_ms: int = 100, queue_capacity: int = 1024)"
+    },
+    {
+      "bases": [
+        "builtins.object"
+      ],
+      "classification": "stable",
+      "dataclass_fields": [
+        {
+          "default": "<required>",
+          "name": "phase",
+          "type": "LifecyclePhase"
+        },
+        {
+          "default": "<required>",
+          "name": "callback",
+          "type": "str"
+        },
+        {
+          "default": "<required>",
+          "name": "event_time",
+          "type": "datetime | None"
+        }
+      ],
+      "defined_in": "ml4t.live.lifecycle",
+      "kind": "dataclass",
+      "methods": [],
+      "module": "ml4t.live",
+      "name": "LifecycleInvocation",
+      "signature": "(phase: 'LifecyclePhase', callback: 'str', event_time: 'datetime | None') -> None"
+    },
+    {
+      "bases": [
+        "builtins.object"
+      ],
+      "classification": "stable",
+      "defined_in": "ml4t.live.engine",
+      "kind": "class",
+      "methods": [
+        {
+          "kind": "method",
+          "name": "connect",
+          "signature": "(self) -> None"
+        },
+        {
+          "kind": "property",
+          "name": "operational_events",
+          "signature": "(self) -> tuple[dict[str, Any], ...]"
+        },
+        {
+          "kind": "method",
+          "name": "run",
+          "signature": "(self) -> None"
+        },
+        {
+          "kind": "property",
+          "name": "runtime_state",
+          "signature": "(self) -> ml4t.live.engine.RuntimeState"
+        },
+        {
+          "kind": "method",
+          "name": "runtime_status",
+          "signature": "(self, now: datetime.datetime | None = None) -> dict[str, Any]"
+        },
+        {
+          "kind": "property",
+          "name": "runtime_transitions",
+          "signature": "(self) -> tuple[ml4t.live.engine.RuntimeTransition, ...]"
+        },
+        {
+          "kind": "property",
+          "name": "stats",
+          "signature": "(self) -> dict[str, Any]"
+        },
+        {
+          "kind": "method",
+          "name": "stop",
+          "signature": "(self) -> None"
+        }
+      ],
+      "module": "ml4t.live",
+      "name": "LiveEngine",
+      "signature": "(strategy: ml4t.backtest.strategy.Strategy, broker: ml4t.live.protocols.AsyncBrokerProtocol, feed: ml4t.live.protocols.DataFeedProtocol, *, on_error: collections.abc.Callable[[Exception, datetime.datetime, dict], None] | None = None, halt_on_error: bool = False, feed_silence_seconds: float | None = None, watchdog_poll_seconds: float = 1.0, halt_on_unhealthy: bool = False, auto_recover: bool = False, recovery_cooldown_seconds: float = 5.0, max_recovery_attempts: int = 3, max_event_age_seconds: float | None = None, on_health_change: collections.abc.Callable[[str, dict[str, Any]], None] | None = None, lifecycle_version: ml4t.specs.lifecycle.LifecycleVersion | str = <LifecycleVersion.V1: '1'>, execution_policy: ml4t.specs.intents.ExecutionPolicy | None = None)"
+    },
+    {
+      "bases": [
+        "ml4t.live.runtime.LiveStrategyRuntimeError"
+      ],
+      "classification": "stable",
+      "defined_in": "ml4t.live.runtime",
+      "kind": "exception",
+      "methods": [],
+      "module": "ml4t.live",
+      "name": "LiveIntentError",
+      "signature": null
+    },
+    {
+      "bases": [
+        "builtins.object"
+      ],
+      "classification": "stable",
+      "defined_in": "ml4t.live.lifecycle",
+      "kind": "class",
+      "methods": [
+        {
+          "kind": "property",
+          "name": "callback_counts",
+          "signature": "(self) -> 'dict[LifecyclePhase, int]'"
+        },
+        {
+          "kind": "method",
+          "name": "close",
+          "signature": "(self) -> 'None'"
+        },
+        {
+          "kind": "method",
+          "name": "dispatch",
+          "signature": "(self, phase: 'LifecyclePhase', *args: 'Any', event_time: 'datetime | None' = None) -> 'Any'"
+        },
+        {
+          "kind": "property",
+          "name": "dropped_invocation_count",
+          "signature": "(self) -> 'int'"
+        },
+        {
+          "kind": "property",
+          "name": "invocation_count",
+          "signature": "(self) -> 'int'"
+        },
+        {
+          "kind": "method",
+          "name": "validate_completed_run",
+          "signature": "(self, market_event_count: 'int', *, baseline: 'dict[LifecyclePhase, int] | None' = None) -> 'None'"
+        }
+      ],
+      "module": "ml4t.live",
+      "name": "LiveLifecycleDispatcher",
+      "signature": "(strategy: 'Any', contract: 'LifecycleContract' = LifecycleContract(version=<LifecycleVersion.V1: '1'>, phases=(LifecyclePhaseSpec(phase=<LifecyclePhase.RUN_START: 'run_start'>, callback='on_start', visible_fields=(), intents_allowed=False, cardinality=<CallbackCardinality.EXACTLY_ONCE: 'exactly_once'>, exception_semantics=<CallbackExceptionSemantics.ABORT_BEFORE_SIDE_EFFECTS: 'abort_before_side_effects'>), LifecyclePhaseSpec(phase=<LifecyclePhase.CAUSAL_INITIALIZATION: 'causal_initialization'>, callback='on_prepare', visible_fields=(<InformationField.PRIOR_COMPLETED_DATA: 'prior_completed_data'>,), intents_allowed=True, cardinality=<CallbackCardinality.EXACTLY_ONCE: 'exactly_once'>, exception_semantics=<CallbackExceptionSemantics.ABORT_BEFORE_SIDE_EFFECTS: 'abort_before_side_effects'>), LifecyclePhaseSpec(phase=<LifecyclePhase.PRE_OPEN: 'pre_open'>, callback='on_pre_open', visible_fields=(<InformationField.PRIOR_COMPLETED_DATA: 'prior_completed_data'>,), intents_allowed=True, cardinality=<CallbackCardinality.ONCE_PER_EVENT: 'once_per_event'>, exception_semantics=<CallbackExceptionSemantics.ROLLBACK_AND_ABORT: 'rollback_and_abort'>), LifecyclePhaseSpec(phase=<LifecyclePhase.OPENING_AUCTION: 'opening_auction'>, callback='on_open', visible_fields=(<InformationField.PRIOR_COMPLETED_DATA: 'prior_completed_data'>, <InformationField.OFFICIAL_OPEN: 'official_open'>, <InformationField.CURRENT_OPEN: 'current_open'>), intents_allowed=True, cardinality=<CallbackCardinality.ONCE_PER_EVENT: 'once_per_event'>, exception_semantics=<CallbackExceptionSemantics.ROLLBACK_AND_ABORT: 'rollback_and_abort'>), LifecyclePhaseSpec(phase=<LifecyclePhase.FILL_RECONCILIATION: 'fill_reconciliation'>, callback='on_fill_reconciliation', visible_fields=(<InformationField.PRIOR_COMPLETED_DATA: 'prior_completed_data'>, <InformationField.OFFICIAL_OPEN: 'official_open'>, <InformationField.CURRENT_OPEN: 'current_open'>, <InformationField.POST_FILL_STATE: 'post_fill_state'>), intents_allowed=False, cardinality=<CallbackCardinality.ONCE_PER_EVENT: 'once_per_event'>, exception_semantics=<CallbackExceptionSemantics.ROLLBACK_AND_ABORT: 'rollback_and_abort'>), LifecyclePhaseSpec(phase=<LifecyclePhase.INTRABAR: 'intrabar'>, callback='on_intrabar', visible_fields=(<InformationField.PRIOR_COMPLETED_DATA: 'prior_completed_data'>, <InformationField.OFFICIAL_OPEN: 'official_open'>, <InformationField.CURRENT_OPEN: 'current_open'>, <InformationField.CURRENT_HIGH: 'current_high'>, <InformationField.CURRENT_LOW: 'current_low'>), intents_allowed=True, cardinality=<CallbackCardinality.ONCE_PER_EVENT: 'once_per_event'>, exception_semantics=<CallbackExceptionSemantics.ROLLBACK_AND_ABORT: 'rollback_and_abort'>), LifecyclePhaseSpec(phase=<LifecyclePhase.CLOSE: 'close'>, callback='on_close', visible_fields=(<InformationField.PRIOR_COMPLETED_DATA: 'prior_completed_data'>, <InformationField.OFFICIAL_OPEN: 'official_open'>, <InformationField.CURRENT_OPEN: 'current_open'>, <InformationField.CURRENT_HIGH: 'current_high'>, <InformationField.CURRENT_LOW: 'current_low'>, <InformationField.CURRENT_CLOSE: 'current_close'>), intents_allowed=True, cardinality=<CallbackCardinality.ONCE_PER_EVENT: 'once_per_event'>, exception_semantics=<CallbackExceptionSemantics.ROLLBACK_AND_ABORT: 'rollback_and_abort'>), LifecyclePhaseSpec(phase=<LifecyclePhase.MARKET_EVENT: 'market_event'>, callback='on_data', visible_fields=(<InformationField.PRIOR_COMPLETED_DATA: 'prior_completed_data'>, <InformationField.OFFICIAL_OPEN: 'official_open'>, <InformationField.CURRENT_OPEN: 'current_open'>, <InformationField.CURRENT_HIGH: 'current_high'>, <InformationField.CURRENT_LOW: 'current_low'>), intents_allowed=True, cardinality=<CallbackCardinality.ONCE_PER_EVENT: 'once_per_event'>, exception_semantics=<CallbackExceptionSemantics.ROLLBACK_AND_ABORT: 'rollback_and_abort'>), LifecyclePhaseSpec(phase=<LifecyclePhase.RUN_END: 'run_end'>, callback='on_end', visible_fields=(<InformationField.PRIOR_COMPLETED_DATA: 'prior_completed_data'>, <InformationField.OFFICIAL_OPEN: 'official_open'>, <InformationField.CURRENT_OPEN: 'current_open'>, <InformationField.CURRENT_HIGH: 'current_high'>, <InformationField.CURRENT_LOW: 'current_low'>, <InformationField.CURRENT_CLOSE: 'current_close'>, <InformationField.POST_FILL_STATE: 'post_fill_state'>), intents_allowed=False, cardinality=<CallbackCardinality.EXACTLY_ONCE: 'exactly_once'>, exception_semantics=<CallbackExceptionSemantics.CLEANUP_AND_RERAISE: 'cleanup_and_reraise'>))), *, event_recorder: 'Callable[..., None] | None' = None) -> 'None'"
+    },
+    {
+      "bases": [
+        "builtins.object"
+      ],
+      "classification": "stable",
+      "dataclass_fields": [
+        {
+          "default": "50000.0",
+          "name": "max_position_value",
+          "type": "float | None"
+        },
+        {
+          "default": "1000.0",
+          "name": "max_position_shares",
+          "type": "float | None"
+        },
+        {
+          "default": "200000.0",
+          "name": "max_total_exposure",
+          "type": "float | None"
+        },
+        {
+          "default": "20",
+          "name": "max_positions",
+          "type": "int | None"
+        },
+        {
+          "default": "10000.0",
+          "name": "max_order_value",
+          "type": "float | None"
+        },
+        {
+          "default": "500.0",
+          "name": "max_order_shares",
+          "type": "float | None"
+        },
+        {
+          "default": "10",
+          "name": "max_orders_per_minute",
+          "type": "int | None"
+        },
+        {
+          "default": "5000.0",
+          "name": "max_daily_loss",
+          "type": "float | None"
+        },
+        {
+          "default": "0.05",
+          "name": "max_drawdown_pct",
+          "type": "float | None"
+        },
+        {
+          "default": "0.05",
+          "name": "max_price_deviation_pct",
+          "type": "float | None"
+        },
+        {
+          "default": "60.0",
+          "name": "max_data_staleness_seconds",
+          "type": "float | None"
+        },
+        {
+          "default": "1.0",
+          "name": "dedup_window_seconds",
+          "type": "float | None"
+        },
+        {
+          "default": "<factory:set>",
+          "name": "allowed_assets",
+          "type": "set[str]"
+        },
+        {
+          "default": "<factory:set>",
+          "name": "blocked_assets",
+          "type": "set[str]"
+        },
+        {
+          "default": "False",
+          "name": "shadow_mode",
+          "type": "<class 'bool'>"
+        },
+        {
+          "default": "False",
+          "name": "kill_switch_enabled",
+          "type": "<class 'bool'>"
+        },
+        {
+          "default": "True",
+          "name": "allow_reducing_risk_when_killed",
+          "type": "<class 'bool'>"
+        },
+        {
+          "default": "True",
+          "name": "halt_on_reducing_risk_failure",
+          "type": "<class 'bool'>"
+        },
+        {
+          "default": "False",
+          "name": "fail_on_reconciliation_mismatch",
+          "type": "<class 'bool'>"
+        },
+        {
+          "default": "'.ml4t_risk_state.json'",
+          "name": "state_file",
+          "type": "<class 'str'>"
+        },
+        {
+          "default": "None",
+          "name": "journal_file",
+          "type": "str | None"
+        },
+        {
+          "default": "True",
+          "name": "fail_on_journal_error",
+          "type": "<class 'bool'>"
+        }
+      ],
+      "defined_in": "ml4t.live.safety",
+      "kind": "dataclass",
+      "methods": [],
+      "module": "ml4t.live",
+      "name": "LiveRiskConfig",
+      "signature": "(max_position_value: float | None = 50000.0, max_position_shares: float | None = 1000.0, max_total_exposure: float | None = 200000.0, max_positions: int | None = 20, max_order_value: float | None = 10000.0, max_order_shares: float | None = 500.0, max_orders_per_minute: int | None = 10, max_daily_loss: float | None = 5000.0, max_drawdown_pct: float | None = 0.05, max_price_deviation_pct: float | None = 0.05, max_data_staleness_seconds: float | None = 60.0, dedup_window_seconds: float | None = 1.0, allowed_assets: set[str] = <factory>, blocked_assets: set[str] = <factory>, shadow_mode: bool = False, kill_switch_enabled: bool = False, allow_reducing_risk_when_killed: bool = True, halt_on_reducing_risk_failure: bool = True, fail_on_reconciliation_mismatch: bool = False, state_file: str = '.ml4t_risk_state.json', journal_file: str | None = None, fail_on_journal_error: bool = True) -> None"
+    },
+    {
+      "bases": [
+        "builtins.object"
+      ],
+      "classification": "stable",
+      "defined_in": "ml4t.live.runtime",
+      "kind": "class",
+      "methods": [
+        {
+          "kind": "property",
+          "name": "children",
+          "signature": "(self) -> 'tuple[CanonicalChildOrderIntent, ...]'"
+        },
+        {
+          "kind": "method",
+          "name": "clear_position_rules",
+          "signature": "(self, asset: 'str | None' = None) -> 'None'"
+        },
+        {
+          "kind": "method",
+          "name": "observe_strategy_order",
+          "signature": "(self, order: 'Order') -> 'None'"
+        },
+        {
+          "kind": "property",
+          "name": "position_rule_states",
+          "signature": "(self) -> 'tuple[PositionRuleState, ...]'"
+        },
+        {
+          "kind": "method",
+          "name": "process_market_event",
+          "signature": "(self, timestamp: 'datetime', data: 'dict[str, dict[str, Any]]', context: 'dict[str, Any]') -> 'None'"
+        },
+        {
+          "kind": "property",
+          "name": "reconciliations",
+          "signature": "(self) -> 'tuple[IntentReconciliation, ...]'"
+        },
+        {
+          "kind": "method",
+          "name": "register_position_rule_policy",
+          "signature": "(self, policy_id: 'str', rules: 'PositionRule') -> 'None'"
+        },
+        {
+          "kind": "method",
+          "name": "register_target_intent",
+          "signature": "(self, intent: 'CanonicalTargetIntent', *, position_rules: 'PositionRule | None' = None) -> 'CanonicalTargetIntent'"
+        },
+        {
+          "kind": "method",
+          "name": "set_position_rules",
+          "signature": "(self, rules: 'PositionRule | None', asset: 'str | None' = None) -> 'None'"
+        },
+        {
+          "kind": "property",
+          "name": "targets",
+          "signature": "(self) -> 'tuple[CanonicalTargetIntent, ...]'"
+        },
+        {
+          "kind": "method",
+          "name": "to_state",
+          "signature": "(self) -> 'dict[str, Any]'"
+        },
+        {
+          "kind": "method",
+          "name": "update_position_context",
+          "signature": "(self, asset: 'str', context: 'dict[str, Any]') -> 'None'"
+        }
+      ],
+      "module": "ml4t.live",
+      "name": "LiveStrategyRuntime",
+      "signature": "(broker: 'AsyncBrokerProtocol', policy: 'ExecutionPolicy', lifecycle_version: 'LifecycleVersion') -> 'None'"
+    },
+    {
+      "bases": [
+        "builtins.RuntimeError"
+      ],
+      "classification": "stable",
+      "defined_in": "ml4t.live.runtime",
+      "kind": "exception",
+      "methods": [],
+      "module": "ml4t.live",
+      "name": "LiveStrategyRuntimeError",
+      "signature": null
+    },
+    {
+      "bases": [
+        "ml4t.live.protocols.DataFeedProtocol"
+      ],
+      "classification": "stable",
+      "defined_in": "ml4t.live.feeds.okx_feed",
+      "kind": "class",
+      "methods": [
+        {
+          "kind": "method",
+          "name": "close",
+          "signature": "(self) -> None"
+        },
+        {
+          "kind": "method",
+          "name": "start",
+          "signature": "(self) -> None"
+        },
+        {
+          "kind": "property",
+          "name": "stats",
+          "signature": "(self) -> dict[str, Any]"
+        },
+        {
+          "kind": "method",
+          "name": "stop",
+          "signature": "(self) -> None"
+        }
+      ],
+      "module": "ml4t.live",
+      "name": "OKXFundingFeed",
+      "signature": "(symbols: list[str], *, timeframe: str = '1H', poll_interval_seconds: float = 60.0, queue_capacity: int = 256)"
+    },
+    {
+      "bases": [
+        "ml4t.live.safety.RiskLimitError"
+      ],
+      "classification": "stable",
+      "defined_in": "ml4t.live.safety",
+      "kind": "exception",
+      "methods": [],
+      "module": "ml4t.live",
+      "name": "OrderReplacementGapError",
+      "signature": null
+    },
+    {
+      "bases": [
+        "builtins.ValueError"
+      ],
+      "classification": "stable",
+      "defined_in": "ml4t.live.orders",
+      "kind": "exception",
+      "methods": [],
+      "module": "ml4t.live",
+      "name": "OrderValidationError",
+      "signature": null
+    },
+    {
+      "bases": [
+        "builtins.RuntimeError"
+      ],
+      "classification": "stable",
+      "defined_in": "ml4t.live.persistence",
+      "kind": "exception",
+      "methods": [],
+      "module": "ml4t.live",
+      "name": "PersistenceSafetyError",
+      "signature": null
+    },
+    {
+      "bases": [
+        "builtins.RuntimeError"
+      ],
+      "classification": "stable",
+      "defined_in": "ml4t.live.safety",
+      "kind": "exception",
+      "methods": [],
+      "module": "ml4t.live",
+      "name": "ReconciliationMismatchError",
+      "signature": null
+    },
+    {
+      "bases": [
+        "ml4t.live.runtime.LiveStrategyRuntimeError"
+      ],
+      "classification": "stable",
+      "defined_in": "ml4t.live.runtime",
+      "kind": "exception",
+      "methods": [],
+      "module": "ml4t.live",
+      "name": "ReducingRiskExecutionError",
+      "signature": null
+    },
+    {
+      "bases": [
+        "builtins.Exception"
+      ],
+      "classification": "stable",
+      "defined_in": "ml4t.live.safety",
+      "kind": "exception",
+      "methods": [],
+      "module": "ml4t.live",
+      "name": "RiskLimitError",
+      "signature": null
+    },
+    {
+      "bases": [
+        "builtins.object"
+      ],
+      "classification": "stable",
+      "dataclass_fields": [
+        {
+          "default": "<required>",
+          "name": "date",
+          "type": "<class 'str'>"
+        },
+        {
+          "default": "0.0",
+          "name": "daily_loss",
+          "type": "<class 'float'>"
+        },
+        {
+          "default": "0",
+          "name": "orders_placed",
+          "type": "<class 'int'>"
+        },
+        {
+          "default": "0.0",
+          "name": "high_water_mark",
+          "type": "<class 'float'>"
+        },
+        {
+          "default": "None",
+          "name": "session_start_equity",
+          "type": "float | None"
+        },
+        {
+          "default": "<factory:dict>",
+          "name": "persisted_positions",
+          "type": "dict[str, float]"
+        },
+        {
+          "default": "<factory:list>",
+          "name": "persisted_pending_orders",
+          "type": "list[dict[str, typing.Any]]"
+        },
+        {
+          "default": "<factory:dict>",
+          "name": "portable_strategy_state",
+          "type": "dict[str, typing.Any]"
+        },
+        {
+          "default": "<factory:dict>",
+          "name": "replacement_gaps",
+          "type": "dict[str, dict[str, typing.Any]]"
+        },
+        {
+          "default": "<factory:dict>",
+          "name": "shadow_portfolio",
+          "type": "dict[str, typing.Any]"
+        },
+        {
+          "default": "False",
+          "name": "kill_switch_activated",
+          "type": "<class 'bool'>"
+        },
+        {
+          "default": "''",
+          "name": "kill_switch_reason",
+          "type": "<class 'str'>"
+        }
+      ],
+      "defined_in": "ml4t.live.safety",
+      "kind": "dataclass",
+      "methods": [
+        {
+          "kind": "staticmethod",
+          "name": "create_for_today",
+          "signature": "() -> 'RiskState'"
+        },
+        {
+          "kind": "classmethod",
+          "name": "from_dict",
+          "signature": "(cls, data: dict) -> 'RiskState'"
+        },
+        {
+          "kind": "staticmethod",
+          "name": "load",
+          "signature": "(filepath: str) -> 'RiskState | None'"
+        },
+        {
+          "kind": "staticmethod",
+          "name": "save_atomic",
+          "signature": "(state: 'RiskState', filepath: str) -> None"
+        },
+        {
+          "kind": "method",
+          "name": "to_dict",
+          "signature": "(self) -> dict[str, Any]"
+        },
+        {
+          "kind": "method",
+          "name": "validate",
+          "signature": "(self) -> None"
+        }
+      ],
+      "module": "ml4t.live",
+      "name": "RiskState",
+      "signature": "(date: str, daily_loss: float = 0.0, orders_placed: int = 0, high_water_mark: float = 0.0, session_start_equity: float | None = None, persisted_positions: dict[str, float] = <factory>, persisted_pending_orders: list[dict[str, Any]] = <factory>, portable_strategy_state: dict[str, Any] = <factory>, replacement_gaps: dict[str, dict[str, Any]] = <factory>, shadow_portfolio: dict[str, Any] = <factory>, kill_switch_activated: bool = False, kill_switch_reason: str = '') -> None"
+    },
+    {
+      "bases": [
+        "builtins.RuntimeError"
+      ],
+      "classification": "stable",
+      "defined_in": "ml4t.live.engine",
+      "kind": "exception",
+      "methods": [],
+      "module": "ml4t.live",
+      "name": "RuntimeCleanupError",
+      "signature": "(cleanup_result: dict[str, str])"
+    },
+    {
+      "bases": [
+        "builtins.RuntimeError"
+      ],
+      "classification": "stable",
+      "defined_in": "ml4t.live.engine",
+      "kind": "exception",
+      "methods": [],
+      "module": "ml4t.live",
+      "name": "RuntimeFailureError",
+      "signature": null
+    },
+    {
+      "bases": [
+        "enum.StrEnum"
+      ],
+      "classification": "stable",
+      "defined_in": "ml4t.live.engine",
+      "enum_members": [
+        {
+          "name": "STOPPED",
+          "value": "'stopped'"
+        },
+        {
+          "name": "PREFLIGHT",
+          "value": "'preflight'"
+        },
+        {
+          "name": "CONNECTING_BROKER",
+          "value": "'connecting_broker'"
+        },
+        {
+          "name": "RECONCILING",
+          "value": "'reconciling'"
+        },
+        {
+          "name": "STARTING_FEED",
+          "value": "'starting_feed'"
+        },
+        {
+          "name": "READY",
+          "value": "'ready'"
+        },
+        {
+          "name": "STARTING_STRATEGY",
+          "value": "'starting_strategy'"
+        },
+        {
+          "name": "RUNNING",
+          "value": "'running'"
+        },
+        {
+          "name": "DEGRADED",
+          "value": "'degraded'"
+        },
+        {
+          "name": "RECOVERING",
+          "value": "'recovering'"
+        },
+        {
+          "name": "STOPPING",
+          "value": "'stopping'"
+        },
+        {
+          "name": "FAILED",
+          "value": "'failed'"
+        }
+      ],
+      "kind": "enum",
+      "methods": [],
+      "module": "ml4t.live",
+      "name": "RuntimeState",
+      "signature": "(*values)"
+    },
+    {
+      "bases": [
+        "builtins.object"
+      ],
+      "classification": "stable",
+      "dataclass_fields": [
+        {
+          "default": "<required>",
+          "name": "occurred_at",
+          "type": "<class 'datetime.datetime'>"
+        },
+        {
+          "default": "<required>",
+          "name": "previous",
+          "type": "<enum 'RuntimeState'>"
+        },
+        {
+          "default": "<required>",
+          "name": "current",
+          "type": "<enum 'RuntimeState'>"
+        },
+        {
+          "default": "<required>",
+          "name": "reason",
+          "type": "<class 'str'>"
+        },
+        {
+          "default": "<required>",
+          "name": "attempt",
+          "type": "int | None"
+        },
+        {
+          "default": "<required>",
+          "name": "last_known_sequence",
+          "type": "<class 'int'>"
+        }
+      ],
+      "defined_in": "ml4t.live.engine",
+      "kind": "dataclass",
+      "methods": [],
+      "module": "ml4t.live",
+      "name": "RuntimeTransition",
+      "signature": "(occurred_at: datetime.datetime, previous: ml4t.live.engine.RuntimeState, current: ml4t.live.engine.RuntimeState, reason: str, attempt: int | None, last_known_sequence: int) -> None"
+    },
+    {
+      "bases": [
+        "builtins.object"
+      ],
+      "classification": "stable",
+      "defined_in": "ml4t.live.safety",
+      "kind": "class",
+      "methods": [
+        {
+          "kind": "method",
+          "name": "cancel_order_async",
+          "signature": "(self, order_id: str) -> bool"
+        },
+        {
+          "kind": "method",
+          "name": "close_all_positions",
+          "signature": "(self) -> list[ml4t.backtest.types.Order]"
+        },
+        {
+          "kind": "method",
+          "name": "close_persistence",
+          "signature": "(self) -> None"
+        },
+        {
+          "kind": "method",
+          "name": "close_position_async",
+          "signature": "(self, asset: str) -> ml4t.backtest.types.Order | None"
+        },
+        {
+          "kind": "method",
+          "name": "connect",
+          "signature": "(self) -> None"
+        },
+        {
+          "kind": "method",
+          "name": "disable_kill_switch",
+          "signature": "(self) -> None"
+        },
+        {
+          "kind": "method",
+          "name": "disconnect",
+          "signature": "(self) -> None"
+        },
+        {
+          "kind": "method",
+          "name": "enable_kill_switch",
+          "signature": "(self, reason: str = 'Manual') -> None"
+        },
+        {
+          "kind": "property",
+          "name": "execution_capabilities",
+          "signature": "(self) -> frozenset[Any]"
+        },
+        {
+          "kind": "method",
+          "name": "get_account_value_async",
+          "signature": "(self) -> float"
+        },
+        {
+          "kind": "method",
+          "name": "get_cash_async",
+          "signature": "(self) -> float"
+        },
+        {
+          "kind": "method",
+          "name": "get_pending_orders_async",
+          "signature": "(self, asset: str | None = None) -> list[ml4t.backtest.types.Order]"
+        },
+        {
+          "kind": "method",
+          "name": "get_position",
+          "signature": "(self, asset: str) -> ml4t.backtest.types.Position | None"
+        },
+        {
+          "kind": "method",
+          "name": "get_position_async",
+          "signature": "(self, asset: str) -> ml4t.backtest.types.Position | None"
+        },
+        {
+          "kind": "method",
+          "name": "get_positions",
+          "signature": "(self) -> dict[str, ml4t.backtest.types.Position]"
+        },
+        {
+          "kind": "method",
+          "name": "get_positions_async",
+          "signature": "(self) -> dict[str, ml4t.backtest.types.Position]"
+        },
+        {
+          "kind": "property",
+          "name": "is_connected",
+          "signature": "(self) -> bool"
+        },
+        {
+          "kind": "method",
+          "name": "is_connected_async",
+          "signature": "(self) -> bool"
+        },
+        {
+          "kind": "method",
+          "name": "load_portable_strategy_state",
+          "signature": "(self) -> dict[str, Any]"
+        },
+        {
+          "kind": "property",
+          "name": "pending_orders",
+          "signature": "(self) -> list[ml4t.backtest.types.Order]"
+        },
+        {
+          "kind": "property",
+          "name": "persistence_status",
+          "signature": "(self) -> dict[str, Any]"
+        },
+        {
+          "kind": "property",
+          "name": "positions",
+          "signature": "(self) -> dict[str, ml4t.backtest.types.Position]"
+        },
+        {
+          "kind": "method",
+          "name": "preflight_async",
+          "signature": "(self) -> dict[str, Any]"
+        },
+        {
+          "kind": "method",
+          "name": "preview_reconciliation_async",
+          "signature": "(self) -> dict[str, Any]"
+        },
+        {
+          "kind": "property",
+          "name": "reconciliation_report",
+          "signature": "(self) -> dict[str, Any] | None"
+        },
+        {
+          "kind": "method",
+          "name": "record_event",
+          "signature": "(self, event: str, **payload: Any) -> None"
+        },
+        {
+          "kind": "method",
+          "name": "record_market_snapshot",
+          "signature": "(self, asset: str, price: float, timestamp: datetime.datetime | None = None) -> None"
+        },
+        {
+          "kind": "method",
+          "name": "reduce_position_async",
+          "signature": "(self, asset: str, quantity: float, *, reason: str, idempotency_key: str, fill_price: float | None = None) -> ml4t.backtest.types.Order"
+        },
+        {
+          "kind": "method",
+          "name": "replace_order_async",
+          "signature": "(self, order_id: str, *, quantity: float | None = None, limit_price: float | None = None, stop_price: float | None = None) -> ml4t.backtest.types.Order"
+        },
+        {
+          "kind": "property",
+          "name": "replacement_gaps",
+          "signature": "(self) -> dict[str, dict[str, Any]]"
+        },
+        {
+          "kind": "method",
+          "name": "save_portable_strategy_state",
+          "signature": "(self, state: dict[str, Any]) -> None"
+        },
+        {
+          "kind": "method",
+          "name": "submit_order_async",
+          "signature": "(self, asset: str, quantity: float, side: ml4t.backtest.types.OrderSide | None = None, order_type: ml4t.backtest.types.OrderType = <OrderType.MARKET: 'market'>, limit_price: float | None = None, stop_price: float | None = None, **kwargs: Any) -> ml4t.backtest.types.Order"
+        }
+      ],
+      "module": "ml4t.live",
+      "name": "SafeBroker",
+      "signature": "(broker: ml4t.live.protocols.AsyncBrokerProtocol, config: ml4t.live.safety.LiveRiskConfig)"
+    },
+    {
+      "bases": [
+        "builtins.object"
+      ],
+      "classification": "stable",
+      "defined_in": "ml4t.live.wrappers",
+      "kind": "class",
+      "methods": [
+        {
+          "kind": "method",
+          "name": "cancel_order",
+          "signature": "(self, order_id: str) -> bool"
+        },
+        {
+          "kind": "method",
+          "name": "clear_position_rules",
+          "signature": "(self, asset: str | None = None) -> None"
+        },
+        {
+          "kind": "method",
+          "name": "close_position",
+          "signature": "(self, asset: str) -> ml4t.backtest.types.Order | None"
+        },
+        {
+          "kind": "method",
+          "name": "export_target_intent_state",
+          "signature": "(self) -> dict[str, Any]"
+        },
+        {
+          "kind": "method",
+          "name": "get_account_value",
+          "signature": "(self) -> float"
+        },
+        {
+          "kind": "method",
+          "name": "get_cash",
+          "signature": "(self) -> float"
+        },
+        {
+          "kind": "method",
+          "name": "get_child_order_intents",
+          "signature": "(self) -> tuple[Any, ...]"
+        },
+        {
+          "kind": "method",
+          "name": "get_intent_reconciliations",
+          "signature": "(self) -> tuple[Any, ...]"
+        },
+        {
+          "kind": "method",
+          "name": "get_pending_orders",
+          "signature": "(self, asset: str | None = None) -> list[ml4t.backtest.types.Order]"
+        },
+        {
+          "kind": "method",
+          "name": "get_position",
+          "signature": "(self, asset: str) -> ml4t.backtest.types.Position | None"
+        },
+        {
+          "kind": "method",
+          "name": "get_positions",
+          "signature": "(self) -> dict[str, ml4t.backtest.types.Position]"
+        },
+        {
+          "kind": "method",
+          "name": "get_target_intents",
+          "signature": "(self) -> tuple[ml4t.specs.intents.CanonicalTargetIntent, ...]"
+        },
+        {
+          "kind": "property",
+          "name": "is_connected",
+          "signature": "(self) -> bool"
+        },
+        {
+          "kind": "property",
+          "name": "pending_orders",
+          "signature": "(self) -> list[ml4t.backtest.types.Order]"
+        },
+        {
+          "kind": "property",
+          "name": "positions",
+          "signature": "(self) -> dict[str, ml4t.backtest.types.Position]"
+        },
+        {
+          "kind": "method",
+          "name": "register_position_rule_policy",
+          "signature": "(self, policy_id: str, rules: Any) -> None"
+        },
+        {
+          "kind": "method",
+          "name": "register_target_intent",
+          "signature": "(self, intent: ml4t.specs.intents.CanonicalTargetIntent, *, position_rules: Any | None = None) -> ml4t.specs.intents.CanonicalTargetIntent"
+        },
+        {
+          "kind": "method",
+          "name": "replace_order",
+          "signature": "(self, order_id: str, *, quantity: float | None = None, limit_price: float | None = None, stop_price: float | None = None) -> ml4t.backtest.types.Order"
+        },
+        {
+          "kind": "method",
+          "name": "set_position_rules",
+          "signature": "(self, rules: Any | None, asset: str | None = None) -> None"
+        },
+        {
+          "kind": "method",
+          "name": "submit_order",
+          "signature": "(self, asset: str, quantity: float, side: ml4t.backtest.types.OrderSide | None = None, order_type: ml4t.backtest.types.OrderType = <OrderType.MARKET: 'market'>, limit_price: float | None = None, stop_price: float | None = None, **kwargs: Any) -> ml4t.backtest.types.Order"
+        },
+        {
+          "kind": "method",
+          "name": "update_position_context",
+          "signature": "(self, asset: str, context: dict[str, Any]) -> None"
+        }
+      ],
+      "module": "ml4t.live",
+      "name": "ThreadSafeBrokerWrapper",
+      "signature": "(async_broker: ml4t.live.protocols.AsyncBrokerProtocol, loop: asyncio.events.AbstractEventLoop, strategy_runtime: Any | None = None)"
+    },
+    {
+      "bases": [
+        "ml4t.live.persistence.PersistenceSafetyError"
+      ],
+      "classification": "stable",
+      "defined_in": "ml4t.live.persistence",
+      "kind": "exception",
+      "methods": [],
+      "module": "ml4t.live",
+      "name": "UnsafePersistencePathError",
+      "signature": null
+    },
+    {
+      "bases": [
+        "ml4t.live.runtime.LiveStrategyRuntimeError"
+      ],
+      "classification": "stable",
+      "defined_in": "ml4t.live.runtime",
+      "kind": "exception",
+      "methods": [],
+      "module": "ml4t.live",
+      "name": "UnsupportedLiveCapabilityError",
+      "signature": null
+    },
+    {
+      "bases": [
+        "ml4t.live.orders.OrderValidationError"
+      ],
+      "classification": "stable",
+      "defined_in": "ml4t.live.orders",
+      "kind": "exception",
+      "methods": [],
+      "module": "ml4t.live",
+      "name": "UnsupportedOrderCapabilityError",
+      "signature": null
+    },
+    {
+      "bases": [
+        "builtins.object"
+      ],
+      "classification": "stable",
+      "defined_in": "ml4t.live.safety",
+      "kind": "class",
+      "methods": [
+        {
+          "kind": "property",
+          "name": "account_value",
+          "signature": "(self) -> float"
+        },
+        {
+          "kind": "property",
+          "name": "cash",
+          "signature": "(self) -> float"
+        },
+        {
+          "kind": "property",
+          "name": "positions",
+          "signature": "(self) -> dict[str, ml4t.backtest.types.Position]"
+        },
+        {
+          "kind": "method",
+          "name": "process_fill",
+          "signature": "(self, order: ml4t.backtest.types.Order) -> None"
+        },
+        {
+          "kind": "method",
+          "name": "restore_state",
+          "signature": "(self, state: dict[str, Any]) -> None"
+        },
+        {
+          "kind": "method",
+          "name": "to_state",
+          "signature": "(self) -> dict[str, Any]"
+        },
+        {
+          "kind": "method",
+          "name": "update_prices",
+          "signature": "(self, prices: dict[str, float]) -> None"
+        }
+      ],
+      "module": "ml4t.live",
+      "name": "VirtualPortfolio",
+      "signature": "(initial_cash: float = 100000.0)"
+    },
+    {
+      "classification": "stable",
+      "defined_in": "ml4t.live",
+      "kind": "constant",
+      "module": "ml4t.live",
+      "name": "__version__"
+    },
+    {
+      "classification": "stable",
+      "defined_in": "ml4t.live.lifecycle",
+      "kind": "function",
+      "module": "ml4t.live",
+      "name": "callback_trace",
+      "signature": "(invocations: 'Iterable[LifecycleInvocation]') -> 'tuple[tuple[str, str, datetime | None], ...]'"
+    },
+    {
+      "classification": "stable",
+      "defined_in": "ml4t.live.runtime",
+      "kind": "function",
+      "module": "ml4t.live",
+      "name": "default_live_execution_policy",
+      "signature": "(*, opening_auction: 'ExecutionBehavior' = <ExecutionBehavior.DISABLED: 'disabled'>) -> 'ExecutionPolicy'"
+    },
+    {
+      "bases": [
+        "builtins.object"
+      ],
+      "classification": "stable",
+      "defined_in": "ml4t.live.brokers.alpaca",
+      "kind": "class",
+      "methods": [
+        {
+          "kind": "method",
+          "name": "assert_paper_trading",
+          "signature": "(self) -> None"
+        },
+        {
+          "kind": "method",
+          "name": "cancel_order_async",
+          "signature": "(self, order_id: str) -> bool"
+        },
+        {
+          "kind": "method",
+          "name": "close_position_async",
+          "signature": "(self, asset: str) -> ml4t.backtest.types.Order | None"
+        },
+        {
+          "kind": "method",
+          "name": "connect",
+          "signature": "(self) -> None"
+        },
+        {
+          "kind": "method",
+          "name": "disconnect",
+          "signature": "(self) -> None"
+        },
+        {
+          "kind": "property",
+          "name": "execution_capabilities",
+          "signature": "(self) -> frozenset[ml4t.specs.intents.ExecutionCapability]"
+        },
+        {
+          "kind": "method",
+          "name": "get_account_value_async",
+          "signature": "(self) -> float"
+        },
+        {
+          "kind": "method",
+          "name": "get_cash_async",
+          "signature": "(self) -> float"
+        },
+        {
+          "kind": "method",
+          "name": "get_pending_orders_async",
+          "signature": "(self, asset: str | None = None) -> list[ml4t.backtest.types.Order]"
+        },
+        {
+          "kind": "method",
+          "name": "get_position",
+          "signature": "(self, asset: str) -> ml4t.backtest.types.Position | None"
+        },
+        {
+          "kind": "method",
+          "name": "get_position_async",
+          "signature": "(self, asset: str) -> ml4t.backtest.types.Position | None"
+        },
+        {
+          "kind": "method",
+          "name": "get_positions_async",
+          "signature": "(self) -> dict[str, ml4t.backtest.types.Position]"
+        },
+        {
+          "kind": "property",
+          "name": "is_connected",
+          "signature": "(self) -> bool"
+        },
+        {
+          "kind": "method",
+          "name": "is_connected_async",
+          "signature": "(self) -> bool"
+        },
+        {
+          "kind": "property",
+          "name": "pending_orders",
+          "signature": "(self) -> list[ml4t.backtest.types.Order]"
+        },
+        {
+          "kind": "property",
+          "name": "positions",
+          "signature": "(self) -> dict[str, ml4t.backtest.types.Position]"
+        },
+        {
+          "kind": "method",
+          "name": "replace_order_async",
+          "signature": "(self, order_id: str, *, quantity: float | None = None, limit_price: float | None = None, stop_price: float | None = None, **kwargs: Any) -> ml4t.backtest.types.Order"
+        },
+        {
+          "kind": "method",
+          "name": "submit_order_async",
+          "signature": "(self, asset: str, quantity: float, side: ml4t.backtest.types.OrderSide | None = None, order_type: ml4t.backtest.types.OrderType = <OrderType.MARKET: 'market'>, limit_price: float | None = None, stop_price: float | None = None, **kwargs: Any) -> ml4t.backtest.types.Order"
+        }
+      ],
+      "module": "ml4t.live.brokers",
+      "name": "AlpacaBroker",
+      "signature": "(api_key: str, secret_key: str, paper: bool = True)"
+    },
+    {
+      "bases": [
+        "builtins.object"
+      ],
+      "classification": "stable",
+      "defined_in": "ml4t.live.brokers.ib",
+      "kind": "class",
+      "methods": [
+        {
+          "kind": "method",
+          "name": "assert_paper_trading",
+          "signature": "(self) -> None"
+        },
+        {
+          "kind": "method",
+          "name": "cancel_order_async",
+          "signature": "(self, order_id: str) -> bool"
+        },
+        {
+          "kind": "method",
+          "name": "close_position_async",
+          "signature": "(self, asset: str) -> ml4t.backtest.types.Order | None"
+        },
+        {
+          "kind": "method",
+          "name": "connect",
+          "signature": "(self) -> None"
+        },
+        {
+          "kind": "method",
+          "name": "disconnect",
+          "signature": "(self) -> None"
+        },
+        {
+          "kind": "property",
+          "name": "execution_capabilities",
+          "signature": "(self) -> frozenset[ml4t.specs.intents.ExecutionCapability]"
+        },
+        {
+          "kind": "method",
+          "name": "get_account_value_async",
+          "signature": "(self) -> float"
+        },
+        {
+          "kind": "method",
+          "name": "get_cash_async",
+          "signature": "(self) -> float"
+        },
+        {
+          "kind": "method",
+          "name": "get_pending_orders_async",
+          "signature": "(self, asset: str | None = None) -> list[ml4t.backtest.types.Order]"
+        },
+        {
+          "kind": "method",
+          "name": "get_position",
+          "signature": "(self, asset: str) -> ml4t.backtest.types.Position | None"
+        },
+        {
+          "kind": "method",
+          "name": "get_position_async",
+          "signature": "(self, asset: str) -> ml4t.backtest.types.Position | None"
+        },
+        {
+          "kind": "method",
+          "name": "get_positions_async",
+          "signature": "(self) -> dict[str, ml4t.backtest.types.Position]"
+        },
+        {
+          "kind": "property",
+          "name": "is_connected",
+          "signature": "(self) -> bool"
+        },
+        {
+          "kind": "method",
+          "name": "is_connected_async",
+          "signature": "(self) -> bool"
+        },
+        {
+          "kind": "property",
+          "name": "pending_orders",
+          "signature": "(self) -> list[ml4t.backtest.types.Order]"
+        },
+        {
+          "kind": "property",
+          "name": "positions",
+          "signature": "(self) -> dict[str, ml4t.backtest.types.Position]"
+        },
+        {
+          "kind": "method",
+          "name": "replace_order_async",
+          "signature": "(self, order_id: str, *, quantity: float | None = None, limit_price: float | None = None, stop_price: float | None = None, **kwargs: Any) -> ml4t.backtest.types.Order"
+        },
+        {
+          "kind": "method",
+          "name": "submit_order_async",
+          "signature": "(self, asset: str, quantity: float, side: ml4t.backtest.types.OrderSide | None = None, order_type: ml4t.backtest.types.OrderType = <OrderType.MARKET: 'market'>, limit_price: float | None = None, stop_price: float | None = None, **kwargs: Any) -> ml4t.backtest.types.Order"
+        }
+      ],
+      "module": "ml4t.live.brokers",
+      "name": "IBBroker",
+      "signature": "(host: str = '127.0.0.1', port: int = 7497, client_id: int = 1, account: str | None = None, market_data_type: int | None = None)"
+    },
+    {
+      "bases": [
+        "builtins.object"
+      ],
+      "classification": "stable",
+      "defined_in": "ml4t.live.brokers.alpaca",
+      "kind": "class",
+      "methods": [
+        {
+          "kind": "method",
+          "name": "assert_paper_trading",
+          "signature": "(self) -> None"
+        },
+        {
+          "kind": "method",
+          "name": "cancel_order_async",
+          "signature": "(self, order_id: str) -> bool"
+        },
+        {
+          "kind": "method",
+          "name": "close_position_async",
+          "signature": "(self, asset: str) -> ml4t.backtest.types.Order | None"
+        },
+        {
+          "kind": "method",
+          "name": "connect",
+          "signature": "(self) -> None"
+        },
+        {
+          "kind": "method",
+          "name": "disconnect",
+          "signature": "(self) -> None"
+        },
+        {
+          "kind": "property",
+          "name": "execution_capabilities",
+          "signature": "(self) -> frozenset[ml4t.specs.intents.ExecutionCapability]"
+        },
+        {
+          "kind": "method",
+          "name": "get_account_value_async",
+          "signature": "(self) -> float"
+        },
+        {
+          "kind": "method",
+          "name": "get_cash_async",
+          "signature": "(self) -> float"
+        },
+        {
+          "kind": "method",
+          "name": "get_pending_orders_async",
+          "signature": "(self, asset: str | None = None) -> list[ml4t.backtest.types.Order]"
+        },
+        {
+          "kind": "method",
+          "name": "get_position",
+          "signature": "(self, asset: str) -> ml4t.backtest.types.Position | None"
+        },
+        {
+          "kind": "method",
+          "name": "get_position_async",
+          "signature": "(self, asset: str) -> ml4t.backtest.types.Position | None"
+        },
+        {
+          "kind": "method",
+          "name": "get_positions_async",
+          "signature": "(self) -> dict[str, ml4t.backtest.types.Position]"
+        },
+        {
+          "kind": "property",
+          "name": "is_connected",
+          "signature": "(self) -> bool"
+        },
+        {
+          "kind": "method",
+          "name": "is_connected_async",
+          "signature": "(self) -> bool"
+        },
+        {
+          "kind": "property",
+          "name": "pending_orders",
+          "signature": "(self) -> list[ml4t.backtest.types.Order]"
+        },
+        {
+          "kind": "property",
+          "name": "positions",
+          "signature": "(self) -> dict[str, ml4t.backtest.types.Position]"
+        },
+        {
+          "kind": "method",
+          "name": "replace_order_async",
+          "signature": "(self, order_id: str, *, quantity: float | None = None, limit_price: float | None = None, stop_price: float | None = None, **kwargs: Any) -> ml4t.backtest.types.Order"
+        },
+        {
+          "kind": "method",
+          "name": "submit_order_async",
+          "signature": "(self, asset: str, quantity: float, side: ml4t.backtest.types.OrderSide | None = None, order_type: ml4t.backtest.types.OrderType = <OrderType.MARKET: 'market'>, limit_price: float | None = None, stop_price: float | None = None, **kwargs: Any) -> ml4t.backtest.types.Order"
+        }
+      ],
+      "module": "ml4t.live.brokers.alpaca",
+      "name": "AlpacaBroker",
+      "signature": "(api_key: str, secret_key: str, paper: bool = True)"
+    },
+    {
+      "bases": [
+        "builtins.object"
+      ],
+      "classification": "stable",
+      "defined_in": "ml4t.live.brokers.ib",
+      "kind": "class",
+      "methods": [
+        {
+          "kind": "method",
+          "name": "assert_paper_trading",
+          "signature": "(self) -> None"
+        },
+        {
+          "kind": "method",
+          "name": "cancel_order_async",
+          "signature": "(self, order_id: str) -> bool"
+        },
+        {
+          "kind": "method",
+          "name": "close_position_async",
+          "signature": "(self, asset: str) -> ml4t.backtest.types.Order | None"
+        },
+        {
+          "kind": "method",
+          "name": "connect",
+          "signature": "(self) -> None"
+        },
+        {
+          "kind": "method",
+          "name": "disconnect",
+          "signature": "(self) -> None"
+        },
+        {
+          "kind": "property",
+          "name": "execution_capabilities",
+          "signature": "(self) -> frozenset[ml4t.specs.intents.ExecutionCapability]"
+        },
+        {
+          "kind": "method",
+          "name": "get_account_value_async",
+          "signature": "(self) -> float"
+        },
+        {
+          "kind": "method",
+          "name": "get_cash_async",
+          "signature": "(self) -> float"
+        },
+        {
+          "kind": "method",
+          "name": "get_pending_orders_async",
+          "signature": "(self, asset: str | None = None) -> list[ml4t.backtest.types.Order]"
+        },
+        {
+          "kind": "method",
+          "name": "get_position",
+          "signature": "(self, asset: str) -> ml4t.backtest.types.Position | None"
+        },
+        {
+          "kind": "method",
+          "name": "get_position_async",
+          "signature": "(self, asset: str) -> ml4t.backtest.types.Position | None"
+        },
+        {
+          "kind": "method",
+          "name": "get_positions_async",
+          "signature": "(self) -> dict[str, ml4t.backtest.types.Position]"
+        },
+        {
+          "kind": "property",
+          "name": "is_connected",
+          "signature": "(self) -> bool"
+        },
+        {
+          "kind": "method",
+          "name": "is_connected_async",
+          "signature": "(self) -> bool"
+        },
+        {
+          "kind": "property",
+          "name": "pending_orders",
+          "signature": "(self) -> list[ml4t.backtest.types.Order]"
+        },
+        {
+          "kind": "property",
+          "name": "positions",
+          "signature": "(self) -> dict[str, ml4t.backtest.types.Position]"
+        },
+        {
+          "kind": "method",
+          "name": "replace_order_async",
+          "signature": "(self, order_id: str, *, quantity: float | None = None, limit_price: float | None = None, stop_price: float | None = None, **kwargs: Any) -> ml4t.backtest.types.Order"
+        },
+        {
+          "kind": "method",
+          "name": "submit_order_async",
+          "signature": "(self, asset: str, quantity: float, side: ml4t.backtest.types.OrderSide | None = None, order_type: ml4t.backtest.types.OrderType = <OrderType.MARKET: 'market'>, limit_price: float | None = None, stop_price: float | None = None, **kwargs: Any) -> ml4t.backtest.types.Order"
+        }
+      ],
+      "module": "ml4t.live.brokers.ib",
+      "name": "IBBroker",
+      "signature": "(host: str = '127.0.0.1', port: int = 7497, client_id: int = 1, account: str | None = None, market_data_type: int | None = None)"
+    },
+    {
+      "classification": "internal",
+      "defined_in": "ml4t.live.brokers.ib",
+      "kind": "constant",
+      "module": "ml4t.live.brokers.ib",
+      "name": "IB_PENDING_ORDER_STATUSES"
+    },
+    {
+      "bases": [
+        "builtins.object"
+      ],
+      "classification": "internal",
+      "dataclass_fields": [
+        {
+          "default": "<required>",
+          "name": "status",
+          "type": "str"
+        },
+        {
+          "default": "<required>",
+          "name": "detail",
+          "type": "str"
+        },
+        {
+          "default": "<required>",
+          "name": "positions",
+          "type": "dict[str, float]"
+        },
+        {
+          "default": "<required>",
+          "name": "pending_orders",
+          "type": "list[dict[str, Any]]"
+        }
+      ],
+      "defined_in": "ml4t.live.cli.main",
+      "kind": "dataclass",
+      "methods": [],
+      "module": "ml4t.live.cli.main",
+      "name": "BrokerProbeResult",
+      "signature": "(status: 'str', detail: 'str', positions: 'dict[str, float]', pending_orders: 'list[dict[str, Any]]') -> None"
+    },
+    {
+      "classification": "internal",
+      "defined_in": "ml4t.live.cli.main",
+      "kind": "constant",
+      "module": "ml4t.live.cli.main",
+      "name": "DEFAULT_STATE_FILE"
+    },
+    {
+      "bases": [
+        "ml4t.live.safety.SafeBroker"
+      ],
+      "classification": "internal",
+      "defined_in": "ml4t.live.cli.main",
+      "kind": "class",
+      "methods": [
+        {
+          "kind": "property",
+          "name": "recent_order_intents",
+          "signature": "(self) -> 'list[OrderIntentRecord]'"
+        },
+        {
+          "kind": "method",
+          "name": "submit_order_async",
+          "signature": "(self, asset: 'str', quantity: 'float', side: 'OrderSide | None' = None, order_type: 'OrderType' = <OrderType.MARKET: 'market'>, limit_price: 'float | None' = None, stop_price: 'float | None' = None, **kwargs: 'Any') -> 'Order'"
+        }
+      ],
+      "module": "ml4t.live.cli.main",
+      "name": "IntentPrintingSafeBroker",
+      "signature": "(broker: 'AsyncBrokerProtocol', config: 'LiveRiskConfig')"
+    },
+    {
+      "bases": [
+        "builtins.object"
+      ],
+      "classification": "internal",
+      "defined_in": "ml4t.live.cli.main",
+      "kind": "class",
+      "methods": [
+        {
+          "kind": "method",
+          "name": "cancel_order_async",
+          "signature": "(self, order_id: 'str') -> 'bool'"
+        },
+        {
+          "kind": "method",
+          "name": "close_position_async",
+          "signature": "(self, asset: 'str') -> 'Order | None'"
+        },
+        {
+          "kind": "method",
+          "name": "connect",
+          "signature": "(self) -> 'None'"
+        },
+        {
+          "kind": "method",
+          "name": "disconnect",
+          "signature": "(self) -> 'None'"
+        },
+        {
+          "kind": "method",
+          "name": "get_account_value_async",
+          "signature": "(self) -> 'float'"
+        },
+        {
+          "kind": "method",
+          "name": "get_cash_async",
+          "signature": "(self) -> 'float'"
+        },
+        {
+          "kind": "method",
+          "name": "get_pending_orders_async",
+          "signature": "(self, asset: 'str | None' = None) -> 'list[Order]'"
+        },
+        {
+          "kind": "method",
+          "name": "get_position_async",
+          "signature": "(self, asset: 'str') -> 'Position | None'"
+        },
+        {
+          "kind": "method",
+          "name": "get_positions_async",
+          "signature": "(self) -> 'dict[str, Position]'"
+        },
+        {
+          "kind": "method",
+          "name": "is_connected_async",
+          "signature": "(self) -> 'bool'"
+        },
+        {
+          "kind": "property",
+          "name": "pending_orders",
+          "signature": "(self) -> 'list[Order]'"
+        },
+        {
+          "kind": "property",
+          "name": "positions",
+          "signature": "(self) -> 'dict[str, Position]'"
+        },
+        {
+          "kind": "method",
+          "name": "replace_order_async",
+          "signature": "(self, order_id: 'str', *, quantity: 'float | None' = None, limit_price: 'float | None' = None, stop_price: 'float | None' = None) -> 'Order'"
+        },
+        {
+          "kind": "method",
+          "name": "submit_order_async",
+          "signature": "(self, asset: 'str', quantity: 'float', side: 'OrderSide | None' = None, order_type: 'OrderType' = <OrderType.MARKET: 'market'>, limit_price: 'float | None' = None, stop_price: 'float | None' = None, **kwargs: 'Any') -> 'Order'"
+        }
+      ],
+      "module": "ml4t.live.cli.main",
+      "name": "NullBroker",
+      "signature": "() -> 'None'"
+    },
+    {
+      "bases": [
+        "builtins.object"
+      ],
+      "classification": "internal",
+      "dataclass_fields": [
+        {
+          "default": "<required>",
+          "name": "created_at",
+          "type": "datetime"
+        },
+        {
+          "default": "<required>",
+          "name": "asset",
+          "type": "str"
+        },
+        {
+          "default": "<required>",
+          "name": "side",
+          "type": "str"
+        },
+        {
+          "default": "<required>",
+          "name": "quantity",
+          "type": "float"
+        },
+        {
+          "default": "<required>",
+          "name": "order_type",
+          "type": "str"
+        }
+      ],
+      "defined_in": "ml4t.live.cli.main",
+      "kind": "dataclass",
+      "methods": [],
+      "module": "ml4t.live.cli.main",
+      "name": "OrderIntentRecord",
+      "signature": "(created_at: 'datetime', asset: 'str', side: 'str', quantity: 'float', order_type: 'str') -> None"
+    },
+    {
+      "bases": [
+        "builtins.object"
+      ],
+      "classification": "internal",
+      "dataclass_fields": [
+        {
+          "default": "<required>",
+          "name": "status",
+          "type": "str"
+        },
+        {
+          "default": "<required>",
+          "name": "detail",
+          "type": "str"
+        },
+        {
+          "default": "<required>",
+          "name": "account_value",
+          "type": "float | None"
+        },
+        {
+          "default": "<required>",
+          "name": "cash",
+          "type": "float | None"
+        },
+        {
+          "default": "<required>",
+          "name": "reconciliation_report",
+          "type": "dict[str, Any] | None"
+        },
+        {
+          "default": "<required>",
+          "name": "kill_switch_activated",
+          "type": "bool"
+        },
+        {
+          "default": "<required>",
+          "name": "kill_switch_reason",
+          "type": "str"
+        },
+        {
+          "default": "<required>",
+          "name": "journal_file",
+          "type": "str | None"
+        },
+        {
+          "default": "<required>",
+          "name": "session_state",
+          "type": "str | None"
+        },
+        {
+          "default": "<required>",
+          "name": "next_session_boundary",
+          "type": "datetime | None"
+        }
+      ],
+      "defined_in": "ml4t.live.cli.main",
+      "kind": "dataclass",
+      "methods": [],
+      "module": "ml4t.live.cli.main",
+      "name": "PreflightResult",
+      "signature": "(status: 'str', detail: 'str', account_value: 'float | None', cash: 'float | None', reconciliation_report: 'dict[str, Any] | None', kill_switch_activated: 'bool', kill_switch_reason: 'str', journal_file: 'str | None', session_state: 'str | None', next_session_boundary: 'datetime | None') -> None"
+    },
+    {
+      "classification": "internal",
+      "defined_in": "ml4t.live.cli.main",
+      "kind": "function",
+      "module": "ml4t.live.cli.main",
+      "name": "app",
+      "signature": "() -> 'None'"
+    },
+    {
+      "classification": "internal",
+      "defined_in": "ml4t.live.cli.main",
+      "kind": "function",
+      "module": "ml4t.live.cli.main",
+      "name": "build_parser",
+      "signature": "() -> 'argparse.ArgumentParser'"
+    },
+    {
+      "classification": "internal",
+      "defined_in": "ml4t.live.cli.main",
+      "kind": "function",
+      "module": "ml4t.live.cli.main",
+      "name": "run_cli",
+      "signature": "(argv: 'list[str] | None' = None) -> 'int'"
+    },
+    {
+      "bases": [
+        "builtins.object"
+      ],
+      "classification": "stable",
+      "defined_in": "ml4t.live.engine",
+      "kind": "class",
+      "methods": [
+        {
+          "kind": "method",
+          "name": "connect",
+          "signature": "(self) -> None"
+        },
+        {
+          "kind": "property",
+          "name": "operational_events",
+          "signature": "(self) -> tuple[dict[str, Any], ...]"
+        },
+        {
+          "kind": "method",
+          "name": "run",
+          "signature": "(self) -> None"
+        },
+        {
+          "kind": "property",
+          "name": "runtime_state",
+          "signature": "(self) -> ml4t.live.engine.RuntimeState"
+        },
+        {
+          "kind": "method",
+          "name": "runtime_status",
+          "signature": "(self, now: datetime.datetime | None = None) -> dict[str, Any]"
+        },
+        {
+          "kind": "property",
+          "name": "runtime_transitions",
+          "signature": "(self) -> tuple[ml4t.live.engine.RuntimeTransition, ...]"
+        },
+        {
+          "kind": "property",
+          "name": "stats",
+          "signature": "(self) -> dict[str, Any]"
+        },
+        {
+          "kind": "method",
+          "name": "stop",
+          "signature": "(self) -> None"
+        }
+      ],
+      "module": "ml4t.live.engine",
+      "name": "LiveEngine",
+      "signature": "(strategy: ml4t.backtest.strategy.Strategy, broker: ml4t.live.protocols.AsyncBrokerProtocol, feed: ml4t.live.protocols.DataFeedProtocol, *, on_error: collections.abc.Callable[[Exception, datetime.datetime, dict], None] | None = None, halt_on_error: bool = False, feed_silence_seconds: float | None = None, watchdog_poll_seconds: float = 1.0, halt_on_unhealthy: bool = False, auto_recover: bool = False, recovery_cooldown_seconds: float = 5.0, max_recovery_attempts: int = 3, max_event_age_seconds: float | None = None, on_health_change: collections.abc.Callable[[str, dict[str, Any]], None] | None = None, lifecycle_version: ml4t.specs.lifecycle.LifecycleVersion | str = <LifecycleVersion.V1: '1'>, execution_policy: ml4t.specs.intents.ExecutionPolicy | None = None)"
+    },
+    {
+      "classification": "internal",
+      "defined_in": "ml4t.live.engine",
+      "kind": "constant",
+      "module": "ml4t.live.engine",
+      "name": "RECOVERABLE_HEALTH_STATES"
+    },
+    {
+      "classification": "internal",
+      "defined_in": "ml4t.live.engine",
+      "kind": "constant",
+      "module": "ml4t.live.engine",
+      "name": "RETAINED_OPERATIONAL_EVENT_LIMIT"
+    },
+    {
+      "bases": [
+        "builtins.RuntimeError"
+      ],
+      "classification": "stable",
+      "defined_in": "ml4t.live.engine",
+      "kind": "exception",
+      "methods": [],
+      "module": "ml4t.live.engine",
+      "name": "RuntimeCleanupError",
+      "signature": "(cleanup_result: dict[str, str])"
+    },
+    {
+      "bases": [
+        "builtins.RuntimeError"
+      ],
+      "classification": "stable",
+      "defined_in": "ml4t.live.engine",
+      "kind": "exception",
+      "methods": [],
+      "module": "ml4t.live.engine",
+      "name": "RuntimeFailureError",
+      "signature": null
+    },
+    {
+      "bases": [
+        "enum.StrEnum"
+      ],
+      "classification": "stable",
+      "defined_in": "ml4t.live.engine",
+      "enum_members": [
+        {
+          "name": "STOPPED",
+          "value": "'stopped'"
+        },
+        {
+          "name": "PREFLIGHT",
+          "value": "'preflight'"
+        },
+        {
+          "name": "CONNECTING_BROKER",
+          "value": "'connecting_broker'"
+        },
+        {
+          "name": "RECONCILING",
+          "value": "'reconciling'"
+        },
+        {
+          "name": "STARTING_FEED",
+          "value": "'starting_feed'"
+        },
+        {
+          "name": "READY",
+          "value": "'ready'"
+        },
+        {
+          "name": "STARTING_STRATEGY",
+          "value": "'starting_strategy'"
+        },
+        {
+          "name": "RUNNING",
+          "value": "'running'"
+        },
+        {
+          "name": "DEGRADED",
+          "value": "'degraded'"
+        },
+        {
+          "name": "RECOVERING",
+          "value": "'recovering'"
+        },
+        {
+          "name": "STOPPING",
+          "value": "'stopping'"
+        },
+        {
+          "name": "FAILED",
+          "value": "'failed'"
+        }
+      ],
+      "kind": "enum",
+      "methods": [],
+      "module": "ml4t.live.engine",
+      "name": "RuntimeState",
+      "signature": "(*values)"
+    },
+    {
+      "bases": [
+        "builtins.object"
+      ],
+      "classification": "stable",
+      "dataclass_fields": [
+        {
+          "default": "<required>",
+          "name": "occurred_at",
+          "type": "<class 'datetime.datetime'>"
+        },
+        {
+          "default": "<required>",
+          "name": "previous",
+          "type": "<enum 'RuntimeState'>"
+        },
+        {
+          "default": "<required>",
+          "name": "current",
+          "type": "<enum 'RuntimeState'>"
+        },
+        {
+          "default": "<required>",
+          "name": "reason",
+          "type": "<class 'str'>"
+        },
+        {
+          "default": "<required>",
+          "name": "attempt",
+          "type": "int | None"
+        },
+        {
+          "default": "<required>",
+          "name": "last_known_sequence",
+          "type": "<class 'int'>"
+        }
+      ],
+      "defined_in": "ml4t.live.engine",
+      "kind": "dataclass",
+      "methods": [],
+      "module": "ml4t.live.engine",
+      "name": "RuntimeTransition",
+      "signature": "(occurred_at: datetime.datetime, previous: ml4t.live.engine.RuntimeState, current: ml4t.live.engine.RuntimeState, reason: str, attempt: int | None, last_known_sequence: int) -> None"
+    },
+    {
+      "classification": "internal",
+      "defined_in": "zoneinfo",
+      "kind": "constant",
+      "module": "ml4t.live.engine",
+      "name": "US_EASTERN"
+    },
+    {
+      "classification": "internal",
+      "defined_in": "ml4t.live.engine",
+      "kind": "constant",
+      "module": "ml4t.live.engine",
+      "name": "US_EQUITY_CLOSE"
+    },
+    {
+      "classification": "internal",
+      "defined_in": "ml4t.live.engine",
+      "kind": "constant",
+      "module": "ml4t.live.engine",
+      "name": "US_EQUITY_OPEN"
+    },
+    {
+      "bases": [
+        "ml4t.live.protocols.DataFeedProtocol"
+      ],
+      "classification": "stable",
+      "defined_in": "ml4t.live.feeds.alpaca_feed",
+      "kind": "class",
+      "methods": [
+        {
+          "kind": "method",
+          "name": "start",
+          "signature": "(self) -> None"
+        },
+        {
+          "kind": "property",
+          "name": "stats",
+          "signature": "(self) -> dict[str, Any]"
+        },
+        {
+          "kind": "method",
+          "name": "stop",
+          "signature": "(self) -> None"
+        }
+      ],
+      "module": "ml4t.live.feeds",
+      "name": "AlpacaDataFeed",
+      "signature": "(api_key: str, secret_key: str, symbols: list[str], *, data_type: str = 'bars', feed: str = 'iex', queue_capacity: int = 1024)"
+    },
+    {
+      "bases": [
+        "builtins.object"
+      ],
+      "classification": "stable",
+      "defined_in": "ml4t.live.feeds.aggregator",
+      "kind": "class",
+      "methods": [
+        {
+          "kind": "method",
+          "name": "start",
+          "signature": "(self) -> None"
+        },
+        {
+          "kind": "property",
+          "name": "stats",
+          "signature": "(self) -> dict[str, Any]"
+        },
+        {
+          "kind": "method",
+          "name": "stop",
+          "signature": "(self) -> None"
+        }
+      ],
+      "module": "ml4t.live.feeds",
+      "name": "BarAggregator",
+      "signature": "(source_feed: 'DataFeedProtocol', bar_size_minutes: int = 1, assets: list[str] | None = None, flush_timeout_seconds: float = 2.0, queue_capacity: int = 256)"
+    },
+    {
+      "bases": [
+        "builtins.object"
+      ],
+      "classification": "stable",
+      "dataclass_fields": [
+        {
+          "default": "None",
+          "name": "open",
+          "type": "float | None"
+        },
+        {
+          "default": "-inf",
+          "name": "high",
+          "type": "<class 'float'>"
+        },
+        {
+          "default": "inf",
+          "name": "low",
+          "type": "<class 'float'>"
+        },
+        {
+          "default": "0.0",
+          "name": "close",
+          "type": "<class 'float'>"
+        },
+        {
+          "default": "0.0",
+          "name": "volume",
+          "type": "<class 'float'>"
+        }
+      ],
+      "defined_in": "ml4t.live.feeds.aggregator",
+      "kind": "dataclass",
+      "methods": [
+        {
+          "kind": "method",
+          "name": "reset",
+          "signature": "(self) -> None"
+        },
+        {
+          "kind": "method",
+          "name": "to_dict",
+          "signature": "(self) -> dict[str, Any]"
+        },
+        {
+          "kind": "method",
+          "name": "update",
+          "signature": "(self, price: float, size: float = 0) -> None"
+        },
+        {
+          "kind": "method",
+          "name": "update_bar",
+          "signature": "(self, payload: dict[str, Any]) -> None"
+        }
+      ],
+      "module": "ml4t.live.feeds",
+      "name": "BarBuffer",
+      "signature": "(open: float | None = None, high: float = -inf, low: float = inf, close: float = 0.0, volume: float = 0.0) -> None"
+    },
+    {
+      "bases": [
+        "ml4t.live.protocols.DataFeedProtocol"
+      ],
+      "classification": "experimental",
+      "defined_in": "ml4t.live.feeds.crypto_feed",
+      "kind": "class",
+      "methods": [
+        {
+          "kind": "method",
+          "name": "close",
+          "signature": "(self) -> None"
+        },
+        {
+          "kind": "method",
+          "name": "start",
+          "signature": "(self) -> None"
+        },
+        {
+          "kind": "property",
+          "name": "stats",
+          "signature": "(self) -> dict[str, Any]"
+        },
+        {
+          "kind": "method",
+          "name": "stop",
+          "signature": "(self) -> None"
+        }
+      ],
+      "module": "ml4t.live.feeds",
+      "name": "CryptoFeed",
+      "signature": "(exchange: str, symbols: list[str], *, timeframe: str = '1m', stream_trades: bool = False, stream_ohlcv: bool = True, api_key: str | None = None, api_secret: str | None = None, api_passphrase: str | None = None, experimental: bool = False)"
+    },
+    {
+      "bases": [
+        "ml4t.live.protocols.DataFeedProtocol"
+      ],
+      "classification": "experimental",
+      "defined_in": "ml4t.live.feeds.databento_feed",
+      "kind": "class",
+      "methods": [
+        {
+          "kind": "classmethod",
+          "name": "from_file",
+          "signature": "(cls, file_path: str | pathlib.Path, symbols: list[str], *, replay_speed: float = 1.0, experimental: bool = False) -> 'DataBentoFeed'"
+        },
+        {
+          "kind": "classmethod",
+          "name": "from_live",
+          "signature": "(cls, api_key: str, dataset: str, schema: str, symbols: list[str], *, experimental: bool = False) -> 'DataBentoFeed'"
+        },
+        {
+          "kind": "method",
+          "name": "start",
+          "signature": "(self) -> None"
+        },
+        {
+          "kind": "property",
+          "name": "stats",
+          "signature": "(self) -> dict[str, Any]"
+        },
+        {
+          "kind": "method",
+          "name": "stop",
+          "signature": "(self) -> None"
+        }
+      ],
+      "module": "ml4t.live.feeds",
+      "name": "DataBentoFeed",
+      "signature": "(client: ml4t.live.feeds.databento_feed._HistoricalRecordSource | ml4t.live.feeds.databento_feed._LiveRecordSource, symbols: list[str], *, mode: str = 'historical', replay_speed: float = 1.0, experimental: bool = False)"
+    },
+    {
+      "bases": [
+        "builtins.RuntimeError"
+      ],
+      "classification": "experimental",
+      "defined_in": "ml4t.live.feeds.experimental",
+      "kind": "exception",
+      "methods": [],
+      "module": "ml4t.live.feeds",
+      "name": "ExperimentalFeedError",
+      "signature": null
+    },
+    {
+      "bases": [
+        "builtins.UserWarning"
+      ],
+      "classification": "experimental",
+      "defined_in": "ml4t.live.feeds.experimental",
+      "kind": "exception",
+      "methods": [],
+      "module": "ml4t.live.feeds",
+      "name": "ExperimentalFeedWarning",
+      "signature": null
+    },
+    {
+      "bases": [
+        "ml4t.live.feeds.events.FeedContractError"
+      ],
+      "classification": "stable",
+      "defined_in": "ml4t.live.feeds.events",
+      "kind": "exception",
+      "methods": [
+        {
+          "kind": "method",
+          "name": "to_dict",
+          "signature": "(self) -> 'dict[str, Any]'"
+        }
+      ],
+      "module": "ml4t.live.feeds",
+      "name": "FeedContinuityError",
+      "signature": "(reason: 'str', event: 'MarketEvent') -> 'None'"
+    },
+    {
+      "bases": [
+        "builtins.ValueError"
+      ],
+      "classification": "stable",
+      "defined_in": "ml4t.live.feeds.events",
+      "kind": "exception",
+      "methods": [],
+      "module": "ml4t.live.feeds",
+      "name": "FeedContractError",
+      "signature": null
+    },
+    {
+      "bases": [
+        "builtins.RuntimeError"
+      ],
+      "classification": "stable",
+      "defined_in": "ml4t.live.feeds.queue",
+      "kind": "exception",
+      "methods": [
+        {
+          "kind": "method",
+          "name": "to_dict",
+          "signature": "(self) -> 'dict[str, Any]'"
+        }
+      ],
+      "module": "ml4t.live.feeds",
+      "name": "FeedOverflowError",
+      "signature": "(*, feed: 'str', event: 'MarketEvent', snapshot: 'FeedQueueSnapshot') -> 'None'"
+    },
+    {
+      "bases": [
+        "builtins.object"
+      ],
+      "classification": "stable",
+      "dataclass_fields": [
+        {
+          "default": "<required>",
+          "name": "capacity",
+          "type": "int"
+        },
+        {
+          "default": "<required>",
+          "name": "occupancy",
+          "type": "int"
+        },
+        {
+          "default": "<required>",
+          "name": "high_watermark",
+          "type": "int"
+        },
+        {
+          "default": "<required>",
+          "name": "overflow_count",
+          "type": "int"
+        },
+        {
+          "default": "<required>",
+          "name": "oldest_event_lag_seconds",
+          "type": "float | None"
+        },
+        {
+          "default": "<required>",
+          "name": "failed",
+          "type": "bool"
+        },
+        {
+          "default": "<required>",
+          "name": "finished",
+          "type": "bool"
+        }
+      ],
+      "defined_in": "ml4t.live.feeds.queue",
+      "kind": "dataclass",
+      "methods": [
+        {
+          "kind": "method",
+          "name": "to_dict",
+          "signature": "(self) -> 'dict[str, Any]'"
+        }
+      ],
+      "module": "ml4t.live.feeds",
+      "name": "FeedQueueSnapshot",
+      "signature": "(capacity: 'int', occupancy: 'int', high_watermark: 'int', overflow_count: 'int', oldest_event_lag_seconds: 'float | None', failed: 'bool', finished: 'bool') -> None"
+    },
+    {
+      "bases": [
+        "ml4t.live.protocols.DataFeedProtocol"
+      ],
+      "classification": "stable",
+      "defined_in": "ml4t.live.feeds.ib_feed",
+      "kind": "class",
+      "methods": [
+        {
+          "kind": "method",
+          "name": "start",
+          "signature": "(self) -> None"
+        },
+        {
+          "kind": "property",
+          "name": "stats",
+          "signature": "(self) -> dict[str, Any]"
+        },
+        {
+          "kind": "method",
+          "name": "stop",
+          "signature": "(self) -> None"
+        }
+      ],
+      "module": "ml4t.live.feeds",
+      "name": "IBDataFeed",
+      "signature": "(ib: ib_async.ib.IB, symbols: list[str], *, exchange: str = 'SMART', currency: str = 'USD', tick_throttle_ms: int = 100, queue_capacity: int = 1024)"
+    },
+    {
+      "bases": [
+        "ml4t.live.protocols.DataFeedProtocol"
+      ],
+      "classification": "stable",
+      "defined_in": "ml4t.live.feeds.okx_feed",
+      "kind": "class",
+      "methods": [
+        {
+          "kind": "method",
+          "name": "close",
+          "signature": "(self) -> None"
+        },
+        {
+          "kind": "method",
+          "name": "start",
+          "signature": "(self) -> None"
+        },
+        {
+          "kind": "property",
+          "name": "stats",
+          "signature": "(self) -> dict[str, Any]"
+        },
+        {
+          "kind": "method",
+          "name": "stop",
+          "signature": "(self) -> None"
+        }
+      ],
+      "module": "ml4t.live.feeds",
+      "name": "OKXFundingFeed",
+      "signature": "(symbols: list[str], *, timeframe: str = '1H', poll_interval_seconds: float = 60.0, queue_capacity: int = 256)"
+    },
+    {
+      "bases": [
+        "builtins.object"
+      ],
+      "classification": "stable",
+      "defined_in": "ml4t.live.feeds.aggregator",
+      "kind": "class",
+      "methods": [
+        {
+          "kind": "method",
+          "name": "start",
+          "signature": "(self) -> None"
+        },
+        {
+          "kind": "property",
+          "name": "stats",
+          "signature": "(self) -> dict[str, Any]"
+        },
+        {
+          "kind": "method",
+          "name": "stop",
+          "signature": "(self) -> None"
+        }
+      ],
+      "module": "ml4t.live.feeds.aggregator",
+      "name": "BarAggregator",
+      "signature": "(source_feed: 'DataFeedProtocol', bar_size_minutes: int = 1, assets: list[str] | None = None, flush_timeout_seconds: float = 2.0, queue_capacity: int = 256)"
+    },
+    {
+      "bases": [
+        "builtins.object"
+      ],
+      "classification": "stable",
+      "dataclass_fields": [
+        {
+          "default": "None",
+          "name": "open",
+          "type": "float | None"
+        },
+        {
+          "default": "-inf",
+          "name": "high",
+          "type": "<class 'float'>"
+        },
+        {
+          "default": "inf",
+          "name": "low",
+          "type": "<class 'float'>"
+        },
+        {
+          "default": "0.0",
+          "name": "close",
+          "type": "<class 'float'>"
+        },
+        {
+          "default": "0.0",
+          "name": "volume",
+          "type": "<class 'float'>"
+        }
+      ],
+      "defined_in": "ml4t.live.feeds.aggregator",
+      "kind": "dataclass",
+      "methods": [
+        {
+          "kind": "method",
+          "name": "reset",
+          "signature": "(self) -> None"
+        },
+        {
+          "kind": "method",
+          "name": "to_dict",
+          "signature": "(self) -> dict[str, Any]"
+        },
+        {
+          "kind": "method",
+          "name": "update",
+          "signature": "(self, price: float, size: float = 0) -> None"
+        },
+        {
+          "kind": "method",
+          "name": "update_bar",
+          "signature": "(self, payload: dict[str, Any]) -> None"
+        }
+      ],
+      "module": "ml4t.live.feeds.aggregator",
+      "name": "BarBuffer",
+      "signature": "(open: float | None = None, high: float = -inf, low: float = inf, close: float = 0.0, volume: float = 0.0) -> None"
+    },
+    {
+      "bases": [
+        "ml4t.live.protocols.DataFeedProtocol"
+      ],
+      "classification": "stable",
+      "defined_in": "ml4t.live.feeds.alpaca_feed",
+      "kind": "class",
+      "methods": [
+        {
+          "kind": "method",
+          "name": "start",
+          "signature": "(self) -> None"
+        },
+        {
+          "kind": "property",
+          "name": "stats",
+          "signature": "(self) -> dict[str, Any]"
+        },
+        {
+          "kind": "method",
+          "name": "stop",
+          "signature": "(self) -> None"
+        }
+      ],
+      "module": "ml4t.live.feeds.alpaca_feed",
+      "name": "AlpacaDataFeed",
+      "signature": "(api_key: str, secret_key: str, symbols: list[str], *, data_type: str = 'bars', feed: str = 'iex', queue_capacity: int = 1024)"
+    },
+    {
+      "classification": "internal",
+      "defined_in": "ml4t.live.feeds.crypto_feed",
+      "kind": "constant",
+      "module": "ml4t.live.feeds.crypto_feed",
+      "name": "CCXT_WEBSOCKET_AVAILABLE"
+    },
+    {
+      "classification": "internal",
+      "defined_in": "ml4t.live.feeds.crypto_feed",
+      "kind": "constant",
+      "module": "ml4t.live.feeds.crypto_feed",
+      "name": "CRYPTO_MISSING_GUARANTEES"
+    },
+    {
+      "bases": [
+        "ml4t.live.protocols.DataFeedProtocol"
+      ],
+      "classification": "experimental",
+      "defined_in": "ml4t.live.feeds.crypto_feed",
+      "kind": "class",
+      "methods": [
+        {
+          "kind": "method",
+          "name": "close",
+          "signature": "(self) -> None"
+        },
+        {
+          "kind": "method",
+          "name": "start",
+          "signature": "(self) -> None"
+        },
+        {
+          "kind": "property",
+          "name": "stats",
+          "signature": "(self) -> dict[str, Any]"
+        },
+        {
+          "kind": "method",
+          "name": "stop",
+          "signature": "(self) -> None"
+        }
+      ],
+      "module": "ml4t.live.feeds.crypto_feed",
+      "name": "CryptoFeed",
+      "signature": "(exchange: str, symbols: list[str], *, timeframe: str = '1m', stream_trades: bool = False, stream_ohlcv: bool = True, api_key: str | None = None, api_secret: str | None = None, api_passphrase: str | None = None, experimental: bool = False)"
+    },
+    {
+      "classification": "internal",
+      "defined_in": "ml4t.live.feeds.databento_feed",
+      "kind": "constant",
+      "module": "ml4t.live.feeds.databento_feed",
+      "name": "DATABENTO_MISSING_GUARANTEES"
+    },
+    {
+      "bases": [
+        "ml4t.live.protocols.DataFeedProtocol"
+      ],
+      "classification": "experimental",
+      "defined_in": "ml4t.live.feeds.databento_feed",
+      "kind": "class",
+      "methods": [
+        {
+          "kind": "classmethod",
+          "name": "from_file",
+          "signature": "(cls, file_path: str | pathlib.Path, symbols: list[str], *, replay_speed: float = 1.0, experimental: bool = False) -> 'DataBentoFeed'"
+        },
+        {
+          "kind": "classmethod",
+          "name": "from_live",
+          "signature": "(cls, api_key: str, dataset: str, schema: str, symbols: list[str], *, experimental: bool = False) -> 'DataBentoFeed'"
+        },
+        {
+          "kind": "method",
+          "name": "start",
+          "signature": "(self) -> None"
+        },
+        {
+          "kind": "property",
+          "name": "stats",
+          "signature": "(self) -> dict[str, Any]"
+        },
+        {
+          "kind": "method",
+          "name": "stop",
+          "signature": "(self) -> None"
+        }
+      ],
+      "module": "ml4t.live.feeds.databento_feed",
+      "name": "DataBentoFeed",
+      "signature": "(client: ml4t.live.feeds.databento_feed._HistoricalRecordSource | ml4t.live.feeds.databento_feed._LiveRecordSource, symbols: list[str], *, mode: str = 'historical', replay_speed: float = 1.0, experimental: bool = False)"
+    },
+    {
+      "bases": [
+        "enum.StrEnum"
+      ],
+      "classification": "internal",
+      "defined_in": "ml4t.live.feeds.events",
+      "enum_members": [
+        {
+          "name": "ACCEPT",
+          "value": "'accept'"
+        },
+        {
+          "name": "DUPLICATE",
+          "value": "'duplicate'"
+        }
+      ],
+      "kind": "enum",
+      "methods": [],
+      "module": "ml4t.live.feeds.events",
+      "name": "ContinuityDisposition",
+      "signature": "(*values)"
+    },
+    {
+      "bases": [
+        "builtins.object"
+      ],
+      "classification": "internal",
+      "defined_in": "ml4t.live.feeds.events",
+      "kind": "class",
+      "methods": [
+        {
+          "kind": "method",
+          "name": "mark_recovery",
+          "signature": "(self) -> 'None'"
+        },
+        {
+          "kind": "method",
+          "name": "snapshot",
+          "signature": "(self) -> 'dict[str, Any]'"
+        },
+        {
+          "kind": "method",
+          "name": "validate",
+          "signature": "(self, event: 'MarketEvent') -> 'ContinuityDisposition'"
+        }
+      ],
+      "module": "ml4t.live.feeds.events",
+      "name": "EventContinuityTracker",
+      "signature": "() -> 'None'"
+    },
+    {
+      "bases": [
+        "ml4t.live.feeds.events.FeedContractError"
+      ],
+      "classification": "stable",
+      "defined_in": "ml4t.live.feeds.events",
+      "kind": "exception",
+      "methods": [
+        {
+          "kind": "method",
+          "name": "to_dict",
+          "signature": "(self) -> 'dict[str, Any]'"
+        }
+      ],
+      "module": "ml4t.live.feeds.events",
+      "name": "FeedContinuityError",
+      "signature": "(reason: 'str', event: 'MarketEvent') -> 'None'"
+    },
+    {
+      "bases": [
+        "builtins.ValueError"
+      ],
+      "classification": "stable",
+      "defined_in": "ml4t.live.feeds.events",
+      "kind": "exception",
+      "methods": [],
+      "module": "ml4t.live.feeds.events",
+      "name": "FeedContractError",
+      "signature": null
+    },
+    {
+      "classification": "internal",
+      "defined_in": "ml4t.live.feeds.events",
+      "kind": "function",
+      "module": "ml4t.live.feeds.events",
+      "name": "sequence_unavailable",
+      "signature": "(source: 'str', detail: 'str') -> 'GapEvidence'"
+    },
+    {
+      "classification": "internal",
+      "defined_in": "ml4t.live.feeds.events",
+      "kind": "function",
+      "module": "ml4t.live.feeds.events",
+      "name": "strategy_input",
+      "signature": "(event: 'MarketEvent', *, processing_time: 'datetime') -> 'tuple[datetime, dict[str, dict[str, Any]], dict[str, Any]]'"
+    },
+    {
+      "classification": "internal",
+      "defined_in": "ml4t.live.feeds.events",
+      "kind": "function",
+      "module": "ml4t.live.feeds.events",
+      "name": "utc_datetime",
+      "signature": "(value: 'object', field: 'str') -> 'datetime'"
+    },
+    {
+      "classification": "internal",
+      "defined_in": "ml4t.live.feeds.events",
+      "kind": "function",
+      "module": "ml4t.live.feeds.events",
+      "name": "validate_event_timing",
+      "signature": "(event: 'MarketEvent', *, processing_time: 'datetime', max_age_seconds: 'float | None', future_tolerance_seconds: 'float' = 5.0) -> 'None'"
+    },
+    {
+      "bases": [
+        "builtins.RuntimeError"
+      ],
+      "classification": "experimental",
+      "defined_in": "ml4t.live.feeds.experimental",
+      "kind": "exception",
+      "methods": [],
+      "module": "ml4t.live.feeds.experimental",
+      "name": "ExperimentalFeedError",
+      "signature": null
+    },
+    {
+      "bases": [
+        "builtins.UserWarning"
+      ],
+      "classification": "experimental",
+      "defined_in": "ml4t.live.feeds.experimental",
+      "kind": "exception",
+      "methods": [],
+      "module": "ml4t.live.feeds.experimental",
+      "name": "ExperimentalFeedWarning",
+      "signature": null
+    },
+    {
+      "classification": "internal",
+      "defined_in": "ml4t.live.feeds.experimental",
+      "kind": "function",
+      "module": "ml4t.live.feeds.experimental",
+      "name": "require_experimental_opt_in",
+      "signature": "(feed: 'str', *, experimental: 'bool', missing_guarantees: 'Sequence[str]') -> 'None'"
+    },
+    {
+      "bases": [
+        "ml4t.live.protocols.DataFeedProtocol"
+      ],
+      "classification": "stable",
+      "defined_in": "ml4t.live.feeds.ib_feed",
+      "kind": "class",
+      "methods": [
+        {
+          "kind": "method",
+          "name": "start",
+          "signature": "(self) -> None"
+        },
+        {
+          "kind": "property",
+          "name": "stats",
+          "signature": "(self) -> dict[str, Any]"
+        },
+        {
+          "kind": "method",
+          "name": "stop",
+          "signature": "(self) -> None"
+        }
+      ],
+      "module": "ml4t.live.feeds.ib_feed",
+      "name": "IBDataFeed",
+      "signature": "(ib: ib_async.ib.IB, symbols: list[str], *, exchange: str = 'SMART', currency: str = 'USD', tick_throttle_ms: int = 100, queue_capacity: int = 1024)"
+    },
+    {
+      "bases": [
+        "ml4t.live.protocols.DataFeedProtocol"
+      ],
+      "classification": "stable",
+      "defined_in": "ml4t.live.feeds.okx_feed",
+      "kind": "class",
+      "methods": [
+        {
+          "kind": "method",
+          "name": "close",
+          "signature": "(self) -> None"
+        },
+        {
+          "kind": "method",
+          "name": "start",
+          "signature": "(self) -> None"
+        },
+        {
+          "kind": "property",
+          "name": "stats",
+          "signature": "(self) -> dict[str, Any]"
+        },
+        {
+          "kind": "method",
+          "name": "stop",
+          "signature": "(self) -> None"
+        }
+      ],
+      "module": "ml4t.live.feeds.okx_feed",
+      "name": "OKXFundingFeed",
+      "signature": "(symbols: list[str], *, timeframe: str = '1H', poll_interval_seconds: float = 60.0, queue_capacity: int = 256)"
+    },
+    {
+      "bases": [
+        "builtins.object"
+      ],
+      "classification": "internal",
+      "defined_in": "ml4t.live.feeds.queue",
+      "kind": "class",
+      "methods": [
+        {
+          "kind": "method",
+          "name": "empty",
+          "signature": "(self) -> 'bool'"
+        },
+        {
+          "kind": "method",
+          "name": "fail",
+          "signature": "(self, error: 'Exception', *, discard: 'bool') -> 'None'"
+        },
+        {
+          "kind": "method",
+          "name": "finish",
+          "signature": "(self, *, discard: 'bool') -> 'None'"
+        },
+        {
+          "kind": "method",
+          "name": "full",
+          "signature": "(self) -> 'bool'"
+        },
+        {
+          "kind": "method",
+          "name": "get",
+          "signature": "(self) -> 'MarketEvent | None'"
+        },
+        {
+          "kind": "method",
+          "name": "get_nowait",
+          "signature": "(self) -> 'MarketEvent | None'"
+        },
+        {
+          "kind": "method",
+          "name": "put",
+          "signature": "(self, item: 'MarketEvent | None') -> 'None'"
+        },
+        {
+          "kind": "method",
+          "name": "put_nowait",
+          "signature": "(self, item: 'MarketEvent | None') -> 'None'"
+        },
+        {
+          "kind": "method",
+          "name": "qsize",
+          "signature": "(self) -> 'int'"
+        },
+        {
+          "kind": "method",
+          "name": "snapshot",
+          "signature": "(self, *, now: 'datetime | None' = None) -> 'FeedQueueSnapshot'"
+        }
+      ],
+      "module": "ml4t.live.feeds.queue",
+      "name": "BoundedEventQueue",
+      "signature": "(*, capacity: 'int', feed: 'str') -> 'None'"
+    },
+    {
+      "bases": [
+        "builtins.RuntimeError"
+      ],
+      "classification": "stable",
+      "defined_in": "ml4t.live.feeds.queue",
+      "kind": "exception",
+      "methods": [
+        {
+          "kind": "method",
+          "name": "to_dict",
+          "signature": "(self) -> 'dict[str, Any]'"
+        }
+      ],
+      "module": "ml4t.live.feeds.queue",
+      "name": "FeedOverflowError",
+      "signature": "(*, feed: 'str', event: 'MarketEvent', snapshot: 'FeedQueueSnapshot') -> 'None'"
+    },
+    {
+      "bases": [
+        "builtins.object"
+      ],
+      "classification": "stable",
+      "dataclass_fields": [
+        {
+          "default": "<required>",
+          "name": "capacity",
+          "type": "int"
+        },
+        {
+          "default": "<required>",
+          "name": "occupancy",
+          "type": "int"
+        },
+        {
+          "default": "<required>",
+          "name": "high_watermark",
+          "type": "int"
+        },
+        {
+          "default": "<required>",
+          "name": "overflow_count",
+          "type": "int"
+        },
+        {
+          "default": "<required>",
+          "name": "oldest_event_lag_seconds",
+          "type": "float | None"
+        },
+        {
+          "default": "<required>",
+          "name": "failed",
+          "type": "bool"
+        },
+        {
+          "default": "<required>",
+          "name": "finished",
+          "type": "bool"
+        }
+      ],
+      "defined_in": "ml4t.live.feeds.queue",
+      "kind": "dataclass",
+      "methods": [
+        {
+          "kind": "method",
+          "name": "to_dict",
+          "signature": "(self) -> 'dict[str, Any]'"
+        }
+      ],
+      "module": "ml4t.live.feeds.queue",
+      "name": "FeedQueueSnapshot",
+      "signature": "(capacity: 'int', occupancy: 'int', high_watermark: 'int', overflow_count: 'int', oldest_event_lag_seconds: 'float | None', failed: 'bool', finished: 'bool') -> None"
+    },
+    {
+      "bases": [
+        "builtins.object"
+      ],
+      "classification": "stable",
+      "dataclass_fields": [
+        {
+          "default": "<required>",
+          "name": "phase",
+          "type": "LifecyclePhase"
+        },
+        {
+          "default": "<required>",
+          "name": "callback",
+          "type": "str"
+        },
+        {
+          "default": "<required>",
+          "name": "event_time",
+          "type": "datetime | None"
+        }
+      ],
+      "defined_in": "ml4t.live.lifecycle",
+      "kind": "dataclass",
+      "methods": [],
+      "module": "ml4t.live.lifecycle",
+      "name": "LifecycleInvocation",
+      "signature": "(phase: 'LifecyclePhase', callback: 'str', event_time: 'datetime | None') -> None"
+    },
+    {
+      "bases": [
+        "builtins.object"
+      ],
+      "classification": "stable",
+      "defined_in": "ml4t.live.lifecycle",
+      "kind": "class",
+      "methods": [
+        {
+          "kind": "property",
+          "name": "callback_counts",
+          "signature": "(self) -> 'dict[LifecyclePhase, int]'"
+        },
+        {
+          "kind": "method",
+          "name": "close",
+          "signature": "(self) -> 'None'"
+        },
+        {
+          "kind": "method",
+          "name": "dispatch",
+          "signature": "(self, phase: 'LifecyclePhase', *args: 'Any', event_time: 'datetime | None' = None) -> 'Any'"
+        },
+        {
+          "kind": "property",
+          "name": "dropped_invocation_count",
+          "signature": "(self) -> 'int'"
+        },
+        {
+          "kind": "property",
+          "name": "invocation_count",
+          "signature": "(self) -> 'int'"
+        },
+        {
+          "kind": "method",
+          "name": "validate_completed_run",
+          "signature": "(self, market_event_count: 'int', *, baseline: 'dict[LifecyclePhase, int] | None' = None) -> 'None'"
+        }
+      ],
+      "module": "ml4t.live.lifecycle",
+      "name": "LiveLifecycleDispatcher",
+      "signature": "(strategy: 'Any', contract: 'LifecycleContract' = LifecycleContract(version=<LifecycleVersion.V1: '1'>, phases=(LifecyclePhaseSpec(phase=<LifecyclePhase.RUN_START: 'run_start'>, callback='on_start', visible_fields=(), intents_allowed=False, cardinality=<CallbackCardinality.EXACTLY_ONCE: 'exactly_once'>, exception_semantics=<CallbackExceptionSemantics.ABORT_BEFORE_SIDE_EFFECTS: 'abort_before_side_effects'>), LifecyclePhaseSpec(phase=<LifecyclePhase.CAUSAL_INITIALIZATION: 'causal_initialization'>, callback='on_prepare', visible_fields=(<InformationField.PRIOR_COMPLETED_DATA: 'prior_completed_data'>,), intents_allowed=True, cardinality=<CallbackCardinality.EXACTLY_ONCE: 'exactly_once'>, exception_semantics=<CallbackExceptionSemantics.ABORT_BEFORE_SIDE_EFFECTS: 'abort_before_side_effects'>), LifecyclePhaseSpec(phase=<LifecyclePhase.PRE_OPEN: 'pre_open'>, callback='on_pre_open', visible_fields=(<InformationField.PRIOR_COMPLETED_DATA: 'prior_completed_data'>,), intents_allowed=True, cardinality=<CallbackCardinality.ONCE_PER_EVENT: 'once_per_event'>, exception_semantics=<CallbackExceptionSemantics.ROLLBACK_AND_ABORT: 'rollback_and_abort'>), LifecyclePhaseSpec(phase=<LifecyclePhase.OPENING_AUCTION: 'opening_auction'>, callback='on_open', visible_fields=(<InformationField.PRIOR_COMPLETED_DATA: 'prior_completed_data'>, <InformationField.OFFICIAL_OPEN: 'official_open'>, <InformationField.CURRENT_OPEN: 'current_open'>), intents_allowed=True, cardinality=<CallbackCardinality.ONCE_PER_EVENT: 'once_per_event'>, exception_semantics=<CallbackExceptionSemantics.ROLLBACK_AND_ABORT: 'rollback_and_abort'>), LifecyclePhaseSpec(phase=<LifecyclePhase.FILL_RECONCILIATION: 'fill_reconciliation'>, callback='on_fill_reconciliation', visible_fields=(<InformationField.PRIOR_COMPLETED_DATA: 'prior_completed_data'>, <InformationField.OFFICIAL_OPEN: 'official_open'>, <InformationField.CURRENT_OPEN: 'current_open'>, <InformationField.POST_FILL_STATE: 'post_fill_state'>), intents_allowed=False, cardinality=<CallbackCardinality.ONCE_PER_EVENT: 'once_per_event'>, exception_semantics=<CallbackExceptionSemantics.ROLLBACK_AND_ABORT: 'rollback_and_abort'>), LifecyclePhaseSpec(phase=<LifecyclePhase.INTRABAR: 'intrabar'>, callback='on_intrabar', visible_fields=(<InformationField.PRIOR_COMPLETED_DATA: 'prior_completed_data'>, <InformationField.OFFICIAL_OPEN: 'official_open'>, <InformationField.CURRENT_OPEN: 'current_open'>, <InformationField.CURRENT_HIGH: 'current_high'>, <InformationField.CURRENT_LOW: 'current_low'>), intents_allowed=True, cardinality=<CallbackCardinality.ONCE_PER_EVENT: 'once_per_event'>, exception_semantics=<CallbackExceptionSemantics.ROLLBACK_AND_ABORT: 'rollback_and_abort'>), LifecyclePhaseSpec(phase=<LifecyclePhase.CLOSE: 'close'>, callback='on_close', visible_fields=(<InformationField.PRIOR_COMPLETED_DATA: 'prior_completed_data'>, <InformationField.OFFICIAL_OPEN: 'official_open'>, <InformationField.CURRENT_OPEN: 'current_open'>, <InformationField.CURRENT_HIGH: 'current_high'>, <InformationField.CURRENT_LOW: 'current_low'>, <InformationField.CURRENT_CLOSE: 'current_close'>), intents_allowed=True, cardinality=<CallbackCardinality.ONCE_PER_EVENT: 'once_per_event'>, exception_semantics=<CallbackExceptionSemantics.ROLLBACK_AND_ABORT: 'rollback_and_abort'>), LifecyclePhaseSpec(phase=<LifecyclePhase.MARKET_EVENT: 'market_event'>, callback='on_data', visible_fields=(<InformationField.PRIOR_COMPLETED_DATA: 'prior_completed_data'>, <InformationField.OFFICIAL_OPEN: 'official_open'>, <InformationField.CURRENT_OPEN: 'current_open'>, <InformationField.CURRENT_HIGH: 'current_high'>, <InformationField.CURRENT_LOW: 'current_low'>), intents_allowed=True, cardinality=<CallbackCardinality.ONCE_PER_EVENT: 'once_per_event'>, exception_semantics=<CallbackExceptionSemantics.ROLLBACK_AND_ABORT: 'rollback_and_abort'>), LifecyclePhaseSpec(phase=<LifecyclePhase.RUN_END: 'run_end'>, callback='on_end', visible_fields=(<InformationField.PRIOR_COMPLETED_DATA: 'prior_completed_data'>, <InformationField.OFFICIAL_OPEN: 'official_open'>, <InformationField.CURRENT_OPEN: 'current_open'>, <InformationField.CURRENT_HIGH: 'current_high'>, <InformationField.CURRENT_LOW: 'current_low'>, <InformationField.CURRENT_CLOSE: 'current_close'>, <InformationField.POST_FILL_STATE: 'post_fill_state'>), intents_allowed=False, cardinality=<CallbackCardinality.EXACTLY_ONCE: 'exactly_once'>, exception_semantics=<CallbackExceptionSemantics.CLEANUP_AND_RERAISE: 'cleanup_and_reraise'>))), *, event_recorder: 'Callable[..., None] | None' = None) -> 'None'"
+    },
+    {
+      "classification": "internal",
+      "defined_in": "ml4t.live.lifecycle",
+      "kind": "constant",
+      "module": "ml4t.live.lifecycle",
+      "name": "RETAINED_CALLBACK_TRACE_LIMIT"
+    },
+    {
+      "classification": "stable",
+      "defined_in": "ml4t.live.lifecycle",
+      "kind": "function",
+      "module": "ml4t.live.lifecycle",
+      "name": "callback_trace",
+      "signature": "(invocations: 'Iterable[LifecycleInvocation]') -> 'tuple[tuple[str, str, datetime | None], ...]'"
+    },
+    {
+      "bases": [
+        "builtins.RuntimeError"
+      ],
+      "classification": "stable",
+      "defined_in": "ml4t.live.orders",
+      "kind": "exception",
+      "methods": [],
+      "module": "ml4t.live.orders",
+      "name": "BrokerOrderContractError",
+      "signature": null
+    },
+    {
+      "bases": [
+        "builtins.object"
+      ],
+      "classification": "stable",
+      "dataclass_fields": [
+        {
+          "default": "<required>",
+          "name": "asset",
+          "type": "str"
+        },
+        {
+          "default": "<required>",
+          "name": "quantity",
+          "type": "float"
+        },
+        {
+          "default": "<required>",
+          "name": "side",
+          "type": "OrderSide"
+        },
+        {
+          "default": "<required>",
+          "name": "order_type",
+          "type": "OrderType"
+        },
+        {
+          "default": "None",
+          "name": "limit_price",
+          "type": "float | None"
+        },
+        {
+          "default": "None",
+          "name": "stop_price",
+          "type": "float | None"
+        }
+      ],
+      "defined_in": "ml4t.live.orders",
+      "kind": "dataclass",
+      "methods": [
+        {
+          "kind": "classmethod",
+          "name": "from_input",
+          "signature": "(cls, asset: 'str', quantity: 'Any', side: 'OrderSide | None', order_type: 'OrderType', limit_price: 'Any' = None, stop_price: 'Any' = None, *, capabilities: 'Iterable[Any]' = ()) -> 'CanonicalOrderRequest'"
+        },
+        {
+          "kind": "method",
+          "name": "validate_result",
+          "signature": "(self, order: 'Order') -> 'None'"
+        }
+      ],
+      "module": "ml4t.live.orders",
+      "name": "CanonicalOrderRequest",
+      "signature": "(asset: 'str', quantity: 'float', side: 'OrderSide', order_type: 'OrderType', limit_price: 'float | None' = None, stop_price: 'float | None' = None) -> None"
+    },
+    {
+      "bases": [
+        "builtins.ValueError"
+      ],
+      "classification": "stable",
+      "defined_in": "ml4t.live.orders",
+      "kind": "exception",
+      "methods": [],
+      "module": "ml4t.live.orders",
+      "name": "OrderValidationError",
+      "signature": null
+    },
+    {
+      "bases": [
+        "ml4t.live.orders.OrderValidationError"
+      ],
+      "classification": "stable",
+      "defined_in": "ml4t.live.orders",
+      "kind": "exception",
+      "methods": [],
+      "module": "ml4t.live.orders",
+      "name": "UnsupportedOrderCapabilityError",
+      "signature": null
+    },
+    {
+      "bases": [
+        "ml4t.live.persistence.PersistenceSafetyError"
+      ],
+      "classification": "stable",
+      "defined_in": "ml4t.live.persistence",
+      "kind": "exception",
+      "methods": [],
+      "module": "ml4t.live.persistence",
+      "name": "AcceptedOrderPersistenceError",
+      "signature": null
+    },
+    {
+      "bases": [
+        "ml4t.live.persistence.PersistenceSafetyError"
+      ],
+      "classification": "stable",
+      "defined_in": "ml4t.live.persistence",
+      "kind": "exception",
+      "methods": [],
+      "module": "ml4t.live.persistence",
+      "name": "AuditJournalError",
+      "signature": null
+    },
+    {
+      "bases": [
+        "ml4t.live.persistence.PersistenceSafetyError"
+      ],
+      "classification": "stable",
+      "defined_in": "ml4t.live.persistence",
+      "kind": "exception",
+      "methods": [],
+      "module": "ml4t.live.persistence",
+      "name": "ConcurrentStateWriterError",
+      "signature": null
+    },
+    {
+      "bases": [
+        "ml4t.live.persistence.PersistenceSafetyError"
+      ],
+      "classification": "stable",
+      "defined_in": "ml4t.live.persistence",
+      "kind": "exception",
+      "methods": [],
+      "module": "ml4t.live.persistence",
+      "name": "CorruptStateError",
+      "signature": null
+    },
+    {
+      "bases": [
+        "builtins.RuntimeError"
+      ],
+      "classification": "stable",
+      "defined_in": "ml4t.live.persistence",
+      "kind": "exception",
+      "methods": [],
+      "module": "ml4t.live.persistence",
+      "name": "PersistenceSafetyError",
+      "signature": null
+    },
+    {
+      "classification": "internal",
+      "defined_in": "ml4t.live.persistence",
+      "kind": "constant",
+      "module": "ml4t.live.persistence",
+      "name": "STATE_FILE_MODE"
+    },
+    {
+      "classification": "internal",
+      "defined_in": "ml4t.live.persistence",
+      "kind": "constant",
+      "module": "ml4t.live.persistence",
+      "name": "STATE_SCHEMA_VERSION"
+    },
+    {
+      "bases": [
+        "builtins.object"
+      ],
+      "classification": "internal",
+      "defined_in": "ml4t.live.persistence",
+      "kind": "class",
+      "methods": [
+        {
+          "kind": "method",
+          "name": "append",
+          "signature": "(self, event: 'dict[str, Any]') -> 'dict[str, Any]'"
+        },
+        {
+          "kind": "method",
+          "name": "tail",
+          "signature": "(self, limit: 'int' = 3) -> 'list[dict[str, Any]]'"
+        },
+        {
+          "kind": "method",
+          "name": "validate",
+          "signature": "(self) -> 'tuple[int, str]'"
+        }
+      ],
+      "module": "ml4t.live.persistence",
+      "name": "SecureAuditJournal",
+      "signature": "(path: 'str | Path', *, fault_injector: '_FaultInjector | None' = None)"
+    },
+    {
+      "bases": [
+        "builtins.object"
+      ],
+      "classification": "internal",
+      "defined_in": "ml4t.live.persistence",
+      "kind": "class",
+      "methods": [
+        {
+          "kind": "method",
+          "name": "acquire_writer",
+          "signature": "(self) -> 'None'"
+        },
+        {
+          "kind": "property",
+          "name": "has_writer",
+          "signature": "(self) -> 'bool'"
+        },
+        {
+          "kind": "method",
+          "name": "load",
+          "signature": "(self) -> 'StateSnapshot | None'"
+        },
+        {
+          "kind": "method",
+          "name": "release_writer",
+          "signature": "(self) -> 'None'"
+        },
+        {
+          "kind": "method",
+          "name": "save",
+          "signature": "(self, payload: 'dict[str, Any]', *, expected_generation: 'int | None') -> 'int'"
+        }
+      ],
+      "module": "ml4t.live.persistence",
+      "name": "SecureStateStore",
+      "signature": "(path: 'str | Path', *, fault_injector: '_FaultInjector | None' = None)"
+    },
+    {
+      "bases": [
+        "builtins.object"
+      ],
+      "classification": "internal",
+      "dataclass_fields": [
+        {
+          "default": "<required>",
+          "name": "payload",
+          "type": "dict[str, Any]"
+        },
+        {
+          "default": "<required>",
+          "name": "generation",
+          "type": "int"
+        },
+        {
+          "default": "False",
+          "name": "legacy",
+          "type": "bool"
+        }
+      ],
+      "defined_in": "ml4t.live.persistence",
+      "kind": "dataclass",
+      "methods": [],
+      "module": "ml4t.live.persistence",
+      "name": "StateSnapshot",
+      "signature": "(payload: 'dict[str, Any]', generation: 'int', legacy: 'bool' = False) -> None"
+    },
+    {
+      "bases": [
+        "ml4t.live.persistence.PersistenceSafetyError"
+      ],
+      "classification": "stable",
+      "defined_in": "ml4t.live.persistence",
+      "kind": "exception",
+      "methods": [],
+      "module": "ml4t.live.persistence",
+      "name": "UnsafePersistencePathError",
+      "signature": null
+    },
+    {
+      "classification": "internal",
+      "defined_in": "ml4t.live.persistence",
+      "kind": "function",
+      "module": "ml4t.live.persistence",
+      "name": "redact_sensitive",
+      "signature": "(value: 'Any', *, key: 'str | None' = None) -> 'Any'"
+    },
+    {
+      "bases": [
+        "typing.Protocol"
+      ],
+      "classification": "stable",
+      "defined_in": "ml4t.live.protocols",
+      "kind": "protocol",
+      "methods": [
+        {
+          "kind": "method",
+          "name": "cancel_order_async",
+          "signature": "(self, order_id: 'str') -> 'bool'"
+        },
+        {
+          "kind": "method",
+          "name": "close_position_async",
+          "signature": "(self, asset: 'str') -> 'Order | None'"
+        },
+        {
+          "kind": "method",
+          "name": "connect",
+          "signature": "(self) -> 'None'"
+        },
+        {
+          "kind": "method",
+          "name": "disconnect",
+          "signature": "(self) -> 'None'"
+        },
+        {
+          "kind": "method",
+          "name": "get_account_value_async",
+          "signature": "(self) -> 'float'"
+        },
+        {
+          "kind": "method",
+          "name": "get_cash_async",
+          "signature": "(self) -> 'float'"
+        },
+        {
+          "kind": "method",
+          "name": "get_pending_orders_async",
+          "signature": "(self, asset: 'str | None' = None) -> 'list[Order]'"
+        },
+        {
+          "kind": "method",
+          "name": "get_position_async",
+          "signature": "(self, asset: 'str') -> 'Position | None'"
+        },
+        {
+          "kind": "method",
+          "name": "get_positions_async",
+          "signature": "(self) -> 'dict[str, Position]'"
+        },
+        {
+          "kind": "method",
+          "name": "is_connected_async",
+          "signature": "(self) -> 'bool'"
+        },
+        {
+          "kind": "method",
+          "name": "replace_order_async",
+          "signature": "(self, order_id: 'str', *, quantity: 'float | None' = None, limit_price: 'float | None' = None, stop_price: 'float | None' = None) -> 'Order'"
+        },
+        {
+          "kind": "method",
+          "name": "submit_order_async",
+          "signature": "(self, asset: 'str', quantity: 'float', side: 'OrderSide | None' = None, order_type: 'OrderType' = <OrderType.MARKET: 'market'>, limit_price: 'float | None' = None, stop_price: 'float | None' = None, **kwargs: 'Any') -> 'Order'"
+        }
+      ],
+      "module": "ml4t.live.protocols",
+      "name": "AsyncBrokerProtocol",
+      "signature": "(*args, **kwargs)"
+    },
+    {
+      "bases": [
+        "typing.Protocol"
+      ],
+      "classification": "stable",
+      "defined_in": "ml4t.live.protocols",
+      "kind": "protocol",
+      "methods": [
+        {
+          "kind": "method",
+          "name": "cancel_order",
+          "signature": "(self, order_id: 'str') -> 'bool'"
+        },
+        {
+          "kind": "method",
+          "name": "clear_position_rules",
+          "signature": "(self, asset: 'str | None' = None) -> 'None'"
+        },
+        {
+          "kind": "method",
+          "name": "close_position",
+          "signature": "(self, asset: 'str') -> 'Order | None'"
+        },
+        {
+          "kind": "method",
+          "name": "export_target_intent_state",
+          "signature": "(self) -> 'dict[str, Any]'"
+        },
+        {
+          "kind": "method",
+          "name": "get_account_value",
+          "signature": "(self) -> 'float'"
+        },
+        {
+          "kind": "method",
+          "name": "get_cash",
+          "signature": "(self) -> 'float'"
+        },
+        {
+          "kind": "method",
+          "name": "get_child_order_intents",
+          "signature": "(self) -> 'tuple[CanonicalChildOrderIntent, ...]'"
+        },
+        {
+          "kind": "method",
+          "name": "get_intent_reconciliations",
+          "signature": "(self) -> 'tuple[IntentReconciliation, ...]'"
+        },
+        {
+          "kind": "method",
+          "name": "get_pending_orders",
+          "signature": "(self, asset: 'str | None' = None) -> 'list[Order]'"
+        },
+        {
+          "kind": "method",
+          "name": "get_position",
+          "signature": "(self, asset: 'str') -> 'Position | None'"
+        },
+        {
+          "kind": "method",
+          "name": "get_positions",
+          "signature": "(self) -> 'dict[str, Position]'"
+        },
+        {
+          "kind": "method",
+          "name": "get_target_intents",
+          "signature": "(self) -> 'tuple[CanonicalTargetIntent, ...]'"
+        },
+        {
+          "kind": "property",
+          "name": "is_connected",
+          "signature": "(self) -> 'bool'"
+        },
+        {
+          "kind": "property",
+          "name": "pending_orders",
+          "signature": "(self) -> 'list[Order]'"
+        },
+        {
+          "kind": "property",
+          "name": "positions",
+          "signature": "(self) -> 'dict[str, Position]'"
+        },
+        {
+          "kind": "method",
+          "name": "register_position_rule_policy",
+          "signature": "(self, policy_id: 'str', rules: 'PositionRule') -> 'None'"
+        },
+        {
+          "kind": "method",
+          "name": "register_target_intent",
+          "signature": "(self, intent: 'CanonicalTargetIntent', *, position_rules: 'PositionRule | None' = None) -> 'CanonicalTargetIntent'"
+        },
+        {
+          "kind": "method",
+          "name": "replace_order",
+          "signature": "(self, order_id: 'str', *, quantity: 'float | None' = None, limit_price: 'float | None' = None, stop_price: 'float | None' = None) -> 'Order'"
+        },
+        {
+          "kind": "method",
+          "name": "set_position_rules",
+          "signature": "(self, rules: 'PositionRule | None', asset: 'str | None' = None) -> 'None'"
+        },
+        {
+          "kind": "method",
+          "name": "submit_order",
+          "signature": "(self, asset: 'str', quantity: 'float', side: 'OrderSide | None' = None, order_type: 'OrderType' = <OrderType.MARKET: 'market'>, limit_price: 'float | None' = None, stop_price: 'float | None' = None, **kwargs: 'Any') -> 'Order'"
+        },
+        {
+          "kind": "method",
+          "name": "update_position_context",
+          "signature": "(self, asset: 'str', context: 'dict[str, Any]') -> 'None'"
+        }
+      ],
+      "module": "ml4t.live.protocols",
+      "name": "BrokerProtocol",
+      "signature": "(*args, **kwargs)"
+    },
+    {
+      "bases": [
+        "typing.Protocol"
+      ],
+      "classification": "stable",
+      "defined_in": "ml4t.live.protocols",
+      "kind": "protocol",
+      "methods": [
+        {
+          "kind": "method",
+          "name": "start",
+          "signature": "(self) -> 'None'"
+        },
+        {
+          "kind": "method",
+          "name": "stop",
+          "signature": "(self) -> 'None'"
+        }
+      ],
+      "module": "ml4t.live.protocols",
+      "name": "DataFeedProtocol",
+      "signature": "(*args, **kwargs)"
+    },
+    {
+      "bases": [
+        "ml4t.live.runtime.LiveStrategyRuntimeError"
+      ],
+      "classification": "stable",
+      "defined_in": "ml4t.live.runtime",
+      "kind": "exception",
+      "methods": [],
+      "module": "ml4t.live.runtime",
+      "name": "LiveIntentError",
+      "signature": null
+    },
+    {
+      "bases": [
+        "builtins.object"
+      ],
+      "classification": "stable",
+      "defined_in": "ml4t.live.runtime",
+      "kind": "class",
+      "methods": [
+        {
+          "kind": "property",
+          "name": "children",
+          "signature": "(self) -> 'tuple[CanonicalChildOrderIntent, ...]'"
+        },
+        {
+          "kind": "method",
+          "name": "clear_position_rules",
+          "signature": "(self, asset: 'str | None' = None) -> 'None'"
+        },
+        {
+          "kind": "method",
+          "name": "observe_strategy_order",
+          "signature": "(self, order: 'Order') -> 'None'"
+        },
+        {
+          "kind": "property",
+          "name": "position_rule_states",
+          "signature": "(self) -> 'tuple[PositionRuleState, ...]'"
+        },
+        {
+          "kind": "method",
+          "name": "process_market_event",
+          "signature": "(self, timestamp: 'datetime', data: 'dict[str, dict[str, Any]]', context: 'dict[str, Any]') -> 'None'"
+        },
+        {
+          "kind": "property",
+          "name": "reconciliations",
+          "signature": "(self) -> 'tuple[IntentReconciliation, ...]'"
+        },
+        {
+          "kind": "method",
+          "name": "register_position_rule_policy",
+          "signature": "(self, policy_id: 'str', rules: 'PositionRule') -> 'None'"
+        },
+        {
+          "kind": "method",
+          "name": "register_target_intent",
+          "signature": "(self, intent: 'CanonicalTargetIntent', *, position_rules: 'PositionRule | None' = None) -> 'CanonicalTargetIntent'"
+        },
+        {
+          "kind": "method",
+          "name": "set_position_rules",
+          "signature": "(self, rules: 'PositionRule | None', asset: 'str | None' = None) -> 'None'"
+        },
+        {
+          "kind": "property",
+          "name": "targets",
+          "signature": "(self) -> 'tuple[CanonicalTargetIntent, ...]'"
+        },
+        {
+          "kind": "method",
+          "name": "to_state",
+          "signature": "(self) -> 'dict[str, Any]'"
+        },
+        {
+          "kind": "method",
+          "name": "update_position_context",
+          "signature": "(self, asset: 'str', context: 'dict[str, Any]') -> 'None'"
+        }
+      ],
+      "module": "ml4t.live.runtime",
+      "name": "LiveStrategyRuntime",
+      "signature": "(broker: 'AsyncBrokerProtocol', policy: 'ExecutionPolicy', lifecycle_version: 'LifecycleVersion') -> 'None'"
+    },
+    {
+      "bases": [
+        "builtins.RuntimeError"
+      ],
+      "classification": "stable",
+      "defined_in": "ml4t.live.runtime",
+      "kind": "exception",
+      "methods": [],
+      "module": "ml4t.live.runtime",
+      "name": "LiveStrategyRuntimeError",
+      "signature": null
+    },
+    {
+      "bases": [
+        "ml4t.live.runtime.LiveStrategyRuntimeError"
+      ],
+      "classification": "stable",
+      "defined_in": "ml4t.live.runtime",
+      "kind": "exception",
+      "methods": [],
+      "module": "ml4t.live.runtime",
+      "name": "ReducingRiskExecutionError",
+      "signature": null
+    },
+    {
+      "bases": [
+        "ml4t.live.runtime.LiveStrategyRuntimeError"
+      ],
+      "classification": "stable",
+      "defined_in": "ml4t.live.runtime",
+      "kind": "exception",
+      "methods": [],
+      "module": "ml4t.live.runtime",
+      "name": "UnsupportedLiveCapabilityError",
+      "signature": null
+    },
+    {
+      "classification": "stable",
+      "defined_in": "ml4t.live.runtime",
+      "kind": "function",
+      "module": "ml4t.live.runtime",
+      "name": "default_live_execution_policy",
+      "signature": "(*, opening_auction: 'ExecutionBehavior' = <ExecutionBehavior.DISABLED: 'disabled'>) -> 'ExecutionPolicy'"
+    },
+    {
+      "bases": [
+        "builtins.RuntimeError"
+      ],
+      "classification": "stable",
+      "defined_in": "ml4t.live.safety",
+      "kind": "exception",
+      "methods": [],
+      "module": "ml4t.live.safety",
+      "name": "BrokerSnapshotError",
+      "signature": null
+    },
+    {
+      "bases": [
+        "builtins.object"
+      ],
+      "classification": "stable",
+      "dataclass_fields": [
+        {
+          "default": "50000.0",
+          "name": "max_position_value",
+          "type": "float | None"
+        },
+        {
+          "default": "1000.0",
+          "name": "max_position_shares",
+          "type": "float | None"
+        },
+        {
+          "default": "200000.0",
+          "name": "max_total_exposure",
+          "type": "float | None"
+        },
+        {
+          "default": "20",
+          "name": "max_positions",
+          "type": "int | None"
+        },
+        {
+          "default": "10000.0",
+          "name": "max_order_value",
+          "type": "float | None"
+        },
+        {
+          "default": "500.0",
+          "name": "max_order_shares",
+          "type": "float | None"
+        },
+        {
+          "default": "10",
+          "name": "max_orders_per_minute",
+          "type": "int | None"
+        },
+        {
+          "default": "5000.0",
+          "name": "max_daily_loss",
+          "type": "float | None"
+        },
+        {
+          "default": "0.05",
+          "name": "max_drawdown_pct",
+          "type": "float | None"
+        },
+        {
+          "default": "0.05",
+          "name": "max_price_deviation_pct",
+          "type": "float | None"
+        },
+        {
+          "default": "60.0",
+          "name": "max_data_staleness_seconds",
+          "type": "float | None"
+        },
+        {
+          "default": "1.0",
+          "name": "dedup_window_seconds",
+          "type": "float | None"
+        },
+        {
+          "default": "<factory:set>",
+          "name": "allowed_assets",
+          "type": "set[str]"
+        },
+        {
+          "default": "<factory:set>",
+          "name": "blocked_assets",
+          "type": "set[str]"
+        },
+        {
+          "default": "False",
+          "name": "shadow_mode",
+          "type": "<class 'bool'>"
+        },
+        {
+          "default": "False",
+          "name": "kill_switch_enabled",
+          "type": "<class 'bool'>"
+        },
+        {
+          "default": "True",
+          "name": "allow_reducing_risk_when_killed",
+          "type": "<class 'bool'>"
+        },
+        {
+          "default": "True",
+          "name": "halt_on_reducing_risk_failure",
+          "type": "<class 'bool'>"
+        },
+        {
+          "default": "False",
+          "name": "fail_on_reconciliation_mismatch",
+          "type": "<class 'bool'>"
+        },
+        {
+          "default": "'.ml4t_risk_state.json'",
+          "name": "state_file",
+          "type": "<class 'str'>"
+        },
+        {
+          "default": "None",
+          "name": "journal_file",
+          "type": "str | None"
+        },
+        {
+          "default": "True",
+          "name": "fail_on_journal_error",
+          "type": "<class 'bool'>"
+        }
+      ],
+      "defined_in": "ml4t.live.safety",
+      "kind": "dataclass",
+      "methods": [],
+      "module": "ml4t.live.safety",
+      "name": "LiveRiskConfig",
+      "signature": "(max_position_value: float | None = 50000.0, max_position_shares: float | None = 1000.0, max_total_exposure: float | None = 200000.0, max_positions: int | None = 20, max_order_value: float | None = 10000.0, max_order_shares: float | None = 500.0, max_orders_per_minute: int | None = 10, max_daily_loss: float | None = 5000.0, max_drawdown_pct: float | None = 0.05, max_price_deviation_pct: float | None = 0.05, max_data_staleness_seconds: float | None = 60.0, dedup_window_seconds: float | None = 1.0, allowed_assets: set[str] = <factory>, blocked_assets: set[str] = <factory>, shadow_mode: bool = False, kill_switch_enabled: bool = False, allow_reducing_risk_when_killed: bool = True, halt_on_reducing_risk_failure: bool = True, fail_on_reconciliation_mismatch: bool = False, state_file: str = '.ml4t_risk_state.json', journal_file: str | None = None, fail_on_journal_error: bool = True) -> None"
+    },
+    {
+      "bases": [
+        "builtins.object"
+      ],
+      "classification": "internal",
+      "dataclass_fields": [
+        {
+          "default": "<required>",
+          "name": "timestamp",
+          "type": "<class 'datetime.datetime'>"
+        },
+        {
+          "default": "<required>",
+          "name": "observed_at",
+          "type": "<class 'datetime.datetime'>"
+        },
+        {
+          "default": "<required>",
+          "name": "price",
+          "type": "<class 'float'>"
+        }
+      ],
+      "defined_in": "ml4t.live.safety",
+      "kind": "dataclass",
+      "methods": [],
+      "module": "ml4t.live.safety",
+      "name": "MarketSnapshot",
+      "signature": "(timestamp: datetime.datetime, observed_at: datetime.datetime, price: float) -> None"
+    },
+    {
+      "bases": [
+        "ml4t.live.safety.RiskLimitError"
+      ],
+      "classification": "stable",
+      "defined_in": "ml4t.live.safety",
+      "kind": "exception",
+      "methods": [],
+      "module": "ml4t.live.safety",
+      "name": "OrderReplacementGapError",
+      "signature": null
+    },
+    {
+      "bases": [
+        "builtins.RuntimeError"
+      ],
+      "classification": "stable",
+      "defined_in": "ml4t.live.safety",
+      "kind": "exception",
+      "methods": [],
+      "module": "ml4t.live.safety",
+      "name": "ReconciliationMismatchError",
+      "signature": null
+    },
+    {
+      "bases": [
+        "builtins.Exception"
+      ],
+      "classification": "stable",
+      "defined_in": "ml4t.live.safety",
+      "kind": "exception",
+      "methods": [],
+      "module": "ml4t.live.safety",
+      "name": "RiskLimitError",
+      "signature": null
+    },
+    {
+      "bases": [
+        "builtins.object"
+      ],
+      "classification": "stable",
+      "dataclass_fields": [
+        {
+          "default": "<required>",
+          "name": "date",
+          "type": "<class 'str'>"
+        },
+        {
+          "default": "0.0",
+          "name": "daily_loss",
+          "type": "<class 'float'>"
+        },
+        {
+          "default": "0",
+          "name": "orders_placed",
+          "type": "<class 'int'>"
+        },
+        {
+          "default": "0.0",
+          "name": "high_water_mark",
+          "type": "<class 'float'>"
+        },
+        {
+          "default": "None",
+          "name": "session_start_equity",
+          "type": "float | None"
+        },
+        {
+          "default": "<factory:dict>",
+          "name": "persisted_positions",
+          "type": "dict[str, float]"
+        },
+        {
+          "default": "<factory:list>",
+          "name": "persisted_pending_orders",
+          "type": "list[dict[str, typing.Any]]"
+        },
+        {
+          "default": "<factory:dict>",
+          "name": "portable_strategy_state",
+          "type": "dict[str, typing.Any]"
+        },
+        {
+          "default": "<factory:dict>",
+          "name": "replacement_gaps",
+          "type": "dict[str, dict[str, typing.Any]]"
+        },
+        {
+          "default": "<factory:dict>",
+          "name": "shadow_portfolio",
+          "type": "dict[str, typing.Any]"
+        },
+        {
+          "default": "False",
+          "name": "kill_switch_activated",
+          "type": "<class 'bool'>"
+        },
+        {
+          "default": "''",
+          "name": "kill_switch_reason",
+          "type": "<class 'str'>"
+        }
+      ],
+      "defined_in": "ml4t.live.safety",
+      "kind": "dataclass",
+      "methods": [
+        {
+          "kind": "staticmethod",
+          "name": "create_for_today",
+          "signature": "() -> 'RiskState'"
+        },
+        {
+          "kind": "classmethod",
+          "name": "from_dict",
+          "signature": "(cls, data: dict) -> 'RiskState'"
+        },
+        {
+          "kind": "staticmethod",
+          "name": "load",
+          "signature": "(filepath: str) -> 'RiskState | None'"
+        },
+        {
+          "kind": "staticmethod",
+          "name": "save_atomic",
+          "signature": "(state: 'RiskState', filepath: str) -> None"
+        },
+        {
+          "kind": "method",
+          "name": "to_dict",
+          "signature": "(self) -> dict[str, Any]"
+        },
+        {
+          "kind": "method",
+          "name": "validate",
+          "signature": "(self) -> None"
+        }
+      ],
+      "module": "ml4t.live.safety",
+      "name": "RiskState",
+      "signature": "(date: str, daily_loss: float = 0.0, orders_placed: int = 0, high_water_mark: float = 0.0, session_start_equity: float | None = None, persisted_positions: dict[str, float] = <factory>, persisted_pending_orders: list[dict[str, Any]] = <factory>, portable_strategy_state: dict[str, Any] = <factory>, replacement_gaps: dict[str, dict[str, Any]] = <factory>, shadow_portfolio: dict[str, Any] = <factory>, kill_switch_activated: bool = False, kill_switch_reason: str = '') -> None"
+    },
+    {
+      "bases": [
+        "builtins.object"
+      ],
+      "classification": "stable",
+      "defined_in": "ml4t.live.safety",
+      "kind": "class",
+      "methods": [
+        {
+          "kind": "method",
+          "name": "cancel_order_async",
+          "signature": "(self, order_id: str) -> bool"
+        },
+        {
+          "kind": "method",
+          "name": "close_all_positions",
+          "signature": "(self) -> list[ml4t.backtest.types.Order]"
+        },
+        {
+          "kind": "method",
+          "name": "close_persistence",
+          "signature": "(self) -> None"
+        },
+        {
+          "kind": "method",
+          "name": "close_position_async",
+          "signature": "(self, asset: str) -> ml4t.backtest.types.Order | None"
+        },
+        {
+          "kind": "method",
+          "name": "connect",
+          "signature": "(self) -> None"
+        },
+        {
+          "kind": "method",
+          "name": "disable_kill_switch",
+          "signature": "(self) -> None"
+        },
+        {
+          "kind": "method",
+          "name": "disconnect",
+          "signature": "(self) -> None"
+        },
+        {
+          "kind": "method",
+          "name": "enable_kill_switch",
+          "signature": "(self, reason: str = 'Manual') -> None"
+        },
+        {
+          "kind": "property",
+          "name": "execution_capabilities",
+          "signature": "(self) -> frozenset[Any]"
+        },
+        {
+          "kind": "method",
+          "name": "get_account_value_async",
+          "signature": "(self) -> float"
+        },
+        {
+          "kind": "method",
+          "name": "get_cash_async",
+          "signature": "(self) -> float"
+        },
+        {
+          "kind": "method",
+          "name": "get_pending_orders_async",
+          "signature": "(self, asset: str | None = None) -> list[ml4t.backtest.types.Order]"
+        },
+        {
+          "kind": "method",
+          "name": "get_position",
+          "signature": "(self, asset: str) -> ml4t.backtest.types.Position | None"
+        },
+        {
+          "kind": "method",
+          "name": "get_position_async",
+          "signature": "(self, asset: str) -> ml4t.backtest.types.Position | None"
+        },
+        {
+          "kind": "method",
+          "name": "get_positions",
+          "signature": "(self) -> dict[str, ml4t.backtest.types.Position]"
+        },
+        {
+          "kind": "method",
+          "name": "get_positions_async",
+          "signature": "(self) -> dict[str, ml4t.backtest.types.Position]"
+        },
+        {
+          "kind": "property",
+          "name": "is_connected",
+          "signature": "(self) -> bool"
+        },
+        {
+          "kind": "method",
+          "name": "is_connected_async",
+          "signature": "(self) -> bool"
+        },
+        {
+          "kind": "method",
+          "name": "load_portable_strategy_state",
+          "signature": "(self) -> dict[str, Any]"
+        },
+        {
+          "kind": "property",
+          "name": "pending_orders",
+          "signature": "(self) -> list[ml4t.backtest.types.Order]"
+        },
+        {
+          "kind": "property",
+          "name": "persistence_status",
+          "signature": "(self) -> dict[str, Any]"
+        },
+        {
+          "kind": "property",
+          "name": "positions",
+          "signature": "(self) -> dict[str, ml4t.backtest.types.Position]"
+        },
+        {
+          "kind": "method",
+          "name": "preflight_async",
+          "signature": "(self) -> dict[str, Any]"
+        },
+        {
+          "kind": "method",
+          "name": "preview_reconciliation_async",
+          "signature": "(self) -> dict[str, Any]"
+        },
+        {
+          "kind": "property",
+          "name": "reconciliation_report",
+          "signature": "(self) -> dict[str, Any] | None"
+        },
+        {
+          "kind": "method",
+          "name": "record_event",
+          "signature": "(self, event: str, **payload: Any) -> None"
+        },
+        {
+          "kind": "method",
+          "name": "record_market_snapshot",
+          "signature": "(self, asset: str, price: float, timestamp: datetime.datetime | None = None) -> None"
+        },
+        {
+          "kind": "method",
+          "name": "reduce_position_async",
+          "signature": "(self, asset: str, quantity: float, *, reason: str, idempotency_key: str, fill_price: float | None = None) -> ml4t.backtest.types.Order"
+        },
+        {
+          "kind": "method",
+          "name": "replace_order_async",
+          "signature": "(self, order_id: str, *, quantity: float | None = None, limit_price: float | None = None, stop_price: float | None = None) -> ml4t.backtest.types.Order"
+        },
+        {
+          "kind": "property",
+          "name": "replacement_gaps",
+          "signature": "(self) -> dict[str, dict[str, Any]]"
+        },
+        {
+          "kind": "method",
+          "name": "save_portable_strategy_state",
+          "signature": "(self, state: dict[str, Any]) -> None"
+        },
+        {
+          "kind": "method",
+          "name": "submit_order_async",
+          "signature": "(self, asset: str, quantity: float, side: ml4t.backtest.types.OrderSide | None = None, order_type: ml4t.backtest.types.OrderType = <OrderType.MARKET: 'market'>, limit_price: float | None = None, stop_price: float | None = None, **kwargs: Any) -> ml4t.backtest.types.Order"
+        }
+      ],
+      "module": "ml4t.live.safety",
+      "name": "SafeBroker",
+      "signature": "(broker: ml4t.live.protocols.AsyncBrokerProtocol, config: ml4t.live.safety.LiveRiskConfig)"
+    },
+    {
+      "bases": [
+        "builtins.object"
+      ],
+      "classification": "stable",
+      "defined_in": "ml4t.live.safety",
+      "kind": "class",
+      "methods": [
+        {
+          "kind": "property",
+          "name": "account_value",
+          "signature": "(self) -> float"
+        },
+        {
+          "kind": "property",
+          "name": "cash",
+          "signature": "(self) -> float"
+        },
+        {
+          "kind": "property",
+          "name": "positions",
+          "signature": "(self) -> dict[str, ml4t.backtest.types.Position]"
+        },
+        {
+          "kind": "method",
+          "name": "process_fill",
+          "signature": "(self, order: ml4t.backtest.types.Order) -> None"
+        },
+        {
+          "kind": "method",
+          "name": "restore_state",
+          "signature": "(self, state: dict[str, Any]) -> None"
+        },
+        {
+          "kind": "method",
+          "name": "to_state",
+          "signature": "(self) -> dict[str, Any]"
+        },
+        {
+          "kind": "method",
+          "name": "update_prices",
+          "signature": "(self, prices: dict[str, float]) -> None"
+        }
+      ],
+      "module": "ml4t.live.safety",
+      "name": "VirtualPortfolio",
+      "signature": "(initial_cash: float = 100000.0)"
+    },
+    {
+      "bases": [
+        "builtins.object"
+      ],
+      "classification": "stable",
+      "defined_in": "ml4t.live.wrappers",
+      "kind": "class",
+      "methods": [
+        {
+          "kind": "method",
+          "name": "cancel_order",
+          "signature": "(self, order_id: str) -> bool"
+        },
+        {
+          "kind": "method",
+          "name": "clear_position_rules",
+          "signature": "(self, asset: str | None = None) -> None"
+        },
+        {
+          "kind": "method",
+          "name": "close_position",
+          "signature": "(self, asset: str) -> ml4t.backtest.types.Order | None"
+        },
+        {
+          "kind": "method",
+          "name": "export_target_intent_state",
+          "signature": "(self) -> dict[str, Any]"
+        },
+        {
+          "kind": "method",
+          "name": "get_account_value",
+          "signature": "(self) -> float"
+        },
+        {
+          "kind": "method",
+          "name": "get_cash",
+          "signature": "(self) -> float"
+        },
+        {
+          "kind": "method",
+          "name": "get_child_order_intents",
+          "signature": "(self) -> tuple[Any, ...]"
+        },
+        {
+          "kind": "method",
+          "name": "get_intent_reconciliations",
+          "signature": "(self) -> tuple[Any, ...]"
+        },
+        {
+          "kind": "method",
+          "name": "get_pending_orders",
+          "signature": "(self, asset: str | None = None) -> list[ml4t.backtest.types.Order]"
+        },
+        {
+          "kind": "method",
+          "name": "get_position",
+          "signature": "(self, asset: str) -> ml4t.backtest.types.Position | None"
+        },
+        {
+          "kind": "method",
+          "name": "get_positions",
+          "signature": "(self) -> dict[str, ml4t.backtest.types.Position]"
+        },
+        {
+          "kind": "method",
+          "name": "get_target_intents",
+          "signature": "(self) -> tuple[ml4t.specs.intents.CanonicalTargetIntent, ...]"
+        },
+        {
+          "kind": "property",
+          "name": "is_connected",
+          "signature": "(self) -> bool"
+        },
+        {
+          "kind": "property",
+          "name": "pending_orders",
+          "signature": "(self) -> list[ml4t.backtest.types.Order]"
+        },
+        {
+          "kind": "property",
+          "name": "positions",
+          "signature": "(self) -> dict[str, ml4t.backtest.types.Position]"
+        },
+        {
+          "kind": "method",
+          "name": "register_position_rule_policy",
+          "signature": "(self, policy_id: str, rules: Any) -> None"
+        },
+        {
+          "kind": "method",
+          "name": "register_target_intent",
+          "signature": "(self, intent: ml4t.specs.intents.CanonicalTargetIntent, *, position_rules: Any | None = None) -> ml4t.specs.intents.CanonicalTargetIntent"
+        },
+        {
+          "kind": "method",
+          "name": "replace_order",
+          "signature": "(self, order_id: str, *, quantity: float | None = None, limit_price: float | None = None, stop_price: float | None = None) -> ml4t.backtest.types.Order"
+        },
+        {
+          "kind": "method",
+          "name": "set_position_rules",
+          "signature": "(self, rules: Any | None, asset: str | None = None) -> None"
+        },
+        {
+          "kind": "method",
+          "name": "submit_order",
+          "signature": "(self, asset: str, quantity: float, side: ml4t.backtest.types.OrderSide | None = None, order_type: ml4t.backtest.types.OrderType = <OrderType.MARKET: 'market'>, limit_price: float | None = None, stop_price: float | None = None, **kwargs: Any) -> ml4t.backtest.types.Order"
+        },
+        {
+          "kind": "method",
+          "name": "update_position_context",
+          "signature": "(self, asset: str, context: dict[str, Any]) -> None"
+        }
+      ],
+      "module": "ml4t.live.wrappers",
+      "name": "ThreadSafeBrokerWrapper",
+      "signature": "(async_broker: ml4t.live.protocols.AsyncBrokerProtocol, loop: asyncio.events.AbstractEventLoop, strategy_runtime: Any | None = None)"
+    }
+  ]
+}
