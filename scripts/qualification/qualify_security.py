@@ -9,11 +9,18 @@ import tomllib
 from pathlib import Path
 from typing import Any
 
-from scripts.qualification.audit_dependencies import audit
-from scripts.qualification.build_release_inventory import build_inventories
-from scripts.qualification.check_release_recovery import POLICY_PATH, recovery_failures
-from scripts.qualification.check_workflows import validate_workflows
-from scripts.qualification.scan_release_secrets import REPOSITORY_ROOT, scan_release
+try:
+    from scripts.qualification.audit_dependencies import audit
+    from scripts.qualification.build_release_inventory import build_inventories
+    from scripts.qualification.check_release_recovery import POLICY_PATH, recovery_failures
+    from scripts.qualification.check_workflows import validate_workflows
+    from scripts.qualification.scan_release_secrets import REPOSITORY_ROOT, scan_release
+except ModuleNotFoundError:
+    from audit_dependencies import audit
+    from build_release_inventory import build_inventories
+    from check_release_recovery import POLICY_PATH, recovery_failures
+    from check_workflows import validate_workflows
+    from scan_release_secrets import REPOSITORY_ROOT, scan_release
 
 
 def write_json(path: Path, payload: dict[str, Any]) -> None:

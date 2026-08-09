@@ -14,8 +14,16 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from scripts.qualification.audit_dependencies import canonical_name, package_index, scoped_closures
-from scripts.qualification.qualify_artifacts import distribution_pair
+try:
+    from scripts.qualification.audit_dependencies import (
+        canonical_name,
+        package_index,
+        scoped_closures,
+    )
+    from scripts.qualification.qualify_artifacts import distribution_pair
+except ModuleNotFoundError:
+    from audit_dependencies import canonical_name, package_index, scoped_closures
+    from qualify_artifacts import distribution_pair
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 
