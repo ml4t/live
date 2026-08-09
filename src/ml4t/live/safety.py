@@ -13,6 +13,7 @@ The design addresses several critical safety issues identified in code review:
 - Multiple layers of risk controls
 """
 
+import asyncio
 import json
 import logging
 import math
@@ -805,6 +806,7 @@ class SafeBroker:
 
         # Rate limiting
         self._order_timestamps: list[float] = []
+        self._order_operation_lock = asyncio.Lock()
 
         # Duplicate detection
         self._recent_orders: list[tuple[float, str, float]] = []  # (time, asset, qty)
@@ -991,6 +993,10 @@ class SafeBroker:
         Returns:
             True if cancel request submitted
         """
+        async with self._order_operation_lock:
+            return await self._cancel_order_unlocked(order_id)
+
+    async def _cancel_order_unlocked(self, order_id: str) -> bool:
         if self.execution_mode is ExecutionMode.SHADOW:
             return False
         self._require_external_execution_identity()
@@ -1038,6 +1044,24 @@ class SafeBroker:
         fill_price: float | None = None,
     ) -> Order:
         """Submit an explicitly reducing order under the configured kill-switch policy."""
+        async with self._order_operation_lock:
+            return await self._reduce_position_unlocked(
+                asset,
+                quantity,
+                reason=reason,
+                idempotency_key=idempotency_key,
+                fill_price=fill_price,
+            )
+
+    async def _reduce_position_unlocked(
+        self,
+        asset: str,
+        quantity: float,
+        *,
+        reason: str,
+        idempotency_key: str,
+        fill_price: float | None = None,
+    ) -> Order:
         position = self.get_position(asset.upper())
         if position is None:
             raise RiskLimitError(f"Reducing order for {asset} has no open position")
@@ -1151,6 +1175,22 @@ class SafeBroker:
         stop_price: float | None = None,
     ) -> Order:
         """Replace a pending order via cancel-and-resubmit."""
+        async with self._order_operation_lock:
+            return await self._replace_order_unlocked(
+                order_id,
+                quantity=quantity,
+                limit_price=limit_price,
+                stop_price=stop_price,
+            )
+
+    async def _replace_order_unlocked(
+        self,
+        order_id: str,
+        *,
+        quantity: float | None = None,
+        limit_price: float | None = None,
+        stop_price: float | None = None,
+    ) -> Order:
         if self.execution_mode is ExecutionMode.SHADOW:
             raise ExecutionModeError("shadow orders fill immediately and cannot be replaced")
         original = self._pending_order_by_id(order_id)
@@ -1180,7 +1220,7 @@ class SafeBroker:
             order_type=request.order_type.value,
         )
 
-        cancelled = await self.cancel_order_async(order_id)
+        cancelled = await self._cancel_order_unlocked(order_id)
         if not cancelled:
             raise RiskLimitError(f"Could not cancel order {order_id} before replacement")
 
@@ -1201,7 +1241,7 @@ class SafeBroker:
         self._save_state()
         self.record_event("order_replacement_gap_opened", **gap)
         try:
-            replacement = await self.submit_order_async(
+            replacement = await self._submit_order_unlocked(
                 asset=request.asset,
                 quantity=request.quantity,
                 side=request.side,
@@ -1274,6 +1314,27 @@ class SafeBroker:
         Raises:
             RiskLimitError: If order violates any risk limit
         """
+        async with self._order_operation_lock:
+            return await self._submit_order_unlocked(
+                asset,
+                quantity,
+                side,
+                order_type,
+                limit_price,
+                stop_price,
+                **kwargs,
+            )
+
+    async def _submit_order_unlocked(
+        self,
+        asset: str,
+        quantity: float,
+        side: OrderSide | None = None,
+        order_type: OrderType = OrderType.MARKET,
+        limit_price: float | None = None,
+        stop_price: float | None = None,
+        **kwargs: Any,
+    ) -> Order:
         replacement_for = kwargs.pop("_replacement_for", None)
         request = CanonicalOrderRequest.from_input(
             asset,
@@ -1310,13 +1371,23 @@ class SafeBroker:
             price = await self._estimate_price(asset, limit_price)
             order_value = quantity * price
             self._check_order_limits(quantity, order_value)
-            await self._check_position_limits(asset, quantity, order_value, side)
+            await self._check_position_limits(
+                asset,
+                quantity,
+                order_value,
+                side,
+                exclude_pending_order_id=replacement_for,
+            )
             if limit_price is not None and order_type in (
                 OrderType.LIMIT,
                 OrderType.STOP_LIMIT,
             ):
                 await self._check_price_deviation(asset, limit_price)
             await self._check_drawdown()
+            if self.config.kill_switch_enabled or self._state.kill_switch_activated:
+                raise RiskLimitError(
+                    f"Kill switch active: {self._state.kill_switch_reason or 'Manual activation'}"
+                )
         except BaseException:
             if not self._state.kill_switch_activated or state_before.kill_switch_activated:
                 self._state = state_before
@@ -1695,7 +1766,13 @@ class SafeBroker:
             )
 
     async def _check_position_limits(
-        self, asset: str, quantity: float, order_value: float, side: OrderSide
+        self,
+        asset: str,
+        quantity: float,
+        order_value: float,
+        side: OrderSide,
+        *,
+        exclude_pending_order_id: str | None = None,
     ) -> None:
         """Check position size limits.
 
@@ -1708,10 +1785,19 @@ class SafeBroker:
         Raises:
             RiskLimitError: If position limits exceeded
         """
-        pos = self.get_position(asset)
+        positions = self.positions
+        pos = positions.get(asset)
         current_qty = pos.quantity if pos else 0
         current_value = abs(pos.market_value) if pos else 0
         order_unit_price = order_value / abs(quantity) if quantity else 0.0
+        pending_quantities, pending_values = self._pending_risk_reservations(
+            exclude_order_id=exclude_pending_order_id,
+            fallback_asset=asset,
+            fallback_price=order_unit_price,
+        )
+        occupied_assets = {
+            name for name, position in positions.items() if position.quantity != 0
+        } | set(pending_quantities)
 
         # Projected position
         if side == OrderSide.BUY:
@@ -1719,8 +1805,16 @@ class SafeBroker:
         else:
             projected_qty = current_qty - quantity
 
-        projected_value = abs(projected_qty) * order_unit_price
-        total = sum(abs(p.market_value) for p in self.positions.values()) - current_value
+        projected_quantity_at_risk = abs(projected_qty) + pending_quantities.get(asset, 0.0)
+        projected_value = abs(projected_qty) * order_unit_price + pending_values.get(asset, 0.0)
+        total_exposure = (
+            sum(abs(position.market_value) for position in positions.values())
+            - current_value
+            + projected_value
+            + sum(
+                value for pending_asset, value in pending_values.items() if pending_asset != asset
+            )
+        )
 
         if (
             self.config.max_position_value is not None
@@ -1733,30 +1827,68 @@ class SafeBroker:
 
         if (
             self.config.max_position_shares is not None
-            and abs(projected_qty) > self.config.max_position_shares
+            and projected_quantity_at_risk > self.config.max_position_shares
         ):
             raise RiskLimitError(
-                f"Position quantity {projected_qty} would exceed "
+                f"Position quantity at risk {projected_quantity_at_risk} would exceed "
                 f"max {self.config.max_position_shares}"
             )
 
         # Total exposure
         if (
             self.config.max_total_exposure is not None
-            and total + projected_value > self.config.max_total_exposure
+            and total_exposure > self.config.max_total_exposure
         ):
             raise RiskLimitError(
-                f"Total exposure ${total + projected_value:,.0f} would exceed "
+                f"Total exposure ${total_exposure:,.0f} would exceed "
                 f"max ${self.config.max_total_exposure:,.0f}"
             )
 
         # Max positions
         if (
             self.config.max_positions is not None
-            and pos is None
-            and len(self.positions) >= self.config.max_positions
+            and asset not in occupied_assets
+            and len(occupied_assets) >= self.config.max_positions
         ):
             raise RiskLimitError(f"Max positions ({self.config.max_positions}) reached")
+
+    def _pending_risk_reservations(
+        self,
+        *,
+        exclude_order_id: str | None,
+        fallback_asset: str,
+        fallback_price: float,
+    ) -> tuple[dict[str, float], dict[str, float]]:
+        quantities: dict[str, float] = {}
+        values: dict[str, float] = {}
+        positions = self.positions
+        for order in self.pending_orders:
+            if not isinstance(order, Order):
+                raise BrokerSnapshotError("pending order cache contains a non-Order value")
+            if exclude_order_id is not None and self._order_identifier(order) == exclude_order_id:
+                continue
+            if order.status in {OrderStatus.FILLED, OrderStatus.REJECTED, OrderStatus.CANCELLED}:
+                continue
+            filled_quantity = float(order.filled_quantity or 0.0)
+            remaining = max(0.0, float(order.quantity) - filled_quantity)
+            if remaining == 0:
+                continue
+            asset = order.asset.upper()
+            price_candidates = [order.limit_price, order.stop_price]
+            snapshot = self._get_market_snapshot(asset)
+            if snapshot is not None:
+                price_candidates.append(snapshot.price)
+            position = positions.get(asset)
+            if position is not None:
+                price_candidates.extend([position.current_price, position.entry_price])
+            if asset == fallback_asset:
+                price_candidates.append(fallback_price)
+            prices = [float(price) for price in price_candidates if price is not None and price > 0]
+            if not prices:
+                raise BrokerSnapshotError(f"pending order price unavailable for {asset}")
+            quantities[asset] = quantities.get(asset, 0.0) + remaining
+            values[asset] = values.get(asset, 0.0) + remaining * max(prices)
+        return quantities, values
 
     async def _check_price_deviation(self, asset: str, limit_price: float) -> None:
         """Fat finger check: reject if limit price too far from market.

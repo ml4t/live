@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
@@ -9,7 +10,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from ml4t.backtest.types import Order, OrderSide, OrderStatus, OrderType, Position
 
-from ml4t.live import ExecutionModeError, LiveRiskConfig, SafeBroker
+from ml4t.live import ExecutionModeError, LiveRiskConfig, RiskLimitError, SafeBroker
 
 pytestmark = [pytest.mark.integration, pytest.mark.deterministic]
 
@@ -68,6 +69,7 @@ class ModeBroker:
         return self.get_position(asset)
 
     async def get_account_value_async(self) -> float:
+        await asyncio.sleep(0)
         return 100_000.0
 
     async def get_cash_async(self) -> float:
@@ -84,7 +86,7 @@ class ModeBroker:
         **kwargs: Any,
     ) -> Order:
         self.submit_calls += 1
-        return Order(
+        order = Order(
             asset=asset,
             quantity=quantity,
             side=side or OrderSide.BUY,
@@ -93,6 +95,8 @@ class ModeBroker:
             status=OrderStatus.PENDING,
             created_at=datetime.now(UTC),
         )
+        self._pending_orders.append(order)
+        return order
 
     async def cancel_order_async(self, order_id: str) -> bool:
         return False
@@ -236,3 +240,99 @@ def test_persisted_execution_mode_cannot_be_reused_for_another_destination(tmp_p
             ModeBroker("paper"),
             LiveRiskConfig(execution_mode="paper", state_file=str(state_file)),
         )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("config_overrides", "orders"),
+    [
+        ({"max_orders_per_minute": 1, "dedup_window_seconds": 0}, ("SPY", "MSFT")),
+        ({"max_orders_per_minute": None}, ("SPY", "SPY")),
+        (
+            {
+                "max_orders_per_minute": None,
+                "dedup_window_seconds": 0,
+                "max_total_exposure": 100.0,
+            },
+            ("SPY", "MSFT"),
+        ),
+        (
+            {
+                "max_orders_per_minute": None,
+                "dedup_window_seconds": 0,
+                "max_position_shares": 1,
+            },
+            ("SPY", "SPY"),
+        ),
+        (
+            {
+                "max_orders_per_minute": None,
+                "dedup_window_seconds": 0,
+                "max_positions": 1,
+            },
+            ("SPY", "MSFT"),
+        ),
+    ],
+)
+async def test_concurrent_orders_cannot_bypass_safety_policy(
+    tmp_path, config_overrides, orders
+) -> None:
+    broker = ModeBroker("paper")
+    config = {
+        "execution_mode": "paper",
+        "state_file": str(tmp_path / "paper-state.json"),
+        **config_overrides,
+    }
+    safe = SafeBroker(
+        broker,
+        LiveRiskConfig(**config),
+    )
+    await safe.connect()
+    safe.record_market_snapshot("SPY", 100.0)
+    safe.record_market_snapshot("MSFT", 100.0)
+
+    results = await asyncio.gather(
+        *(safe.submit_order_async(asset, 1) for asset in orders),
+        return_exceptions=True,
+    )
+
+    assert broker.submit_calls == 1
+    assert sum(isinstance(result, RiskLimitError) for result in results) == 1
+    assert safe._state.orders_placed == 1
+    await safe.disconnect()
+
+
+@pytest.mark.asyncio
+async def test_kill_switch_activated_during_validation_blocks_provider(tmp_path) -> None:
+    class PausingModeBroker(ModeBroker):
+        def __init__(self) -> None:
+            super().__init__("paper")
+            self.validation_started = asyncio.Event()
+            self.release_validation = asyncio.Event()
+
+        async def get_account_value_async(self) -> float:
+            self.validation_started.set()
+            await self.release_validation.wait()
+            return 100_000.0
+
+    broker = PausingModeBroker()
+    safe = SafeBroker(
+        broker,
+        LiveRiskConfig(
+            execution_mode="paper",
+            state_file=str(tmp_path / "paper-state.json"),
+        ),
+    )
+    await safe.connect()
+    safe.record_market_snapshot("SPY", 100.0)
+    submission = asyncio.create_task(safe.submit_order_async("SPY", 1))
+    await broker.validation_started.wait()
+
+    safe.enable_kill_switch("operator stop")
+    broker.release_validation.set()
+
+    with pytest.raises(RiskLimitError, match="Kill switch active"):
+        await submission
+    assert broker.submit_calls == 0
+    assert safe._state.orders_placed == 0
+    await safe.disconnect()
