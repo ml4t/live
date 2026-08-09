@@ -183,6 +183,16 @@ def validate_workflows(root: Path = WORKFLOW_ROOT) -> list[str]:
     qualification_jobs = qualification["jobs"]
     if qualification.get("env", {}).get("SETUPTOOLS_SCM_PRETEND_VERSION") != "0.1.0b4":
         failures.append("qualification does not build the exact 0.1.0b4 candidate version")
+    if qualification.get("env", {}).get("CANDIDATE_SHA") != (
+        "${{ github.event.pull_request.head.sha || github.sha }}"
+    ):
+        failures.append("qualification does not resolve the pull-request head candidate")
+    for name, job in qualification_jobs.items():
+        checkouts = _action_steps(job, "actions/checkout")
+        if len(checkouts) != 1 or checkouts[0].get("with", {}).get("ref") != (
+            "${{ env.CANDIDATE_SHA }}"
+        ):
+            failures.append(f"{name} does not check out the exact candidate commit")
     for name in ("source-quality", "deterministic"):
         if _matrix_pythons(qualification_jobs.get(name, {})) != SUPPORTED_PYTHONS:
             failures.append(f"{name} does not cover the supported Python matrix")
@@ -212,7 +222,7 @@ def validate_workflows(root: Path = WORKFLOW_ROOT) -> list[str]:
         failures.append("candidate build does not fix its reproducible timestamp")
     build_uploads = _action_steps(build_job, "actions/upload-artifact")
     artifact_downloads = _action_steps(artifact_job, "actions/download-artifact")
-    expected_artifact_name = "dist-${{ github.sha }}"
+    expected_artifact_name = "dist-${{ env.CANDIDATE_SHA }}"
     if len(build_uploads) != 1 or build_uploads[0].get("with", {}).get("name") != (
         expected_artifact_name
     ):
@@ -221,6 +231,20 @@ def validate_workflows(root: Path = WORKFLOW_ROOT) -> list[str]:
         expected_artifact_name
     ):
         failures.append("artifact qualification does not download the candidate artifact")
+    performance_uploads = _action_steps(
+        qualification_jobs.get("performance", {}), "actions/upload-artifact"
+    )
+    if len(performance_uploads) != 1 or performance_uploads[0].get("with", {}).get("name") != (
+        "performance-${{ env.CANDIDATE_SHA }}"
+    ):
+        failures.append("performance evidence is not addressed by the candidate commit")
+    qualification_uploads = _action_steps(artifact_job, "actions/upload-artifact")
+    if (
+        len(qualification_uploads) != 1
+        or qualification_uploads[0].get("with", {}).get("name")
+        != "qualification-${{ env.CANDIDATE_SHA }}"
+    ):
+        failures.append("artifact qualification evidence is not addressed by the candidate commit")
 
     reusable_text = json.dumps(qualification, sort_keys=True)
     ci_text = json.dumps(ci, sort_keys=True)
@@ -242,7 +266,7 @@ def validate_workflows(root: Path = WORKFLOW_ROOT) -> list[str]:
     publish_job = release.get("jobs", {}).get("publish", {})
     publish_downloads = _action_steps(publish_job, "actions/download-artifact")
     if len(publish_downloads) != 1 or publish_downloads[0].get("with", {}).get("name") != (
-        expected_artifact_name
+        "dist-${{ github.sha }}"
     ):
         failures.append("publish does not download the qualified candidate artifact")
     publishers = _action_steps(publish_job, "pypa/gh-action-pypi-publish")
