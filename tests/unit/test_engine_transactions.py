@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import signal
+import threading
+import time
 from collections.abc import AsyncIterator
 from datetime import datetime
 from typing import Any
@@ -96,6 +98,7 @@ class FaultFeed:
         self.block = block
         self.start_calls = 0
         self.stop_calls = 0
+        self.close_calls = 0
         self.started = False
         self._iteration_failed = False
         self._queue: asyncio.Queue[None] = asyncio.Queue()
@@ -116,6 +119,9 @@ class FaultFeed:
 
     def __aiter__(self) -> AsyncIterator[tuple[datetime, dict, dict]]:
         return self
+
+    async def close(self) -> None:
+        self.close_calls += 1
 
     async def __anext__(self) -> tuple[datetime, dict, dict]:
         if self.fail_iteration and not self._iteration_failed:
@@ -266,6 +272,44 @@ async def test_completed_safe_broker_run_releases_persistence_writer(tmp_path) -
     probe.release_writer()
     assert raw_broker.disconnect_calls == 1
     assert engine.runtime_state is RuntimeState.STOPPED
+
+
+@pytest.mark.asyncio
+async def test_terminal_run_releases_every_owned_resource_within_five_seconds(tmp_path) -> None:
+    raw_broker = FaultBroker()
+    feed = FaultFeed()
+    state_path = tmp_path / "state.json"
+    safe_broker = SafeBroker(
+        raw_broker,
+        LiveRiskConfig(
+            execution_mode="paper",
+            state_file=str(state_path),
+            journal_file=str(tmp_path / "journal.jsonl"),
+            max_data_staleness_seconds=None,
+            max_daily_loss=None,
+            max_drawdown_pct=None,
+        ),
+    )
+    engine = LiveEngine(PhaseStrategy(), safe_broker, feed)
+
+    started = time.monotonic()
+    await engine.connect()
+    await engine.run()
+    elapsed = time.monotonic() - started
+
+    owned_tasks = {"ml4t-live-watchdog", "ml4t-live-signal-shutdown"}
+    assert elapsed < 5
+    assert raw_broker.connected is False
+    assert raw_broker.disconnect_calls == 1
+    assert feed.stop_calls == 1
+    assert feed.close_calls == 1
+    assert not [task for task in asyncio.all_tasks() if task.get_name() in owned_tasks]
+    assert not [
+        thread for thread in threading.enumerate() if thread.name.startswith("ml4t-live-strategy")
+    ]
+    probe = SecureStateStore(state_path)
+    probe.acquire_writer()
+    probe.release_writer()
 
 
 @pytest.mark.asyncio
