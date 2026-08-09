@@ -10,8 +10,9 @@ from typing import Any
 
 import pytest
 from ml4t.backtest.types import Order, OrderSide, OrderStatus, OrderType, Position
-from ml4t.specs import CanonicalTargetIntent
+from ml4t.specs import CanonicalTargetIntent, ExecutionCapability
 
+from ml4t.live import AlpacaBroker, IBBroker, LiveRiskConfig, SafeBroker
 from ml4t.live.orders import CanonicalOrderRequest, OrderValidationError
 from ml4t.live.protocols import (
     AsyncBrokerProtocol,
@@ -41,7 +42,7 @@ class MockBroker:
 
     @property
     def is_connected(self) -> bool:
-        return self._connected
+        return getattr(self, "_connected", False)
 
     def get_position(self, asset: str) -> Position | None:
         return self._positions.get(asset)
@@ -166,6 +167,22 @@ class MockAsyncBroker:
         self._pending_orders: list[Order] = []
         self._connected = False
         self._cash = 100000.0
+
+    @property
+    def positions(self) -> dict[str, Position]:
+        return self._positions.copy()
+
+    @property
+    def pending_orders(self) -> list[Order]:
+        return self._pending_orders.copy()
+
+    @property
+    def is_connected(self) -> bool:
+        return getattr(self, "_connected", False)
+
+    @property
+    def execution_capabilities(self) -> frozenset[ExecutionCapability]:
+        return frozenset()
 
     def assert_paper_trading(self) -> None:
         """Identify this deterministic adapter as a paper venue."""
@@ -304,6 +321,40 @@ def test_async_broker_protocol_is_runtime_checkable():
     assert isinstance(broker, AsyncBrokerProtocol), (
         "MockAsyncBroker should satisfy AsyncBrokerProtocol"
     )
+
+
+def test_supported_broker_layers_satisfy_async_contract(tmp_path) -> None:
+    alpaca = AlpacaBroker("test-key", "test-secret")
+    ib = IBBroker()
+    safe = SafeBroker(
+        alpaca,
+        LiveRiskConfig(
+            execution_mode="shadow",
+            state_file=str(tmp_path / "state.json"),
+        ),
+    )
+    try:
+        assert isinstance(alpaca, AsyncBrokerProtocol)
+        assert isinstance(ib, AsyncBrokerProtocol)
+        assert isinstance(safe, AsyncBrokerProtocol)
+    finally:
+        safe.close_persistence()
+
+
+def test_safe_broker_uses_public_connection_contract(tmp_path) -> None:
+    broker = MockAsyncBroker()
+    del broker._connected
+    safe = SafeBroker(
+        broker,
+        LiveRiskConfig(
+            execution_mode="shadow",
+            state_file=str(tmp_path / "state.json"),
+        ),
+    )
+    try:
+        assert safe.is_connected is False
+    finally:
+        safe.close_persistence()
 
 
 def test_data_feed_protocol_is_runtime_checkable():
@@ -536,6 +587,10 @@ def test_broker_protocol_has_all_required_methods():
 def test_async_broker_protocol_has_all_required_methods():
     """Verify AsyncBrokerProtocol has all required method signatures."""
     required_attrs = [
+        "positions",
+        "pending_orders",
+        "is_connected",
+        "execution_capabilities",
         "connect",
         "disconnect",
         "is_connected_async",

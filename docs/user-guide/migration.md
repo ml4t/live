@@ -90,6 +90,8 @@ candidate removes no root export from that release, but the following changes re
   recovery controls.
 - `LiveEngine` accepts lifecycle, execution-policy, and maximum-event-age inputs and exposes typed
   runtime state and retained operational transitions.
+- Remove the beta `halt_on_error` argument. Lifecycle version 1 always stops, finalizes, and
+  reraises a strategy exception; the beta flag was ignored and could imply unsupported recovery.
 - `LiveRiskConfig` requires an explicit `execution_mode`. The old `shadow_mode=True` form remains a
   compatibility alias. Replace `shadow_mode=False` with either `execution_mode="paper"` or
   `execution_mode="live"`; the library cannot infer the intended account safely.

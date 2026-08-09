@@ -10,17 +10,24 @@ Key Design:
 - Differentiated timeouts (5s getters, 30s orders)
 """
 
+from __future__ import annotations
+
 import asyncio
 import logging
 import threading
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
+from ml4t.backtest import IntentReconciliation
 from ml4t.backtest.types import Order, OrderSide, OrderType, Position
-from ml4t.specs import CanonicalTargetIntent
+from ml4t.specs import CanonicalChildOrderIntent, CanonicalTargetIntent
 
-from ml4t.live.orders import CanonicalOrderRequest
-from ml4t.live.persistence import redact_sensitive
-from ml4t.live.protocols import AsyncBrokerProtocol
+from .orders import CanonicalOrderRequest
+from .persistence import redact_sensitive
+from .protocols import AsyncBrokerProtocol
+from .runtime import LiveStrategyRuntime
+
+if TYPE_CHECKING:
+    from ml4t.backtest.risk.position import PositionRule
 
 logger = logging.getLogger(__name__)
 
@@ -58,8 +65,8 @@ class ThreadSafeBrokerWrapper:
         self,
         async_broker: AsyncBrokerProtocol,
         loop: asyncio.AbstractEventLoop,
-        strategy_runtime: Any | None = None,
-    ):
+        strategy_runtime: LiveStrategyRuntime | None = None,
+    ) -> None:
         """Initialize thread-safe wrapper.
 
         Args:
@@ -269,12 +276,12 @@ class ThreadSafeBrokerWrapper:
         self,
         intent: CanonicalTargetIntent,
         *,
-        position_rules: Any | None = None,
+        position_rules: PositionRule | None = None,
     ) -> CanonicalTargetIntent:
         """Register a persistent target intent during a causal callback."""
         return self._runtime().register_target_intent(intent, position_rules=position_rules)
 
-    def register_position_rule_policy(self, policy_id: str, rules: Any) -> None:
+    def register_position_rule_policy(self, policy_id: str, rules: PositionRule) -> None:
         """Bind a portable position-rule policy to its client implementation."""
         self._runtime().register_position_rule_policy(policy_id, rules)
 
@@ -282,11 +289,11 @@ class ThreadSafeBrokerWrapper:
         """Return registered portable target intents."""
         return self._runtime().targets
 
-    def get_child_order_intents(self) -> tuple[Any, ...]:
+    def get_child_order_intents(self) -> tuple[CanonicalChildOrderIntent, ...]:
         """Return lowered child-order intents."""
         return self._runtime().children
 
-    def get_intent_reconciliations(self) -> tuple[Any, ...]:
+    def get_intent_reconciliations(self) -> tuple[IntentReconciliation, ...]:
         """Return retained target execution evidence."""
         return self._runtime().reconciliations
 
@@ -294,7 +301,7 @@ class ThreadSafeBrokerWrapper:
         """Return restart-safe target and position-rule state."""
         return self._runtime().to_state()
 
-    def set_position_rules(self, rules: Any | None, asset: str | None = None) -> None:
+    def set_position_rules(self, rules: PositionRule | None, asset: str | None = None) -> None:
         """Set client-evaluated position rules globally or for one asset."""
         self._runtime().set_position_rules(rules, asset=asset)
 
@@ -306,7 +313,7 @@ class ThreadSafeBrokerWrapper:
         """Merge portable context used by position-rule evaluation."""
         self._runtime().update_position_context(asset, context)
 
-    def _runtime(self) -> Any:
+    def _runtime(self) -> LiveStrategyRuntime:
         if self._strategy_runtime is None:
             raise RuntimeError("Portable strategy runtime is not configured")
         return self._strategy_runtime

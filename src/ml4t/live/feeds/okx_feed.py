@@ -72,7 +72,7 @@ class OKXFundingFeed(DataFeedProtocol):
         timeframe: str = "1H",
         poll_interval_seconds: float = 60.0,
         queue_capacity: int = 256,
-    ):
+    ) -> None:
         """Initialize OKX funding rate feed.
 
         Args:

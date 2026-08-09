@@ -137,7 +137,7 @@ class DataBentoFeed(DataFeedProtocol):
         mode: str = "historical",
         replay_speed: float = 1.0,
         experimental: bool = False,
-    ):
+    ) -> None:
         """Initialize DataBento feed.
 
         Args:

@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import Any
 
 from ml4t.backtest.types import Order, OrderSide, OrderStatus, OrderType, Position
+from ml4t.specs import ExecutionCapability
 
 from .orders import CanonicalOrderRequest
 from .persistence import (
@@ -581,7 +582,7 @@ class VirtualPortfolio:
         assert "AAPL" not in portfolio.positions
     """
 
-    def __init__(self, initial_cash: float = 100_000.0):
+    def __init__(self, initial_cash: float = 100_000.0) -> None:
         """Initialize virtual portfolio.
 
         Args:
@@ -796,7 +797,7 @@ class SafeBroker:
         engine = LiveEngine(strategy, safe, feed)
     """
 
-    def __init__(self, broker: AsyncBrokerProtocol, config: LiveRiskConfig):
+    def __init__(self, broker: AsyncBrokerProtocol, config: LiveRiskConfig) -> None:
         """Initialize SafeBroker.
 
         Args:
@@ -846,15 +847,6 @@ class SafeBroker:
         self._latest_market_data: dict[str, MarketSnapshot] = {}
         self._last_reconciliation_report: dict[str, Any] | None = None
 
-        # Initialize high water mark if not set
-        if self._state.high_water_mark == 0.0:
-            try:
-                # Note: This is sync access to async method - we'll fix this
-                # by making initialization async if needed
-                pass
-            except Exception:
-                pass
-
         self._execution_identity_validated = self.execution_mode is ExecutionMode.SHADOW
         logger.info("SafeBroker initialized. Execution mode: %s", self.execution_mode.value)
         disabled_controls = self._disabled_safety_controls()
@@ -889,12 +881,12 @@ class SafeBroker:
         """
         if self.config.shadow_mode:
             return self._virtual_portfolio.positions
-        return self._broker.positions  # type: ignore[attr-defined]
+        return self._broker.positions
 
     @property
     def pending_orders(self) -> list[Order]:
         """Get pending orders."""
-        return self._broker.pending_orders  # type: ignore[attr-defined]
+        return self._broker.pending_orders
 
     @property
     def reconciliation_report(self) -> dict[str, Any] | None:
@@ -950,19 +942,27 @@ class SafeBroker:
             return
         self._validate_execution_identity()
 
+    def assert_paper_trading(self) -> None:
+        """Fail unless this wrapper and its provider are configured for paper execution."""
+        if self.execution_mode is not ExecutionMode.PAPER:
+            raise ExecutionModeError("SafeBroker is not configured for paper execution")
+        self._validate_execution_identity()
+
+    def assert_live_trading(self) -> None:
+        """Fail unless this wrapper and its provider are configured for live execution."""
+        if self.execution_mode is not ExecutionMode.LIVE:
+            raise ExecutionModeError("SafeBroker is not configured for live execution")
+        self._validate_execution_identity()
+
     @property
     def is_connected(self) -> bool:
         """Check if broker is connected."""
-        # Simplified check - actual implementation might need async
-        try:
-            return bool(self._broker._connected) if hasattr(self._broker, "_connected") else True
-        except Exception:
-            return True
+        return self._broker.is_connected
 
     @property
-    def execution_capabilities(self) -> frozenset[Any]:
+    def execution_capabilities(self) -> frozenset[ExecutionCapability]:
         """Return capabilities declared by the wrapped venue."""
-        return frozenset(getattr(self._broker, "execution_capabilities", ()))
+        return self._broker.execution_capabilities
 
     def load_portable_strategy_state(self) -> dict[str, Any]:
         """Return a copy of persisted target and position-rule state."""
@@ -984,7 +984,7 @@ class SafeBroker:
         """
         if self.config.shadow_mode:
             return self._virtual_portfolio.positions.get(asset)
-        return self._broker.get_position(asset)  # type: ignore[attr-defined]
+        return self._broker.positions.get(asset)
 
     def get_positions(self) -> dict[str, Position]:
         """Get all current positions through the portable strategy facade."""

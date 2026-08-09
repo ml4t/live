@@ -108,7 +108,7 @@ class RuntimeTransition:
 class RuntimeCleanupError(RuntimeError):
     """Raised when runtime finalization cannot release every acquired resource."""
 
-    def __init__(self, cleanup_result: dict[str, str]):
+    def __init__(self, cleanup_result: dict[str, str]) -> None:
         self.cleanup_result = dict(cleanup_result)
         super().__init__(f"runtime cleanup failed: {self.cleanup_result}")
 
@@ -187,7 +187,6 @@ class LiveEngine:
         feed: DataFeedProtocol,
         *,
         on_error: Callable[[Exception, datetime, dict], None] | None = None,
-        halt_on_error: bool = False,
         feed_silence_seconds: float | None = None,
         watchdog_poll_seconds: float = 1.0,
         halt_on_unhealthy: bool = False,
@@ -199,7 +198,7 @@ class LiveEngine:
         lifecycle_version: LifecycleVersion | str = LifecycleVersion.V1,
         execution_policy: ExecutionPolicy | None = None,
         strategy_config: BacktestConfig | None = None,
-    ):
+    ) -> None:
         """Initialize LiveEngine.
 
         Args:
@@ -207,8 +206,6 @@ class LiveEngine:
             broker: Async broker implementation.
             feed: Data feed providing timestamp, data, context tuples.
             on_error: Custom error handler callback.
-            halt_on_error: Deprecated compatibility input. Lifecycle v1 always aborts and reraises
-                strategy exceptions after cleanup.
             feed_silence_seconds: Optional threshold for degraded feed reporting.
             watchdog_poll_seconds: Poll interval for runtime health monitoring.
             halt_on_unhealthy: Stop the engine when watchdog detects a degraded state.
@@ -234,7 +231,6 @@ class LiveEngine:
         self.broker = broker
         self.feed = feed
         self.on_error = on_error or self._default_error_handler
-        self.halt_on_error = halt_on_error
         self.feed_silence_seconds = feed_silence_seconds
         self.watchdog_poll_seconds = watchdog_poll_seconds
         self.halt_on_unhealthy = halt_on_unhealthy

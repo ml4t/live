@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from ml4t.backtest.types import Order, OrderSide, OrderStatus, OrderType, Position
+from ml4t.specs import ExecutionCapability
 
 from ml4t.live import (
     AcceptedOrderPersistenceError,
@@ -30,6 +31,10 @@ class PersistenceBroker:
         self.positions: dict[str, Position] = {}
         self.pending_orders: list[Order] = []
         self.submit_calls = 0
+
+    @property
+    def execution_capabilities(self) -> frozenset[ExecutionCapability]:
+        return frozenset()
 
     def get_position(self, asset: str) -> Position | None:
         return self.positions.get(asset.upper())

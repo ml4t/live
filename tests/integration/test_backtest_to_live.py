@@ -18,6 +18,7 @@ from ml4t.backtest import OrderSide, Strategy
 from ml4t.specs import (
     BarPayload,
     EventCompletion,
+    ExecutionCapability,
     LifecycleVersion,
     MarketEvent,
     MarketEventKind,
@@ -251,6 +252,10 @@ class MockLiveBroker:
     def pending_orders(self):
         """Pending orders property (used by SafeBroker)."""
         return []
+
+    @property
+    def execution_capabilities(self) -> frozenset[ExecutionCapability]:
+        return frozenset()
 
     async def get_positions_async(self):
         from ml4t.backtest.types import Position

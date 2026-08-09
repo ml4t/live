@@ -2,7 +2,7 @@
 
 import asyncio
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -160,7 +160,7 @@ def test_experimental_from_file_constructs_selected_replay() -> None:
 
 def test_experimental_from_live_subscribes_exact_request() -> None:
     client = MockLiveClient([])
-    client.subscribe = MagicMock()  # type: ignore[attr-defined]
+    cast(Any, client).subscribe = MagicMock()
     with (
         patch("ml4t.live.feeds.databento_feed.DATABENTO_AVAILABLE", True),
         patch("ml4t.live.feeds.databento_feed.db") as databento,
@@ -175,7 +175,7 @@ def test_experimental_from_live_subscribes_exact_request() -> None:
             experimental=True,
         )
 
-    client.subscribe.assert_called_once_with(  # type: ignore[attr-defined]
+    cast(Any, client).subscribe.assert_called_once_with(
         dataset="GLBX.MDP3",
         schema="trades",
         symbols=["SPY"],

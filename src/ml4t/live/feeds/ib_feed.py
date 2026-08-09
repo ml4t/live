@@ -78,7 +78,7 @@ class IBDataFeed(DataFeedProtocol):
         currency: str = "USD",
         tick_throttle_ms: int = 100,  # Min time between emits
         queue_capacity: int = 1_024,
-    ):
+    ) -> None:
         """Initialize IB data feed.
 
         Args:

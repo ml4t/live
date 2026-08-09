@@ -12,6 +12,7 @@ from ml4t.backtest.types import Order, OrderSide, OrderStatus, OrderType, Positi
 from ml4t.specs import (
     BarPayload,
     EventCompletion,
+    ExecutionCapability,
     FundingPayload,
     GapEvidence,
     HistoricalStrategyCompatibilityError,
@@ -72,6 +73,10 @@ class MockAsyncBroker:
     def is_connected(self) -> bool:
         """Sync property for direct access."""
         return self._connected
+
+    @property
+    def execution_capabilities(self) -> frozenset[ExecutionCapability]:
+        return frozenset()
 
     # AsyncBrokerProtocol methods
     async def connect(self) -> None:
@@ -435,7 +440,6 @@ async def test_engine_initialization():
     assert engine.strategy is strategy
     assert engine.broker is broker
     assert engine.feed is feed
-    assert engine.halt_on_error is False
     assert engine._running is False
     assert engine._wrapped_broker is None
 
@@ -854,7 +858,7 @@ async def test_strategy_error_aborts_and_runs_cleanup_once():
     def error_handler(e: Exception, timestamp: datetime, data: dict) -> None:
         errors.append(e)
 
-    engine = LiveEngine(strategy, broker, feed, on_error=error_handler, halt_on_error=False)
+    engine = LiveEngine(strategy, broker, feed, on_error=error_handler)
     await engine.connect()
     with pytest.raises(ValueError, match="Test error"):
         await engine.run()
@@ -883,39 +887,6 @@ async def test_strategy_error_aborts_and_runs_cleanup_once():
         "strategy_callback_started",
         "strategy_callback_succeeded",
     ]
-
-
-@pytest.mark.asyncio
-async def test_error_handling_halt():
-    """Test engine halts on strategy error when halt_on_error=True."""
-    strategy = ErrorStrategy(error_on_bar=2)  # Raise error on 2nd bar
-    broker = MockAsyncBroker()
-    bars = [
-        (datetime(2024, 1, 1, 9, 30, tzinfo=UTC), {"AAPL": {"close": 150.0}}, {}),
-        (datetime(2024, 1, 1, 9, 31, tzinfo=UTC), {"AAPL": {"close": 151.0}}, {}),
-        (datetime(2024, 1, 1, 9, 32, tzinfo=UTC), {"AAPL": {"close": 152.0}}, {}),
-    ]
-    feed = MockDataFeed(bars)
-
-    errors: list[Exception] = []
-
-    def error_handler(e: Exception, timestamp: datetime, data: dict) -> None:
-        errors.append(e)
-
-    engine = LiveEngine(strategy, broker, feed, on_error=error_handler, halt_on_error=True)
-    await engine.connect()
-    with pytest.raises(ValueError, match="Test error"):
-        await engine.run()
-
-    # Engine stopped after error
-    assert strategy.call_count == 2  # Only first 2 bars
-
-    # Error captured
-    assert len(errors) == 1
-
-    # Stats show partial processing
-    assert engine.stats["bar_count"] == 2
-    assert engine.stats["error_count"] == 1
 
 
 @pytest.mark.asyncio

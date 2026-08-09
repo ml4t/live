@@ -2,7 +2,7 @@
 
 import asyncio
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -227,9 +227,9 @@ async def test_stream_paths_apply_the_same_completion_policy(websocket: bool) ->
         return batches.pop(0)
 
     if websocket:
-        exchange.watch_ohlcv = next_batch  # type: ignore[attr-defined]
+        cast(Any, exchange).watch_ohlcv = next_batch
     else:
-        exchange.fetch_ohlcv = next_batch  # type: ignore[attr-defined]
+        cast(Any, exchange).fetch_ohlcv = next_batch
     feed = make_feed(exchange)
     feed._running = True
 
@@ -254,7 +254,7 @@ async def test_stream_failure_wakes_consumer_with_cause() -> None:
     async def failed(*args: Any, **kwargs: Any) -> list[list[float]]:
         raise ConnectionError("provider unavailable")
 
-    exchange.watch_ohlcv = failed  # type: ignore[attr-defined]
+    cast(Any, exchange).watch_ohlcv = failed
     feed = make_feed(exchange)
     feed._running = True
 

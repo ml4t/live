@@ -68,7 +68,7 @@ class AlpacaBroker:
         api_key: str,
         secret_key: str,
         paper: bool = True,  # Paper trading by default (SAFETY)
-    ):
+    ) -> None:
         """Initialize AlpacaBroker.
 
         Args:

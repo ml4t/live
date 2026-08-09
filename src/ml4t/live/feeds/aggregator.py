@@ -135,7 +135,7 @@ class BarAggregator:
         assets: list[str] | None = None,
         flush_timeout_seconds: float = 2.0,
         queue_capacity: int = 256,
-    ):
+    ) -> None:
         """Initialize BarAggregator.
 
         Args:
@@ -384,21 +384,18 @@ class BarAggregator:
         for asset in tuple(self._buffers):
             await self._emit_asset_bar(asset, bar_time)
 
-    async def __aiter__(self) -> AsyncIterator[MarketEvent]:
-        """Async iterator interface.
+    def __aiter__(self) -> AsyncIterator[MarketEvent]:
+        """Return this feed's asynchronous iterator."""
+        return self
 
-        Uses None sentinel for shutdown (Gemini fix: avoids busy-wait with 1s timeout).
-
-        Yields:
-            One validated bar event per asset and interval.
-        """
-        while True:
-            item = await self._queue.get()
-            if item is None:  # Shutdown sentinel
-                if self._failure is not None:
-                    raise self._failure
-                break
-            yield item
+    async def __anext__(self) -> MarketEvent:
+        """Return the next validated bar or finish after the queue drains."""
+        item = await self._queue.get()
+        if item is None:
+            if self._failure is not None:
+                raise self._failure
+            raise StopAsyncIteration
+        return item
 
     @property
     def stats(self) -> dict[str, Any]:

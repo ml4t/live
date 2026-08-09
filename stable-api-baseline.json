@@ -498,7 +498,7 @@
       ],
       "module": "ml4t.live",
       "name": "AlpacaBroker",
-      "signature": "(api_key: str, secret_key: str, paper: bool = True)"
+      "signature": "(api_key: str, secret_key: str, paper: bool = True) -> None"
     },
     {
       "bases": [
@@ -526,7 +526,7 @@
       ],
       "module": "ml4t.live",
       "name": "AlpacaDataFeed",
-      "signature": "(api_key: str, secret_key: str, symbols: list[str], *, data_type: str = 'bars', feed: str = 'iex', queue_capacity: int = 1024)"
+      "signature": "(api_key: str, secret_key: str, symbols: list[str], *, data_type: str = 'bars', feed: str = 'iex', queue_capacity: int = 1024) -> None"
     },
     {
       "bases": [
@@ -567,6 +567,11 @@
           "signature": "(self) -> 'None'"
         },
         {
+          "kind": "property",
+          "name": "execution_capabilities",
+          "signature": "(self) -> 'frozenset[ExecutionCapability]'"
+        },
+        {
           "kind": "method",
           "name": "get_account_value_async",
           "signature": "(self) -> 'float'"
@@ -592,9 +597,24 @@
           "signature": "(self) -> 'dict[str, Position]'"
         },
         {
+          "kind": "property",
+          "name": "is_connected",
+          "signature": "(self) -> 'bool'"
+        },
+        {
           "kind": "method",
           "name": "is_connected_async",
           "signature": "(self) -> 'bool'"
+        },
+        {
+          "kind": "property",
+          "name": "pending_orders",
+          "signature": "(self) -> 'list[Order]'"
+        },
+        {
+          "kind": "property",
+          "name": "positions",
+          "signature": "(self) -> 'dict[str, Position]'"
         },
         {
           "kind": "method",
@@ -649,7 +669,7 @@
       ],
       "module": "ml4t.live",
       "name": "BarAggregator",
-      "signature": "(source_feed: 'DataFeedProtocol', bar_size_minutes: int = 1, assets: list[str] | None = None, flush_timeout_seconds: float = 2.0, queue_capacity: int = 256)"
+      "signature": "(source_feed: 'DataFeedProtocol', bar_size_minutes: int = 1, assets: list[str] | None = None, flush_timeout_seconds: float = 2.0, queue_capacity: int = 256) -> None"
     },
     {
       "bases": [
@@ -963,7 +983,7 @@
       ],
       "module": "ml4t.live",
       "name": "CryptoFeed",
-      "signature": "(exchange: str, symbols: list[str], *, timeframe: str = '1m', stream_trades: bool = False, stream_ohlcv: bool = True, api_key: str | None = None, api_secret: str | None = None, api_passphrase: str | None = None, experimental: bool = False)"
+      "signature": "(exchange: str, symbols: list[str], *, timeframe: str = '1m', stream_trades: bool = False, stream_ohlcv: bool = True, api_key: str | None = None, api_secret: str | None = None, api_passphrase: str | None = None, experimental: bool = False) -> None"
     },
     {
       "bases": [
@@ -1001,7 +1021,7 @@
       ],
       "module": "ml4t.live",
       "name": "DataBentoFeed",
-      "signature": "(client: ml4t.live.feeds.databento_feed._HistoricalRecordSource | ml4t.live.feeds.databento_feed._LiveRecordSource, symbols: list[str], *, mode: str = 'historical', replay_speed: float = 1.0, experimental: bool = False)"
+      "signature": "(client: ml4t.live.feeds.databento_feed._HistoricalRecordSource | ml4t.live.feeds.databento_feed._LiveRecordSource, symbols: list[str], *, mode: str = 'historical', replay_speed: float = 1.0, experimental: bool = False) -> None"
     },
     {
       "bases": [
@@ -1297,7 +1317,7 @@
       ],
       "module": "ml4t.live",
       "name": "IBBroker",
-      "signature": "(host: str = '127.0.0.1', port: int = 7497, client_id: int = 1, account: str | None = None, market_data_type: int | None = None)"
+      "signature": "(host: str = '127.0.0.1', port: int = 7497, client_id: int = 1, account: str | None = None, market_data_type: int | None = None) -> None"
     },
     {
       "bases": [
@@ -1325,7 +1345,7 @@
       ],
       "module": "ml4t.live",
       "name": "IBDataFeed",
-      "signature": "(ib: ib_async.ib.IB, symbols: list[str], *, exchange: str = 'SMART', currency: str = 'USD', tick_throttle_ms: int = 100, queue_capacity: int = 1024)"
+      "signature": "(ib: ib_async.ib.IB, symbols: list[str], *, exchange: str = 'SMART', currency: str = 'USD', tick_throttle_ms: int = 100, queue_capacity: int = 1024) -> None"
     },
     {
       "bases": [
@@ -1407,7 +1427,7 @@
       ],
       "module": "ml4t.live",
       "name": "LiveEngine",
-      "signature": "(strategy: ml4t.backtest.strategy.Strategy, broker: ml4t.live.protocols.AsyncBrokerProtocol, feed: ml4t.live.protocols.DataFeedProtocol, *, on_error: collections.abc.Callable[[Exception, datetime.datetime, dict], None] | None = None, halt_on_error: bool = False, feed_silence_seconds: float | None = None, watchdog_poll_seconds: float = 1.0, halt_on_unhealthy: bool = False, auto_recover: bool = False, recovery_cooldown_seconds: float = 5.0, max_recovery_attempts: int = 3, max_event_age_seconds: float | None = None, on_health_change: collections.abc.Callable[[str, dict[str, Any]], None] | None = None, lifecycle_version: ml4t.specs.lifecycle.LifecycleVersion | str = <LifecycleVersion.V1: '1'>, execution_policy: ml4t.specs.intents.ExecutionPolicy | None = None, strategy_config: ml4t.backtest.config.BacktestConfig | None = None)"
+      "signature": "(strategy: ml4t.backtest.strategy.Strategy, broker: ml4t.live.protocols.AsyncBrokerProtocol, feed: ml4t.live.protocols.DataFeedProtocol, *, on_error: collections.abc.Callable[[Exception, datetime.datetime, dict], None] | None = None, feed_silence_seconds: float | None = None, watchdog_poll_seconds: float = 1.0, halt_on_unhealthy: bool = False, auto_recover: bool = False, recovery_cooldown_seconds: float = 5.0, max_recovery_attempts: int = 3, max_event_age_seconds: float | None = None, on_health_change: collections.abc.Callable[[str, dict[str, Any]], None] | None = None, lifecycle_version: ml4t.specs.lifecycle.LifecycleVersion | str = <LifecycleVersion.V1: '1'>, execution_policy: ml4t.specs.intents.ExecutionPolicy | None = None, strategy_config: ml4t.backtest.config.BacktestConfig | None = None) -> None"
     },
     {
       "bases": [
@@ -1715,7 +1735,7 @@
       ],
       "module": "ml4t.live",
       "name": "OKXFundingFeed",
-      "signature": "(symbols: list[str], *, timeframe: str = '1H', poll_interval_seconds: float = 60.0, queue_capacity: int = 256)"
+      "signature": "(symbols: list[str], *, timeframe: str = '1H', poll_interval_seconds: float = 60.0, queue_capacity: int = 256) -> None"
     },
     {
       "bases": [
@@ -1909,7 +1929,7 @@
       "methods": [],
       "module": "ml4t.live",
       "name": "RuntimeCleanupError",
-      "signature": "(cleanup_result: dict[str, str])"
+      "signature": "(cleanup_result: dict[str, str]) -> None"
     },
     {
       "bases": [
@@ -2039,6 +2059,16 @@
       "methods": [
         {
           "kind": "method",
+          "name": "assert_live_trading",
+          "signature": "(self) -> None"
+        },
+        {
+          "kind": "method",
+          "name": "assert_paper_trading",
+          "signature": "(self) -> None"
+        },
+        {
+          "kind": "method",
           "name": "cancel_order_async",
           "signature": "(self, order_id: str) -> bool"
         },
@@ -2080,7 +2110,7 @@
         {
           "kind": "property",
           "name": "execution_capabilities",
-          "signature": "(self) -> frozenset[Any]"
+          "signature": "(self) -> frozenset[ml4t.specs.intents.ExecutionCapability]"
         },
         {
           "kind": "method",
@@ -2200,7 +2230,7 @@
       ],
       "module": "ml4t.live",
       "name": "SafeBroker",
-      "signature": "(broker: ml4t.live.protocols.AsyncBrokerProtocol, config: ml4t.live.safety.LiveRiskConfig)"
+      "signature": "(broker: ml4t.live.protocols.AsyncBrokerProtocol, config: ml4t.live.safety.LiveRiskConfig) -> None"
     },
     {
       "bases": [
@@ -2213,112 +2243,112 @@
         {
           "kind": "method",
           "name": "cancel_order",
-          "signature": "(self, order_id: str) -> bool"
+          "signature": "(self, order_id: 'str') -> 'bool'"
         },
         {
           "kind": "method",
           "name": "clear_position_rules",
-          "signature": "(self, asset: str | None = None) -> None"
+          "signature": "(self, asset: 'str | None' = None) -> 'None'"
         },
         {
           "kind": "method",
           "name": "close_position",
-          "signature": "(self, asset: str) -> ml4t.backtest.types.Order | None"
+          "signature": "(self, asset: 'str') -> 'Order | None'"
         },
         {
           "kind": "method",
           "name": "export_target_intent_state",
-          "signature": "(self) -> dict[str, Any]"
+          "signature": "(self) -> 'dict[str, Any]'"
         },
         {
           "kind": "method",
           "name": "get_account_value",
-          "signature": "(self) -> float"
+          "signature": "(self) -> 'float'"
         },
         {
           "kind": "method",
           "name": "get_cash",
-          "signature": "(self) -> float"
+          "signature": "(self) -> 'float'"
         },
         {
           "kind": "method",
           "name": "get_child_order_intents",
-          "signature": "(self) -> tuple[Any, ...]"
+          "signature": "(self) -> 'tuple[CanonicalChildOrderIntent, ...]'"
         },
         {
           "kind": "method",
           "name": "get_intent_reconciliations",
-          "signature": "(self) -> tuple[Any, ...]"
+          "signature": "(self) -> 'tuple[IntentReconciliation, ...]'"
         },
         {
           "kind": "method",
           "name": "get_pending_orders",
-          "signature": "(self, asset: str | None = None) -> list[ml4t.backtest.types.Order]"
+          "signature": "(self, asset: 'str | None' = None) -> 'list[Order]'"
         },
         {
           "kind": "method",
           "name": "get_position",
-          "signature": "(self, asset: str) -> ml4t.backtest.types.Position | None"
+          "signature": "(self, asset: 'str') -> 'Position | None'"
         },
         {
           "kind": "method",
           "name": "get_positions",
-          "signature": "(self) -> dict[str, ml4t.backtest.types.Position]"
+          "signature": "(self) -> 'dict[str, Position]'"
         },
         {
           "kind": "method",
           "name": "get_target_intents",
-          "signature": "(self) -> tuple[ml4t.specs.intents.CanonicalTargetIntent, ...]"
+          "signature": "(self) -> 'tuple[CanonicalTargetIntent, ...]'"
         },
         {
           "kind": "property",
           "name": "is_connected",
-          "signature": "(self) -> bool"
+          "signature": "(self) -> 'bool'"
         },
         {
           "kind": "property",
           "name": "pending_orders",
-          "signature": "(self) -> list[ml4t.backtest.types.Order]"
+          "signature": "(self) -> 'list[Order]'"
         },
         {
           "kind": "property",
           "name": "positions",
-          "signature": "(self) -> dict[str, ml4t.backtest.types.Position]"
+          "signature": "(self) -> 'dict[str, Position]'"
         },
         {
           "kind": "method",
           "name": "register_position_rule_policy",
-          "signature": "(self, policy_id: str, rules: Any) -> None"
+          "signature": "(self, policy_id: 'str', rules: 'PositionRule') -> 'None'"
         },
         {
           "kind": "method",
           "name": "register_target_intent",
-          "signature": "(self, intent: ml4t.specs.intents.CanonicalTargetIntent, *, position_rules: Any | None = None) -> ml4t.specs.intents.CanonicalTargetIntent"
+          "signature": "(self, intent: 'CanonicalTargetIntent', *, position_rules: 'PositionRule | None' = None) -> 'CanonicalTargetIntent'"
         },
         {
           "kind": "method",
           "name": "replace_order",
-          "signature": "(self, order_id: str, *, quantity: float | None = None, limit_price: float | None = None, stop_price: float | None = None) -> ml4t.backtest.types.Order"
+          "signature": "(self, order_id: 'str', *, quantity: 'float | None' = None, limit_price: 'float | None' = None, stop_price: 'float | None' = None) -> 'Order'"
         },
         {
           "kind": "method",
           "name": "set_position_rules",
-          "signature": "(self, rules: Any | None, asset: str | None = None) -> None"
+          "signature": "(self, rules: 'PositionRule | None', asset: 'str | None' = None) -> 'None'"
         },
         {
           "kind": "method",
           "name": "submit_order",
-          "signature": "(self, asset: str, quantity: float, side: ml4t.backtest.types.OrderSide | None = None, order_type: ml4t.backtest.types.OrderType = <OrderType.MARKET: 'market'>, limit_price: float | None = None, stop_price: float | None = None, **kwargs: Any) -> ml4t.backtest.types.Order"
+          "signature": "(self, asset: 'str', quantity: 'float', side: 'OrderSide | None' = None, order_type: 'OrderType' = <OrderType.MARKET: 'market'>, limit_price: 'float | None' = None, stop_price: 'float | None' = None, **kwargs: 'Any') -> 'Order'"
         },
         {
           "kind": "method",
           "name": "update_position_context",
-          "signature": "(self, asset: str, context: dict[str, Any]) -> None"
+          "signature": "(self, asset: 'str', context: 'dict[str, Any]') -> 'None'"
         }
       ],
       "module": "ml4t.live",
       "name": "ThreadSafeBrokerWrapper",
-      "signature": "(async_broker: ml4t.live.protocols.AsyncBrokerProtocol, loop: asyncio.events.AbstractEventLoop, strategy_runtime: Any | None = None)"
+      "signature": "(async_broker: 'AsyncBrokerProtocol', loop: 'asyncio.AbstractEventLoop', strategy_runtime: 'LiveStrategyRuntime | None' = None) -> 'None'"
     },
     {
       "bases": [
@@ -2402,7 +2432,7 @@
       ],
       "module": "ml4t.live",
       "name": "VirtualPortfolio",
-      "signature": "(initial_cash: float = 100000.0)"
+      "signature": "(initial_cash: float = 100000.0) -> None"
     },
     {
       "classification": "stable",
@@ -2533,7 +2563,7 @@
       ],
       "module": "ml4t.live.brokers",
       "name": "AlpacaBroker",
-      "signature": "(api_key: str, secret_key: str, paper: bool = True)"
+      "signature": "(api_key: str, secret_key: str, paper: bool = True) -> None"
     },
     {
       "bases": [
@@ -2641,7 +2671,7 @@
       ],
       "module": "ml4t.live.brokers",
       "name": "IBBroker",
-      "signature": "(host: str = '127.0.0.1', port: int = 7497, client_id: int = 1, account: str | None = None, market_data_type: int | None = None)"
+      "signature": "(host: str = '127.0.0.1', port: int = 7497, client_id: int = 1, account: str | None = None, market_data_type: int | None = None) -> None"
     },
     {
       "bases": [
@@ -2749,7 +2779,7 @@
       ],
       "module": "ml4t.live.brokers.alpaca",
       "name": "AlpacaBroker",
-      "signature": "(api_key: str, secret_key: str, paper: bool = True)"
+      "signature": "(api_key: str, secret_key: str, paper: bool = True) -> None"
     },
     {
       "bases": [
@@ -2857,7 +2887,7 @@
       ],
       "module": "ml4t.live.brokers.ib",
       "name": "IBBroker",
-      "signature": "(host: str = '127.0.0.1', port: int = 7497, client_id: int = 1, account: str | None = None, market_data_type: int | None = None)"
+      "signature": "(host: str = '127.0.0.1', port: int = 7497, client_id: int = 1, account: str | None = None, market_data_type: int | None = None) -> None"
     },
     {
       "classification": "internal",
@@ -2969,6 +2999,11 @@
           "signature": "(self) -> 'None'"
         },
         {
+          "kind": "property",
+          "name": "execution_capabilities",
+          "signature": "(self) -> 'frozenset[ExecutionCapability]'"
+        },
+        {
           "kind": "method",
           "name": "get_account_value_async",
           "signature": "(self) -> 'float'"
@@ -2992,6 +3027,11 @@
           "kind": "method",
           "name": "get_positions_async",
           "signature": "(self) -> 'dict[str, Position]'"
+        },
+        {
+          "kind": "property",
+          "name": "is_connected",
+          "signature": "(self) -> 'bool'"
         },
         {
           "kind": "method",
@@ -3206,7 +3246,7 @@
       ],
       "module": "ml4t.live.engine",
       "name": "LiveEngine",
-      "signature": "(strategy: ml4t.backtest.strategy.Strategy, broker: ml4t.live.protocols.AsyncBrokerProtocol, feed: ml4t.live.protocols.DataFeedProtocol, *, on_error: collections.abc.Callable[[Exception, datetime.datetime, dict], None] | None = None, halt_on_error: bool = False, feed_silence_seconds: float | None = None, watchdog_poll_seconds: float = 1.0, halt_on_unhealthy: bool = False, auto_recover: bool = False, recovery_cooldown_seconds: float = 5.0, max_recovery_attempts: int = 3, max_event_age_seconds: float | None = None, on_health_change: collections.abc.Callable[[str, dict[str, Any]], None] | None = None, lifecycle_version: ml4t.specs.lifecycle.LifecycleVersion | str = <LifecycleVersion.V1: '1'>, execution_policy: ml4t.specs.intents.ExecutionPolicy | None = None, strategy_config: ml4t.backtest.config.BacktestConfig | None = None)"
+      "signature": "(strategy: ml4t.backtest.strategy.Strategy, broker: ml4t.live.protocols.AsyncBrokerProtocol, feed: ml4t.live.protocols.DataFeedProtocol, *, on_error: collections.abc.Callable[[Exception, datetime.datetime, dict], None] | None = None, feed_silence_seconds: float | None = None, watchdog_poll_seconds: float = 1.0, halt_on_unhealthy: bool = False, auto_recover: bool = False, recovery_cooldown_seconds: float = 5.0, max_recovery_attempts: int = 3, max_event_age_seconds: float | None = None, on_health_change: collections.abc.Callable[[str, dict[str, Any]], None] | None = None, lifecycle_version: ml4t.specs.lifecycle.LifecycleVersion | str = <LifecycleVersion.V1: '1'>, execution_policy: ml4t.specs.intents.ExecutionPolicy | None = None, strategy_config: ml4t.backtest.config.BacktestConfig | None = None) -> None"
     },
     {
       "classification": "internal",
@@ -3232,7 +3272,7 @@
       "methods": [],
       "module": "ml4t.live.engine",
       "name": "RuntimeCleanupError",
-      "signature": "(cleanup_result: dict[str, str])"
+      "signature": "(cleanup_result: dict[str, str]) -> None"
     },
     {
       "bases": [
@@ -3399,7 +3439,7 @@
       ],
       "module": "ml4t.live.feeds",
       "name": "AlpacaDataFeed",
-      "signature": "(api_key: str, secret_key: str, symbols: list[str], *, data_type: str = 'bars', feed: str = 'iex', queue_capacity: int = 1024)"
+      "signature": "(api_key: str, secret_key: str, symbols: list[str], *, data_type: str = 'bars', feed: str = 'iex', queue_capacity: int = 1024) -> None"
     },
     {
       "bases": [
@@ -3427,7 +3467,7 @@
       ],
       "module": "ml4t.live.feeds",
       "name": "BarAggregator",
-      "signature": "(source_feed: 'DataFeedProtocol', bar_size_minutes: int = 1, assets: list[str] | None = None, flush_timeout_seconds: float = 2.0, queue_capacity: int = 256)"
+      "signature": "(source_feed: 'DataFeedProtocol', bar_size_minutes: int = 1, assets: list[str] | None = None, flush_timeout_seconds: float = 2.0, queue_capacity: int = 256) -> None"
     },
     {
       "bases": [
@@ -3520,7 +3560,7 @@
       ],
       "module": "ml4t.live.feeds",
       "name": "CryptoFeed",
-      "signature": "(exchange: str, symbols: list[str], *, timeframe: str = '1m', stream_trades: bool = False, stream_ohlcv: bool = True, api_key: str | None = None, api_secret: str | None = None, api_passphrase: str | None = None, experimental: bool = False)"
+      "signature": "(exchange: str, symbols: list[str], *, timeframe: str = '1m', stream_trades: bool = False, stream_ohlcv: bool = True, api_key: str | None = None, api_secret: str | None = None, api_passphrase: str | None = None, experimental: bool = False) -> None"
     },
     {
       "bases": [
@@ -3558,7 +3598,7 @@
       ],
       "module": "ml4t.live.feeds",
       "name": "DataBentoFeed",
-      "signature": "(client: ml4t.live.feeds.databento_feed._HistoricalRecordSource | ml4t.live.feeds.databento_feed._LiveRecordSource, symbols: list[str], *, mode: str = 'historical', replay_speed: float = 1.0, experimental: bool = False)"
+      "signature": "(client: ml4t.live.feeds.databento_feed._HistoricalRecordSource | ml4t.live.feeds.databento_feed._LiveRecordSource, symbols: list[str], *, mode: str = 'historical', replay_speed: float = 1.0, experimental: bool = False) -> None"
     },
     {
       "bases": [
@@ -3713,7 +3753,7 @@
       ],
       "module": "ml4t.live.feeds",
       "name": "IBDataFeed",
-      "signature": "(ib: ib_async.ib.IB, symbols: list[str], *, exchange: str = 'SMART', currency: str = 'USD', tick_throttle_ms: int = 100, queue_capacity: int = 1024)"
+      "signature": "(ib: ib_async.ib.IB, symbols: list[str], *, exchange: str = 'SMART', currency: str = 'USD', tick_throttle_ms: int = 100, queue_capacity: int = 1024) -> None"
     },
     {
       "bases": [
@@ -3746,7 +3786,7 @@
       ],
       "module": "ml4t.live.feeds",
       "name": "OKXFundingFeed",
-      "signature": "(symbols: list[str], *, timeframe: str = '1H', poll_interval_seconds: float = 60.0, queue_capacity: int = 256)"
+      "signature": "(symbols: list[str], *, timeframe: str = '1H', poll_interval_seconds: float = 60.0, queue_capacity: int = 256) -> None"
     },
     {
       "bases": [
@@ -3774,7 +3814,7 @@
       ],
       "module": "ml4t.live.feeds.aggregator",
       "name": "BarAggregator",
-      "signature": "(source_feed: 'DataFeedProtocol', bar_size_minutes: int = 1, assets: list[str] | None = None, flush_timeout_seconds: float = 2.0, queue_capacity: int = 256)"
+      "signature": "(source_feed: 'DataFeedProtocol', bar_size_minutes: int = 1, assets: list[str] | None = None, flush_timeout_seconds: float = 2.0, queue_capacity: int = 256) -> None"
     },
     {
       "bases": [
@@ -3862,7 +3902,7 @@
       ],
       "module": "ml4t.live.feeds.alpaca_feed",
       "name": "AlpacaDataFeed",
-      "signature": "(api_key: str, secret_key: str, symbols: list[str], *, data_type: str = 'bars', feed: str = 'iex', queue_capacity: int = 1024)"
+      "signature": "(api_key: str, secret_key: str, symbols: list[str], *, data_type: str = 'bars', feed: str = 'iex', queue_capacity: int = 1024) -> None"
     },
     {
       "classification": "internal",
@@ -3909,7 +3949,7 @@
       ],
       "module": "ml4t.live.feeds.crypto_feed",
       "name": "CryptoFeed",
-      "signature": "(exchange: str, symbols: list[str], *, timeframe: str = '1m', stream_trades: bool = False, stream_ohlcv: bool = True, api_key: str | None = None, api_secret: str | None = None, api_passphrase: str | None = None, experimental: bool = False)"
+      "signature": "(exchange: str, symbols: list[str], *, timeframe: str = '1m', stream_trades: bool = False, stream_ohlcv: bool = True, api_key: str | None = None, api_secret: str | None = None, api_passphrase: str | None = None, experimental: bool = False) -> None"
     },
     {
       "classification": "internal",
@@ -3954,7 +3994,7 @@
       ],
       "module": "ml4t.live.feeds.databento_feed",
       "name": "DataBentoFeed",
-      "signature": "(client: ml4t.live.feeds.databento_feed._HistoricalRecordSource | ml4t.live.feeds.databento_feed._LiveRecordSource, symbols: list[str], *, mode: str = 'historical', replay_speed: float = 1.0, experimental: bool = False)"
+      "signature": "(client: ml4t.live.feeds.databento_feed._HistoricalRecordSource | ml4t.live.feeds.databento_feed._LiveRecordSource, symbols: list[str], *, mode: str = 'historical', replay_speed: float = 1.0, experimental: bool = False) -> None"
     },
     {
       "bases": [
@@ -4126,7 +4166,7 @@
       ],
       "module": "ml4t.live.feeds.ib_feed",
       "name": "IBDataFeed",
-      "signature": "(ib: ib_async.ib.IB, symbols: list[str], *, exchange: str = 'SMART', currency: str = 'USD', tick_throttle_ms: int = 100, queue_capacity: int = 1024)"
+      "signature": "(ib: ib_async.ib.IB, symbols: list[str], *, exchange: str = 'SMART', currency: str = 'USD', tick_throttle_ms: int = 100, queue_capacity: int = 1024) -> None"
     },
     {
       "bases": [
@@ -4159,7 +4199,7 @@
       ],
       "module": "ml4t.live.feeds.okx_feed",
       "name": "OKXFundingFeed",
-      "signature": "(symbols: list[str], *, timeframe: str = '1H', poll_interval_seconds: float = 60.0, queue_capacity: int = 256)"
+      "signature": "(symbols: list[str], *, timeframe: str = '1H', poll_interval_seconds: float = 60.0, queue_capacity: int = 256) -> None"
     },
     {
       "bases": [
@@ -4703,6 +4743,11 @@
           "signature": "(self) -> 'None'"
         },
         {
+          "kind": "property",
+          "name": "execution_capabilities",
+          "signature": "(self) -> 'frozenset[ExecutionCapability]'"
+        },
+        {
           "kind": "method",
           "name": "get_account_value_async",
           "signature": "(self) -> 'float'"
@@ -4728,9 +4773,24 @@
           "signature": "(self) -> 'dict[str, Position]'"
         },
         {
+          "kind": "property",
+          "name": "is_connected",
+          "signature": "(self) -> 'bool'"
+        },
+        {
           "kind": "method",
           "name": "is_connected_async",
           "signature": "(self) -> 'bool'"
+        },
+        {
+          "kind": "property",
+          "name": "pending_orders",
+          "signature": "(self) -> 'list[Order]'"
+        },
+        {
+          "kind": "property",
+          "name": "positions",
+          "signature": "(self) -> 'dict[str, Position]'"
         },
         {
           "kind": "method",
@@ -5387,6 +5447,16 @@
       "methods": [
         {
           "kind": "method",
+          "name": "assert_live_trading",
+          "signature": "(self) -> None"
+        },
+        {
+          "kind": "method",
+          "name": "assert_paper_trading",
+          "signature": "(self) -> None"
+        },
+        {
+          "kind": "method",
           "name": "cancel_order_async",
           "signature": "(self, order_id: str) -> bool"
         },
@@ -5428,7 +5498,7 @@
         {
           "kind": "property",
           "name": "execution_capabilities",
-          "signature": "(self) -> frozenset[Any]"
+          "signature": "(self) -> frozenset[ml4t.specs.intents.ExecutionCapability]"
         },
         {
           "kind": "method",
@@ -5548,7 +5618,7 @@
       ],
       "module": "ml4t.live.safety",
       "name": "SafeBroker",
-      "signature": "(broker: ml4t.live.protocols.AsyncBrokerProtocol, config: ml4t.live.safety.LiveRiskConfig)"
+      "signature": "(broker: ml4t.live.protocols.AsyncBrokerProtocol, config: ml4t.live.safety.LiveRiskConfig) -> None"
     },
     {
       "bases": [
@@ -5596,7 +5666,7 @@
       ],
       "module": "ml4t.live.safety",
       "name": "VirtualPortfolio",
-      "signature": "(initial_cash: float = 100000.0)"
+      "signature": "(initial_cash: float = 100000.0) -> None"
     },
     {
       "classification": "internal",
@@ -5624,112 +5694,112 @@
         {
           "kind": "method",
           "name": "cancel_order",
-          "signature": "(self, order_id: str) -> bool"
+          "signature": "(self, order_id: 'str') -> 'bool'"
         },
         {
           "kind": "method",
           "name": "clear_position_rules",
-          "signature": "(self, asset: str | None = None) -> None"
+          "signature": "(self, asset: 'str | None' = None) -> 'None'"
         },
         {
           "kind": "method",
           "name": "close_position",
-          "signature": "(self, asset: str) -> ml4t.backtest.types.Order | None"
+          "signature": "(self, asset: 'str') -> 'Order | None'"
         },
         {
           "kind": "method",
           "name": "export_target_intent_state",
-          "signature": "(self) -> dict[str, Any]"
+          "signature": "(self) -> 'dict[str, Any]'"
         },
         {
           "kind": "method",
           "name": "get_account_value",
-          "signature": "(self) -> float"
+          "signature": "(self) -> 'float'"
         },
         {
           "kind": "method",
           "name": "get_cash",
-          "signature": "(self) -> float"
+          "signature": "(self) -> 'float'"
         },
         {
           "kind": "method",
           "name": "get_child_order_intents",
-          "signature": "(self) -> tuple[Any, ...]"
+          "signature": "(self) -> 'tuple[CanonicalChildOrderIntent, ...]'"
         },
         {
           "kind": "method",
           "name": "get_intent_reconciliations",
-          "signature": "(self) -> tuple[Any, ...]"
+          "signature": "(self) -> 'tuple[IntentReconciliation, ...]'"
         },
         {
           "kind": "method",
           "name": "get_pending_orders",
-          "signature": "(self, asset: str | None = None) -> list[ml4t.backtest.types.Order]"
+          "signature": "(self, asset: 'str | None' = None) -> 'list[Order]'"
         },
         {
           "kind": "method",
           "name": "get_position",
-          "signature": "(self, asset: str) -> ml4t.backtest.types.Position | None"
+          "signature": "(self, asset: 'str') -> 'Position | None'"
         },
         {
           "kind": "method",
           "name": "get_positions",
-          "signature": "(self) -> dict[str, ml4t.backtest.types.Position]"
+          "signature": "(self) -> 'dict[str, Position]'"
         },
         {
           "kind": "method",
           "name": "get_target_intents",
-          "signature": "(self) -> tuple[ml4t.specs.intents.CanonicalTargetIntent, ...]"
+          "signature": "(self) -> 'tuple[CanonicalTargetIntent, ...]'"
         },
         {
           "kind": "property",
           "name": "is_connected",
-          "signature": "(self) -> bool"
+          "signature": "(self) -> 'bool'"
         },
         {
           "kind": "property",
           "name": "pending_orders",
-          "signature": "(self) -> list[ml4t.backtest.types.Order]"
+          "signature": "(self) -> 'list[Order]'"
         },
         {
           "kind": "property",
           "name": "positions",
-          "signature": "(self) -> dict[str, ml4t.backtest.types.Position]"
+          "signature": "(self) -> 'dict[str, Position]'"
         },
         {
           "kind": "method",
           "name": "register_position_rule_policy",
-          "signature": "(self, policy_id: str, rules: Any) -> None"
+          "signature": "(self, policy_id: 'str', rules: 'PositionRule') -> 'None'"
         },
         {
           "kind": "method",
           "name": "register_target_intent",
-          "signature": "(self, intent: ml4t.specs.intents.CanonicalTargetIntent, *, position_rules: Any | None = None) -> ml4t.specs.intents.CanonicalTargetIntent"
+          "signature": "(self, intent: 'CanonicalTargetIntent', *, position_rules: 'PositionRule | None' = None) -> 'CanonicalTargetIntent'"
         },
         {
           "kind": "method",
           "name": "replace_order",
-          "signature": "(self, order_id: str, *, quantity: float | None = None, limit_price: float | None = None, stop_price: float | None = None) -> ml4t.backtest.types.Order"
+          "signature": "(self, order_id: 'str', *, quantity: 'float | None' = None, limit_price: 'float | None' = None, stop_price: 'float | None' = None) -> 'Order'"
         },
         {
           "kind": "method",
           "name": "set_position_rules",
-          "signature": "(self, rules: Any | None, asset: str | None = None) -> None"
+          "signature": "(self, rules: 'PositionRule | None', asset: 'str | None' = None) -> 'None'"
         },
         {
           "kind": "method",
           "name": "submit_order",
-          "signature": "(self, asset: str, quantity: float, side: ml4t.backtest.types.OrderSide | None = None, order_type: ml4t.backtest.types.OrderType = <OrderType.MARKET: 'market'>, limit_price: float | None = None, stop_price: float | None = None, **kwargs: Any) -> ml4t.backtest.types.Order"
+          "signature": "(self, asset: 'str', quantity: 'float', side: 'OrderSide | None' = None, order_type: 'OrderType' = <OrderType.MARKET: 'market'>, limit_price: 'float | None' = None, stop_price: 'float | None' = None, **kwargs: 'Any') -> 'Order'"
         },
         {
           "kind": "method",
           "name": "update_position_context",
-          "signature": "(self, asset: str, context: dict[str, Any]) -> None"
+          "signature": "(self, asset: 'str', context: 'dict[str, Any]') -> 'None'"
         }
       ],
       "module": "ml4t.live.wrappers",
       "name": "ThreadSafeBrokerWrapper",
-      "signature": "(async_broker: ml4t.live.protocols.AsyncBrokerProtocol, loop: asyncio.events.AbstractEventLoop, strategy_runtime: Any | None = None)"
+      "signature": "(async_broker: 'AsyncBrokerProtocol', loop: 'asyncio.AbstractEventLoop', strategy_runtime: 'LiveStrategyRuntime | None' = None) -> 'None'"
     }
   ]
 }

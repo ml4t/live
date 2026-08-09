@@ -102,7 +102,7 @@ class IBBroker:
         client_id: int = 1,
         account: str | None = None,
         market_data_type: int | None = None,
-    ):
+    ) -> None:
         """Initialize IBBroker.
 
         Args:

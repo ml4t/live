@@ -20,7 +20,12 @@ from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 from ml4t.backtest import IntentReconciliation
 from ml4t.backtest.types import Order, OrderSide, OrderType, Position
-from ml4t.specs import CanonicalChildOrderIntent, CanonicalTargetIntent, MarketEvent
+from ml4t.specs import (
+    CanonicalChildOrderIntent,
+    CanonicalTargetIntent,
+    ExecutionCapability,
+    MarketEvent,
+)
 
 if TYPE_CHECKING:
     from ml4t.backtest.risk.position import PositionRule
@@ -242,6 +247,26 @@ class AsyncBrokerProtocol(Protocol):
                 trade = await self.ib.placeOrderAsync(...)
                 return order
     """
+
+    @property
+    def positions(self) -> dict[str, Position]:
+        """Return an independent snapshot of known positions."""
+        ...
+
+    @property
+    def pending_orders(self) -> list[Order]:
+        """Return an independent snapshot of known pending orders."""
+        ...
+
+    @property
+    def is_connected(self) -> bool:
+        """Return the cached provider connection state without blocking."""
+        ...
+
+    @property
+    def execution_capabilities(self) -> frozenset[ExecutionCapability]:
+        """Return the order capabilities implemented by the adapter."""
+        ...
 
     async def connect(self) -> None:
         """Connect to broker and sync initial state.

@@ -1,6 +1,7 @@
 """Tests for validation at the portable feed boundary."""
 
 from datetime import UTC, datetime, timedelta, timezone
+from typing import Any, cast
 
 import pytest
 from ml4t.specs import (
@@ -71,7 +72,7 @@ def test_timing_validation_rejects_invalid_age_configuration(value: object) -> N
     event = quote_event(event_time=now, receipt_time=now)
 
     with pytest.raises(ValueError, match="finite and positive"):
-        validate_event_timing(event, processing_time=now, max_age_seconds=value)  # type: ignore[arg-type]
+        validate_event_timing(event, processing_time=now, max_age_seconds=cast(Any, value))
 
 
 def test_strategy_input_retains_identity_timing_and_capability() -> None:

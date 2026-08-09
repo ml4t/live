@@ -243,7 +243,12 @@ def validate_metadata(message: Message, project: dict[str, object]) -> str:
     if urls != EXPECTED_URLS:
         failures.append("Project-URL")
 
-    expected_dependencies = {Requirement(value) for value in project["dependencies"]}  # type: ignore[arg-type]
+    dependencies = project.get("dependencies")
+    if not isinstance(dependencies, list) or any(
+        not isinstance(value, str) for value in dependencies
+    ):
+        raise QualificationError("project dependencies must be a list of requirement strings")
+    expected_dependencies = {Requirement(value) for value in dependencies}
     runtime_dependencies = {
         requirement
         for value in message.get_all("Requires-Dist", [])

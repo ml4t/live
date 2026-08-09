@@ -132,7 +132,7 @@ class CryptoFeed(DataFeedProtocol):
         api_secret: str | None = None,
         api_passphrase: str | None = None,
         experimental: bool = False,
-    ):
+    ) -> None:
         """Initialize crypto feed.
 
         Args:

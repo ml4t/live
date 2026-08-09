@@ -15,6 +15,7 @@ from typing import Any, cast
 
 from ml4t.backtest import Strategy
 from ml4t.backtest.types import Order, OrderSide, OrderType, Position
+from ml4t.specs import ExecutionCapability
 
 from ml4t.live import __version__
 from ml4t.live.brokers.alpaca import AlpacaBroker
@@ -87,6 +88,14 @@ class NullBroker:
     @property
     def pending_orders(self) -> list[Order]:
         return list(self._pending_orders)
+
+    @property
+    def is_connected(self) -> bool:
+        return self._connected
+
+    @property
+    def execution_capabilities(self) -> frozenset[ExecutionCapability]:
+        return frozenset()
 
     def assert_paper_trading(self) -> None:
         raise RuntimeError("NullBroker is only valid in shadow mode")

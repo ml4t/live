@@ -94,7 +94,7 @@ class AlpacaDataFeed(DataFeedProtocol):
         data_type: str = "bars",  # 'bars', 'quotes', 'trades'
         feed: str = "iex",  # 'iex' (free) or 'sip' (premium)
         queue_capacity: int = 1_024,
-    ):
+    ) -> None:
         """Initialize Alpaca data feed.
 
         Args:
