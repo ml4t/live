@@ -3,15 +3,164 @@
 from __future__ import annotations
 
 import math
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 from datetime import UTC, datetime, timedelta
+from enum import Enum
 from typing import Any
 
-from ml4t.specs import GapEvidence, MarketEvent, MarketEventKind
+from ml4t.specs import EventCompletion, GapEvidence, MarketEvent, MarketEventKind
 
 
 class FeedContractError(ValueError):
     """Raised when provider data cannot cross the portable feed boundary."""
+
+
+class ContinuityDisposition(str, Enum):
+    """Decision for one structurally valid market event."""
+
+    ACCEPT = "accept"
+    DUPLICATE = "duplicate"
+
+
+class FeedContinuityError(FeedContractError):
+    """Raised when event history cannot support another causal decision."""
+
+    def __init__(self, reason: str, event: MarketEvent) -> None:
+        self.reason = reason
+        self.source = event.source
+        self.asset = event.asset
+        self.kind = event.kind.value
+        self.provider_sequence = event.provider_sequence
+        super().__init__(f"{event.source} {event.asset} {event.kind.value}: {reason}")
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "reason": self.reason,
+            "source": self.source,
+            "asset": self.asset,
+            "kind": self.kind,
+            "provider_sequence": self.provider_sequence,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class _ContinuityState:
+    event: MarketEvent
+    generation: int
+
+
+class EventContinuityTracker:
+    """Retain accepted identities across feed restart and reject unsafe continuation."""
+
+    def __init__(self) -> None:
+        self._states: dict[tuple[str, str, MarketEventKind], _ContinuityState] = {}
+        self._generation = 0
+        self._accepted_count = 0
+        self._duplicate_count = 0
+        self._violation_count = 0
+
+    def mark_recovery(self) -> None:
+        self._generation += 1
+
+    def validate(self, event: MarketEvent) -> ContinuityDisposition:
+        if event.gap is not None and event.gap.detected:
+            return self._violation(event.gap.reason, event)
+
+        key = (event.source, event.asset, event.kind)
+        state = self._states.get(key)
+        if state is None:
+            self._accept(key, event)
+            return ContinuityDisposition.ACCEPT
+
+        previous = state.event
+        exact_duplicate = (
+            event.event_time == previous.event_time
+            and event.provider_sequence == previous.provider_sequence
+            and event.completion is previous.completion
+            and event.payload == previous.payload
+        )
+        if exact_duplicate:
+            self._duplicate_count += 1
+            return ContinuityDisposition.DUPLICATE
+
+        if event.event_time < previous.event_time:
+            return self._violation("event time moved backwards", event)
+
+        previous_sequence = previous.provider_sequence
+        current_sequence = event.provider_sequence
+        evolving_bar_revision = (
+            event.kind is MarketEventKind.BAR
+            and event.event_time == previous.event_time
+            and previous.completion is EventCompletion.EVOLVING
+        )
+        if isinstance(previous_sequence, int) and isinstance(current_sequence, int):
+            if current_sequence < previous_sequence:
+                return self._violation("provider sequence replayed an older event", event)
+            if current_sequence == previous_sequence and not evolving_bar_revision:
+                return self._violation("provider sequence identifies conflicting events", event)
+        elif (
+            isinstance(previous_sequence, str)
+            and isinstance(current_sequence, str)
+            and current_sequence == previous_sequence
+            and not evolving_bar_revision
+        ):
+            return self._violation("provider sequence identifies conflicting events", event)
+
+        if event.event_time == previous.event_time:
+            if event.kind is MarketEventKind.BAR:
+                if previous.completion is EventCompletion.COMPLETE:
+                    return self._violation("completed bar identity changed", event)
+            elif current_sequence is None or previous_sequence is None:
+                return self._violation(
+                    "same-time snapshot has no distinct provider identity", event
+                )
+
+        if state.generation < self._generation:
+            evidence = event.gap
+            continuity_proved = (
+                previous_sequence is not None
+                and current_sequence is not None
+                and evidence is not None
+                and evidence.previous_sequence == str(previous_sequence)
+                and evidence.current_sequence == str(current_sequence)
+            )
+            if not continuity_proved:
+                return self._violation("provider continuity is unavailable after reconnect", event)
+
+        self._accept(key, event)
+        return ContinuityDisposition.ACCEPT
+
+    def snapshot(self) -> dict[str, Any]:
+        return {
+            "generation": self._generation,
+            "tracked_streams": len(self._states),
+            "accepted_count": self._accepted_count,
+            "duplicate_count": self._duplicate_count,
+            "violation_count": self._violation_count,
+            "last_sequences": {
+                f"{source}:{asset}:{kind.value}": state.event.provider_sequence
+                for (source, asset, kind), state in sorted(
+                    self._states.items(),
+                    key=lambda item: (item[0][0], item[0][1], item[0][2].value),
+                )
+            },
+        }
+
+    def _accept(
+        self,
+        key: tuple[str, str, MarketEventKind],
+        event: MarketEvent,
+    ) -> None:
+        self._states[key] = _ContinuityState(event, self._generation)
+        self._accepted_count += 1
+
+    def _violation(
+        self,
+        reason: str,
+        event: MarketEvent,
+    ) -> ContinuityDisposition:
+        self._violation_count += 1
+        raise FeedContinuityError(reason, event)
 
 
 def utc_datetime(value: object, field: str) -> datetime:
@@ -97,6 +246,9 @@ def strategy_input(
 
 
 __all__ = [
+    "ContinuityDisposition",
+    "EventContinuityTracker",
+    "FeedContinuityError",
     "FeedContractError",
     "sequence_unavailable",
     "strategy_input",

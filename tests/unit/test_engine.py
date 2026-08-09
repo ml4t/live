@@ -25,6 +25,8 @@ from ml4t.specs import (
 )
 
 from ml4t.live.engine import LiveEngine
+from ml4t.live.feeds.events import FeedContinuityError
+from ml4t.live.feeds.queue import BoundedEventQueue, FeedOverflowError
 from ml4t.live.orders import CanonicalOrderRequest
 from ml4t.live.protocols import AsyncBrokerProtocol, DataFeedProtocol, FeedItem
 from ml4t.live.safety import LiveRiskConfig, SafeBroker
@@ -222,10 +224,44 @@ class CloseableDataFeed(MockDataFeed):
         self.close_count += 1
 
 
+class OverflowDataFeed:
+    """Supported-style feed that overflows before the engine can consume pending data."""
+
+    def __init__(self, first: MarketEvent, rejected: MarketEvent) -> None:
+        self.first = first
+        self.rejected = rejected
+        self._queue = BoundedEventQueue(capacity=1, feed="fixture")
+        self._overflowed = False
+
+    async def start(self) -> None:
+        self._queue = BoundedEventQueue(capacity=1, feed="fixture")
+        self._queue.put_nowait(self.first)
+        self._overflowed = False
+
+    def stop(self) -> None:
+        self._queue.finish(discard=True)
+
+    def __aiter__(self) -> AsyncIterator[MarketEvent]:
+        return self
+
+    async def __anext__(self) -> MarketEvent:
+        if not self._overflowed:
+            self._overflowed = True
+            self._queue.put_nowait(self.rejected)
+        item = await self._queue.get()
+        if item is None:
+            raise StopAsyncIteration
+        return item
+
+    @property
+    def stats(self) -> dict[str, Any]:
+        return {"queue": self._queue.snapshot().to_dict()}
+
+
 class RecoverableFeed:
     """Mock feed that can be stopped and started again by the engine watchdog."""
 
-    def __init__(self, batches: list[list[tuple[datetime, dict, dict]]], delay: float = 0.01):
+    def __init__(self, batches: list[list[FeedItem]], delay: float = 0.01):
         self.batches = batches
         self.delay = delay
         self._running = False
@@ -242,11 +278,11 @@ class RecoverableFeed:
         self.start_count += 1
 
         async def producer() -> None:
-            for timestamp, data, context in batch:
+            for item in batch:
                 if not self._running:
                     return
                 await asyncio.sleep(self.delay)
-                await self._queue.put((timestamp, data, context))
+                await self._queue.put(item)
 
         self._producer_task = asyncio.create_task(producer())
 
@@ -260,10 +296,10 @@ class RecoverableFeed:
         except asyncio.QueueFull:
             pass
 
-    def __aiter__(self) -> AsyncIterator[tuple[datetime, dict[str, dict], dict]]:
+    def __aiter__(self) -> AsyncIterator[FeedItem]:
         return self
 
-    async def __anext__(self) -> tuple[datetime, dict[str, dict], dict]:
+    async def __anext__(self) -> FeedItem:
         item = await self._queue.get()
         if item is None:
             raise StopAsyncIteration
@@ -354,6 +390,26 @@ class ShadowEntryStrategy(Strategy):
         if broker.get_position("AAPL") is None:
             self.order_attempts += 1
             broker.submit_order("AAPL", 10, side=OrderSide.BUY)
+
+
+def typed_trade(
+    timestamp: datetime,
+    sequence: int | None,
+    *,
+    gap: GapEvidence | None = None,
+) -> MarketEvent:
+    return MarketEvent(
+        version=LifecycleVersion.V1,
+        event_time=timestamp,
+        receipt_time=timestamp,
+        kind=MarketEventKind.TRADE,
+        completion=EventCompletion.COMPLETE,
+        source="fixture",
+        asset="AAPL",
+        payload=TradePayload(150.0, 1.0),
+        provider_sequence=sequence,
+        gap=gap,
+    )
 
 
 # === Test Cases ===
@@ -543,6 +599,86 @@ async def test_stale_typed_event_cannot_reach_strategy_or_broker_state() -> None
     assert strategy.on_data_calls == []
     assert broker.market_data_calls == []
     assert engine.stats["event_count"] == 0
+
+
+@pytest.mark.asyncio
+async def test_exact_provider_replay_is_skipped_before_callback() -> None:
+    strategy = RecordingStrategy()
+    broker = MockAsyncBroker()
+    event = typed_trade(datetime.now(UTC), 1)
+    engine = LiveEngine(strategy, broker, MockDataFeed([event, event]))
+
+    await engine.connect()
+    await engine.run()
+
+    assert len(strategy.on_data_calls) == 1
+    assert len(broker.market_data_calls) == 1
+    assert engine.stats["event_count"] == 1
+    assert engine.stats["continuity"]["duplicate_count"] == 1
+    assert [
+        operational["event"]
+        for operational in engine.operational_events
+        if operational["event"] == "feed_duplicate_skipped"
+    ] == ["feed_duplicate_skipped"]
+
+
+@pytest.mark.asyncio
+async def test_explicit_provider_gap_halts_before_callback_and_records_evidence() -> None:
+    strategy = RecordingStrategy()
+    broker = MockAsyncBroker()
+    event = typed_trade(
+        datetime.now(UTC),
+        3,
+        gap=GapEvidence(
+            True,
+            "provider sequence gap",
+            previous_sequence="1",
+            current_sequence="3",
+        ),
+    )
+    engine = LiveEngine(strategy, broker, MockDataFeed([event]))
+
+    await engine.connect()
+    with pytest.raises(FeedContinuityError, match="provider sequence gap"):
+        await engine.run()
+
+    assert strategy.on_data_calls == []
+    assert broker.market_data_calls == []
+    safety_events = [
+        payload for name, payload in broker.runtime_events if name == "feed_safety_halt"
+    ]
+    assert safety_events[-1]["detail"]["reason"] == "provider sequence gap"
+    assert engine.stats["continuity"]["violation_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_queue_overflow_halts_before_pending_callback_and_records_gap() -> None:
+    strategy = RecordingStrategy()
+    broker = MockAsyncBroker()
+    now = datetime.now(UTC)
+    feed = OverflowDataFeed(
+        typed_trade(now, 1),
+        typed_trade(now + timedelta(microseconds=1), 2),
+    )
+    engine = LiveEngine(strategy, broker, feed)
+
+    await engine.connect()
+    with pytest.raises(FeedOverflowError, match="capacity 1 exceeded"):
+        await engine.run()
+
+    assert strategy.on_data_calls == []
+    assert broker.market_data_calls == []
+    safety_events = [
+        payload for name, payload in broker.runtime_events if name == "feed_safety_halt"
+    ]
+    assert safety_events[-1]["detail"]["gap"]["detected"] is True
+    assert safety_events[-1]["detail"]["gap"]["current_sequence"] == "2"
+    assert engine.stats["feed"]["queue"]["overflow_count"] == 1
+    assert [transition.current.value for transition in engine.runtime_transitions][-3:] == [
+        "degraded",
+        "stopping",
+        "failed",
+    ]
 
 
 @pytest.mark.asyncio
@@ -942,6 +1078,80 @@ async def test_watchdog_auto_recovers_after_feed_silence():
         "broker": "released",
     }
     assert "feed_silent" in health_events
+
+
+@pytest.mark.asyncio
+async def test_recovery_skips_replay_then_accepts_monotonic_provider_sequence() -> None:
+    strategy = RecordingStrategy()
+    broker = MockAsyncBroker()
+    now = datetime.now(UTC)
+    first = typed_trade(now, 10)
+    second = typed_trade(
+        now + timedelta(milliseconds=1),
+        11,
+        gap=GapEvidence(
+            False,
+            "fixture continuity proved",
+            previous_sequence="10",
+            current_sequence="11",
+        ),
+    )
+    feed = RecoverableFeed([[first], [first, second]], delay=0.01)
+    engine = LiveEngine(
+        strategy,
+        broker,
+        feed,
+        feed_silence_seconds=0.05,
+        watchdog_poll_seconds=0.01,
+        auto_recover=True,
+        recovery_cooldown_seconds=0.01,
+        max_recovery_attempts=1,
+    )
+    await engine.connect()
+
+    async def stop_after_continuation() -> None:
+        while len(strategy.on_data_calls) < 2:
+            await asyncio.sleep(0.01)
+        await engine.stop()
+
+    await asyncio.wait_for(
+        asyncio.gather(engine.run(), stop_after_continuation()),
+        timeout=1.0,
+    )
+
+    assert len(strategy.on_data_calls) == 2
+    assert engine.stats["continuity"]["generation"] == 1
+    assert engine.stats["continuity"]["duplicate_count"] == 1
+    assert engine.stats["continuity"]["last_sequences"] == {"fixture:AAPL:trade": 11}
+
+
+@pytest.mark.asyncio
+async def test_recovery_without_provider_continuity_halts_before_new_decision() -> None:
+    strategy = RecordingStrategy()
+    broker = MockAsyncBroker()
+    now = datetime.now(UTC)
+    unavailable = GapEvidence(False, "fixture provider sequence unavailable")
+    first = typed_trade(now, None, gap=unavailable)
+    second = typed_trade(now + timedelta(milliseconds=1), None, gap=unavailable)
+    feed = RecoverableFeed([[first], [second]], delay=0.01)
+    engine = LiveEngine(
+        strategy,
+        broker,
+        feed,
+        feed_silence_seconds=0.05,
+        watchdog_poll_seconds=0.01,
+        auto_recover=True,
+        recovery_cooldown_seconds=0.01,
+        max_recovery_attempts=1,
+    )
+    await engine.connect()
+
+    with pytest.raises(FeedContinuityError, match="unavailable after reconnect"):
+        await asyncio.wait_for(engine.run(), timeout=1.0)
+
+    assert len(strategy.on_data_calls) == 1
+    assert len(broker.market_data_calls) == 1
+    assert engine.stats["continuity"]["violation_count"] == 1
 
 
 @pytest.mark.asyncio

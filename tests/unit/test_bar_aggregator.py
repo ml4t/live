@@ -18,6 +18,7 @@ from ml4t.specs import (
 
 from ml4t.live.feeds.aggregator import BarAggregator, BarBuffer
 from ml4t.live.feeds.events import FeedContractError
+from ml4t.live.feeds.queue import FeedOverflowError
 
 
 class MockDataFeed:
@@ -264,3 +265,25 @@ class TestBarAggregator:
         aggregator = BarAggregator(MockDataFeed([]))
 
         assert await collect(aggregator) == []
+
+    async def test_slow_consumer_overflow_halts_and_discards_pending_bars(self) -> None:
+        start = datetime(2024, 1, 1, 10, tzinfo=UTC)
+        aggregator = BarAggregator(
+            MockDataFeed(
+                [
+                    trade("AAPL", start, 150.0),
+                    trade("AAPL", start + timedelta(minutes=1), 151.0),
+                    trade("AAPL", start + timedelta(minutes=2), 152.0),
+                ]
+            ),
+            queue_capacity=1,
+        )
+
+        await aggregator.start()
+        await asyncio.wait_for(aggregator._aggregate_task, timeout=1.0)
+
+        assert aggregator.stats["queue"]["capacity"] == 1
+        assert aggregator.stats["queue"]["occupancy"] == 0
+        assert aggregator.stats["queue"]["overflow_count"] == 1
+        with pytest.raises(FeedOverflowError):
+            _ = [event async for event in aggregator]

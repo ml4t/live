@@ -9,12 +9,14 @@ from ml4t.specs import (
     BarPayload,
     EventCompletion,
     FundingPayload,
+    GapEvidence,
     LifecycleVersion,
     MarketEvent,
     MarketEventKind,
 )
 
 from ml4t.live.feeds.okx_feed import OKXFundingFeed
+from ml4t.live.feeds.queue import FeedOverflowError
 
 
 def okx_bar(timestamp: datetime) -> MarketEvent:
@@ -542,6 +544,69 @@ class TestOKXFundingFeedEmission:
         event = feed._queue.get_nowait()
         assert event is not None
         assert event.kind is MarketEventKind.FUNDING
+
+    async def test_bar_and_funding_overflow_halts_before_pending_delivery(self):
+        feed = OKXFundingFeed(symbols=["BTC-USDT-SWAP"], queue_capacity=1)
+        feed._running = True
+        timestamp = datetime.now(UTC) - timedelta(minutes=1)
+        funding = MarketEvent(
+            version=LifecycleVersion.V1,
+            event_time=datetime.now(UTC),
+            receipt_time=datetime.now(UTC),
+            kind=MarketEventKind.FUNDING,
+            completion=EventCompletion.COMPLETE,
+            source="okx",
+            asset="BTC-USDT-SWAP",
+            payload=FundingPayload(0.0001),
+            provider_sequence=1,
+        )
+        with (
+            patch.object(feed, "_fetch_latest_ohlcv", AsyncMock(return_value=okx_bar(timestamp))),
+            patch.object(feed, "_fetch_funding_rate", AsyncMock(return_value=funding)),
+        ):
+            await feed._fetch_and_emit()
+
+        assert feed._running is False
+        assert feed.stats["queue"]["occupancy"] == 0
+        assert feed.stats["queue"]["overflow_count"] == 1
+        with pytest.raises(FeedOverflowError):
+            await feed.__anext__()
+
+    @pytest.mark.parametrize(("intervals", "detected"), [(1, False), (2, True)])
+    async def test_candle_interval_emits_exact_continuity_evidence(
+        self,
+        intervals: int,
+        detected: bool,
+    ) -> None:
+        feed = OKXFundingFeed(symbols=["BTC-USDT-SWAP"], timeframe="1m")
+        first_time = datetime(2024, 1, 1, 12, tzinfo=UTC)
+        second_time = first_time + timedelta(minutes=intervals)
+        with (
+            patch.object(
+                feed,
+                "_fetch_latest_ohlcv",
+                AsyncMock(side_effect=[okx_bar(first_time), okx_bar(second_time)]),
+            ),
+            patch.object(feed, "_fetch_funding_rate", AsyncMock(return_value=None)),
+        ):
+            await feed._fetch_and_emit()
+            first = feed._queue.get_nowait()
+            await feed._fetch_and_emit()
+            second = feed._queue.get_nowait()
+
+        assert first is not None
+        assert second is not None
+        assert first.gap is None
+        assert second.gap == GapEvidence(
+            detected,
+            (
+                "OKX candle interval gap detected"
+                if detected
+                else "OKX candle interval is continuous"
+            ),
+            previous_sequence=str(int(first_time.timestamp() * 1_000)),
+            current_sequence=str(int(second_time.timestamp() * 1_000)),
+        )
 
     async def test_multiple_symbols(self):
         """Test fetching data for multiple symbols."""

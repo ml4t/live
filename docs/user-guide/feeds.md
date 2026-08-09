@@ -5,17 +5,35 @@
 existing `on_data(timestamp, data, context, broker)` strategy callback. `CryptoFeed` and
 `DataBentoFeed` retain the experimental tuple contract for now.
 
-| Feed | Event kinds | Event time | Completion | Sequence capability | Default maximum age |
-| --- | --- | --- | --- | --- | --- |
-| `AlpacaDataFeed` | bar, quote, trade | provider UTC timestamp | bars complete; quotes and trades evolving | provider sequence or explicit unavailable evidence | 120s bars; 30s quotes/trades |
-| `IBDataFeed` | quote, trade | provider UTC time when present; otherwise receipt time | evolving snapshot | explicit unavailable evidence | 5s |
-| `OKXFundingFeed` | bar, funding | candle open time; local receipt time for observed funding | provider candle flag; funding complete | candle/funding schedule identity or explicit unavailable evidence | two intervals plus poll delay |
-| `BarAggregator` | bar | UTC interval start | complete after interval end; evolving when shutdown flushes the current interval | propagated gap or explicit unavailable evidence | inherited at engine boundary |
+| Feed | Event kinds | Event time | Completion | Sequence capability | Maximum age | Queue |
+| --- | --- | --- | --- | --- | --- | --- |
+| `AlpacaDataFeed` | bar, quote, trade | provider UTC timestamp | bars complete; quotes and trades evolving | provider sequence or explicit unavailable evidence | 120s bars; 30s quotes/trades | 1,024 |
+| `IBDataFeed` | quote, trade | provider UTC time when present; otherwise receipt time | evolving snapshot | explicit unavailable evidence | 5s | 1,024 |
+| `OKXFundingFeed` | bar, funding | candle open time; local receipt time for observed funding | provider candle flag; funding complete | candle/funding schedule identity or explicit unavailable evidence | two intervals plus poll delay | 256 |
+| `BarAggregator` | bar | UTC interval start | complete after interval end; evolving when shutdown flushes the current interval | propagated gap or explicit unavailable evidence | engine setting | 256 |
 
 Every event has separate `event_time` and `receipt_time`. The engine adds `processing_time` under
 `context["_market_event"]`, together with event kind, completion, source, provider sequence, and gap
 evidence. Naive or non-UTC timestamps, stale events, invalid OHLC ranges, nonpositive prices,
 negative sizes, crossed quotes, and non-finite values are rejected before strategy dispatch.
+
+## Overload And Reconnect Safety
+
+Supported feeds halt instead of dropping, coalescing, or blocking indefinitely. Set
+`queue_capacity` when a default does not match the workload. If a queue fills, pending events are
+discarded, `FeedOverflowError` reports the rejected event and queue state with gap evidence, and
+`LiveEngine` records `feed_safety_halt` before cleanup. No pending event is dispatched after the
+overflow.
+
+Capacity, occupancy, high-water mark, overflow count, oldest-event lag, and terminal state are
+available under `feed.stats["queue"]` and `engine.stats["feed"]`. Accepted, duplicate, and rejected
+continuity state appears under `engine.stats["continuity"]`.
+
+The engine retains the last accepted event identity across automatic recovery. It skips an exact
+replay. An older sequence, backwards event time, explicit gap, conflicting completed bar, or stale
+snapshot halts before another callback. A feed without provider continuity evidence may run
+normally, but it cannot make a new causal decision after reconnect. A sequence value alone is not
+evidence that no records were missed. Treat the halt as an operator reconciliation point.
 
 ## Choosing A Feed
 
@@ -39,6 +57,7 @@ feed = AlpacaDataFeed(
     symbols=["AAPL", "BTC/USD"],
     data_type="bars",  # "bars", "quotes", or "trades"
     feed="iex",        # "iex" or "sip"
+    queue_capacity=1024,
 )
 ```
 
@@ -58,6 +77,7 @@ feed = IBDataFeed(
     exchange="SMART",
     currency="USD",
     tick_throttle_ms=1000,
+    queue_capacity=1024,
 )
 ```
 
@@ -117,6 +137,7 @@ feed = OKXFundingFeed(
     symbols=["BTC-USDT-SWAP", "ETH-USDT-SWAP"],
     timeframe="1m",  # also supports "1H", "4H", and "1D"
     poll_interval_seconds=5.0,
+    queue_capacity=256,
 )
 ```
 
@@ -136,6 +157,7 @@ feed = BarAggregator(
     source_feed=raw_feed,
     bar_size_minutes=1,
     flush_timeout_seconds=2.0,
+    queue_capacity=256,
 )
 ```
 

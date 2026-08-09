@@ -22,7 +22,10 @@ from ml4t.live import (
     CryptoFeed,
     DataBentoFeed,
     DataFeedProtocol,
+    FeedContinuityError,
     FeedContractError,
+    FeedOverflowError,
+    FeedQueueSnapshot,
     IBBroker,
     IBDataFeed,
     LiveEngine,
@@ -52,7 +55,7 @@ from ml4t.live import (
 | Engine | `LiveEngine`, `RuntimeState`, `RuntimeTransition`, `RuntimeFailureError`, `RuntimeCleanupError` |
 | Brokers | `IBBroker`, `AlpacaBroker` |
 | Feeds | `IBDataFeed`, `AlpacaDataFeed`, `DataBentoFeed`, `CryptoFeed`, `OKXFundingFeed` |
-| Feed helpers | `BarAggregator`, `BarBuffer`, `FeedContractError` |
+| Feed helpers | `BarAggregator`, `BarBuffer`, `FeedContractError`, `FeedContinuityError`, `FeedOverflowError`, `FeedQueueSnapshot` |
 | Orders | `CanonicalOrderRequest`, `OrderValidationError`, `BrokerOrderContractError` |
 | Safety | `LiveRiskConfig`, `SafeBroker`, `RiskState`, `RiskLimitError`, `PersistenceSafetyError`, `AuditJournalError`, `AcceptedOrderPersistenceError`, `VirtualPortfolio` |
 | Sync/async bridge | `ThreadSafeBrokerWrapper` |
@@ -139,6 +142,18 @@ from ml4t.live import (
       show_root_heading: true
 
 ::: ml4t.live.feeds.events.FeedContractError
+    options:
+      show_root_heading: true
+
+::: ml4t.live.feeds.events.FeedContinuityError
+    options:
+      show_root_heading: true
+
+::: ml4t.live.feeds.queue.FeedOverflowError
+    options:
+      show_root_heading: true
+
+::: ml4t.live.feeds.queue.FeedQueueSnapshot
     options:
       show_root_heading: true
 

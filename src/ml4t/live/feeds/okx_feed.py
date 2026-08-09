@@ -25,6 +25,7 @@ Example:
 import asyncio
 import logging
 import math
+from dataclasses import replace
 from datetime import UTC, datetime
 from typing import Any
 
@@ -33,12 +34,14 @@ from ml4t.specs import (
     BarPayload,
     EventCompletion,
     FundingPayload,
+    GapEvidence,
     LifecycleVersion,
     MarketEvent,
     MarketEventKind,
 )
 
 from ml4t.live.feeds.events import sequence_unavailable
+from ml4t.live.feeds.queue import BoundedEventQueue, FeedOverflowError
 from ml4t.live.persistence import redact_sensitive
 from ml4t.live.protocols import DataFeedProtocol
 
@@ -68,6 +71,7 @@ class OKXFundingFeed(DataFeedProtocol):
         *,
         timeframe: str = "1H",
         poll_interval_seconds: float = 60.0,
+        queue_capacity: int = 256,
     ):
         """Initialize OKX funding rate feed.
 
@@ -75,6 +79,7 @@ class OKXFundingFeed(DataFeedProtocol):
             symbols: List of perpetual swap symbols (e.g., ['BTC-USDT-SWAP'])
             timeframe: OHLCV bar timeframe ('1m', '1H', '4H', '1D')
             poll_interval_seconds: How often to poll for new data
+            queue_capacity: Maximum pending events before a fail-closed overflow.
         """
         if not symbols or any(
             not isinstance(symbol, str) or not symbol.strip() for symbol in symbols
@@ -92,7 +97,8 @@ class OKXFundingFeed(DataFeedProtocol):
         self.poll_interval = poll_interval_seconds
 
         # State
-        self._queue: asyncio.Queue[MarketEvent | None] = asyncio.Queue()
+        self.queue_capacity = queue_capacity
+        self._queue = BoundedEventQueue(capacity=queue_capacity, feed="okx")
         self._running = False
         self._poll_task: asyncio.Task | None = None
         self._client: httpx.AsyncClient | None = None
@@ -100,6 +106,7 @@ class OKXFundingFeed(DataFeedProtocol):
 
         self._emitted_bars: set[tuple[str, datetime, EventCompletion]] = set()
         self._emitted_evolving: dict[tuple[str, datetime], BarPayload] = {}
+        self._last_complete_bar_time: dict[str, datetime] = {}
         self._emitted_funding: set[tuple[str, str | int | None, float, str | None]] = set()
         self.max_event_age_seconds = self._timeframe_seconds(timeframe) * 2 + poll_interval_seconds
 
@@ -118,7 +125,7 @@ class OKXFundingFeed(DataFeedProtocol):
         if self._running:
             return
         await self.close()
-        self._queue = asyncio.Queue()
+        self._queue = BoundedEventQueue(capacity=self.queue_capacity, feed="okx")
         self._failure = None
         self._running = True
 
@@ -139,7 +146,7 @@ class OKXFundingFeed(DataFeedProtocol):
             self._poll_task.cancel()
 
         # Signal consumer
-        self._queue.put_nowait(None)
+        self._queue.finish(discard=True)
 
         logger.info(
             f"OKXFundingFeed: Stopped. Bars: {self._bar_count}, "
@@ -171,7 +178,9 @@ class OKXFundingFeed(DataFeedProtocol):
         except Exception as e:
             self._failure = e
             self._running = False
-            self._queue.put_nowait(None)
+            failure = RuntimeError("OKX polling failed")
+            failure.__cause__ = e
+            self._queue.fail(failure, discard=True)
             logger.error("OKXFundingFeed: Error in poll loop: %s", redact_sensitive(str(e)))
 
     async def _fetch_and_emit(self) -> None:
@@ -182,6 +191,25 @@ class OKXFundingFeed(DataFeedProtocol):
                 # Get latest OHLCV bar
                 ohlcv = await self._fetch_latest_ohlcv(symbol)
                 if ohlcv is not None:
+                    previous_bar_time = self._last_complete_bar_time.get(symbol)
+                    if previous_bar_time is not None:
+                        expected = previous_bar_time.timestamp() + self._timeframe_seconds(
+                            self.timeframe
+                        )
+                        current = ohlcv.event_time.timestamp()
+                        ohlcv = replace(
+                            ohlcv,
+                            gap=GapEvidence(
+                                detected=current > expected,
+                                reason=(
+                                    "OKX candle interval gap detected"
+                                    if current > expected
+                                    else "OKX candle interval is continuous"
+                                ),
+                                previous_sequence=str(int(previous_bar_time.timestamp() * 1_000)),
+                                current_sequence=str(ohlcv.provider_sequence),
+                            ),
+                        )
                     bar_key = (symbol, ohlcv.event_time, ohlcv.completion)
                     evolving_key = (symbol, ohlcv.event_time)
                     should_emit = bar_key not in self._emitted_bars
@@ -193,6 +221,7 @@ class OKXFundingFeed(DataFeedProtocol):
                         if ohlcv.completion is EventCompletion.COMPLETE:
                             self._emitted_bars.add(bar_key)
                             self._emitted_evolving.pop(evolving_key, None)
+                            self._last_complete_bar_time[symbol] = ohlcv.event_time
                         else:
                             assert isinstance(ohlcv.payload, BarPayload)
                             self._emitted_evolving[evolving_key] = ohlcv.payload
@@ -218,6 +247,10 @@ class OKXFundingFeed(DataFeedProtocol):
                         ohlcv.event_time,
                     )
 
+        except FeedOverflowError as e:
+            self._failure = e
+            self._running = False
+            logger.error("OKXFundingFeed: %s", e)
         except Exception as e:
             self._error_count += 1
             logger.error("OKXFundingFeed: Error fetching data: %s", redact_sensitive(str(e)))
@@ -423,4 +456,5 @@ class OKXFundingFeed(DataFeedProtocol):
             "rejected_count": self._rejected_count,
             "error_count": self._error_count,
             "poll_interval": self.poll_interval,
+            "queue": self._queue.snapshot().to_dict(),
         }

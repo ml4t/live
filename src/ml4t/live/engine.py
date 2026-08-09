@@ -51,7 +51,15 @@ from ml4t.specs import (
     require_historical_strategy_compatibility,
 )
 
-from .feeds.events import strategy_input, utc_datetime, validate_event_timing
+from .feeds.events import (
+    ContinuityDisposition,
+    EventContinuityTracker,
+    FeedContinuityError,
+    strategy_input,
+    utc_datetime,
+    validate_event_timing,
+)
+from .feeds.queue import FeedOverflowError
 from .lifecycle import LiveLifecycleDispatcher
 from .persistence import redact_sensitive
 from .protocols import AsyncBrokerProtocol, DataFeedProtocol
@@ -271,6 +279,7 @@ class LiveEngine:
         self._run_event_count = 0
         self._last_cleanup_result: dict[str, str] | None = None
         self._release_failures: dict[str, str] = {}
+        self._continuity = EventContinuityTracker()
 
         self._bar_count = 0
         self._event_count = 0
@@ -401,6 +410,17 @@ class LiveEngine:
                             processing_time=processing_time,
                             max_age_seconds=self.max_event_age_seconds,
                         )
+                        disposition = self._continuity.validate(typed_event)
+                        if disposition is ContinuityDisposition.DUPLICATE:
+                            self._record_runtime_event(
+                                "feed_duplicate_skipped",
+                                source=typed_event.source,
+                                asset=typed_event.asset,
+                                kind=typed_event.kind.value,
+                                provider_sequence=typed_event.provider_sequence,
+                                event_time=typed_event.event_time.isoformat(),
+                            )
+                            continue
                         timestamp, data, context = strategy_input(
                             typed_event,
                             processing_time=processing_time,
@@ -478,6 +498,30 @@ class LiveEngine:
             failure = error
             if not isinstance(error, asyncio.CancelledError):
                 self._terminal_failure_reason = f"runtime:{type(error).__name__}"
+            if isinstance(error, FeedContinuityError | FeedOverflowError):
+                if self._runtime_state is RuntimeState.RUNNING:
+                    try:
+                        self._transition(
+                            RuntimeState.DEGRADED,
+                            reason=f"feed_safety:{type(error).__name__}",
+                        )
+                    except BaseException as transition_error:
+                        error.add_note(
+                            "feed safety transition also failed: "
+                            f"{type(transition_error).__name__}: "
+                            f"{redact_sensitive(str(transition_error))}"
+                        )
+                try:
+                    self._record_runtime_event(
+                        "feed_safety_halt",
+                        detail=error.to_dict(),
+                    )
+                except BaseException as audit_error:
+                    error.add_note(
+                        "feed safety audit also failed: "
+                        f"{type(audit_error).__name__}: "
+                        f"{redact_sensitive(str(audit_error))}"
+                    )
         finally:
             self._running = False
             try:
@@ -703,6 +747,7 @@ class LiveEngine:
                 )
                 continue
 
+            self._continuity.mark_recovery()
             self._recovery_requested_reason = None
             self._last_bar_received_at = None
             duration = monotonic() - started_at
@@ -1216,6 +1261,9 @@ class LiveEngine:
         reference_now = self._normalize_utc(now or datetime.now(UTC))
         session = self._equity_session_status(reference_now)
         broker_connected = self._current_broker_connected()
+        feed_stats = getattr(self.feed, "stats", None)
+        if not isinstance(feed_stats, dict):
+            feed_stats = None
 
         last_bar_age_seconds: float | None = None
         if self._last_bar_received_at is not None:
@@ -1266,6 +1314,8 @@ class LiveEngine:
             "halt_on_unhealthy": self.halt_on_unhealthy,
             "auto_recover": self.auto_recover,
             "max_event_age_seconds": self.max_event_age_seconds,
+            "feed": feed_stats,
+            "continuity": self._continuity.snapshot(),
             "recovery_requested": self._recovery_requested_reason,
             "recovery_attempts": self._recovery_attempts,
             "lifecycle_version": self.lifecycle_version.value,

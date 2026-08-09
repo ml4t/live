@@ -39,6 +39,7 @@ from ml4t.specs import (
 )
 
 from ml4t.live.feeds.events import sequence_unavailable, utc_datetime
+from ml4t.live.feeds.queue import BoundedEventQueue, FeedOverflowError
 from ml4t.live.persistence import redact_sensitive
 from ml4t.live.protocols import DataFeedProtocol
 
@@ -92,6 +93,7 @@ class AlpacaDataFeed(DataFeedProtocol):
         *,
         data_type: str = "bars",  # 'bars', 'quotes', 'trades'
         feed: str = "iex",  # 'iex' (free) or 'sip' (premium)
+        queue_capacity: int = 1_024,
     ):
         """Initialize Alpaca data feed.
 
@@ -101,6 +103,7 @@ class AlpacaDataFeed(DataFeedProtocol):
             symbols: List of symbols (e.g., ['AAPL', 'BTC/USD'])
             data_type: Type of data - 'bars' (default), 'quotes', or 'trades'
             feed: Data feed type - 'iex' (free) or 'sip' (premium)
+            queue_capacity: Maximum pending events before a fail-closed overflow.
         """
         if not symbols or any(
             not isinstance(symbol, str) or not symbol.strip() for symbol in symbols
@@ -124,9 +127,11 @@ class AlpacaDataFeed(DataFeedProtocol):
         self._crypto_stream: CryptoDataStream | None = None
         self._stream_tasks: list[asyncio.Task] = []
         self._failure: Exception | None = None
+        self._consumer_loop: asyncio.AbstractEventLoop | None = None
 
         # State
-        self._queue: asyncio.Queue[MarketEvent | None] = asyncio.Queue()
+        self.queue_capacity = queue_capacity
+        self._queue = BoundedEventQueue(capacity=queue_capacity, feed="alpaca")
         self._running = False
         self.max_event_age_seconds = 120.0 if data_type == "bars" else 30.0
 
@@ -157,9 +162,10 @@ class AlpacaDataFeed(DataFeedProtocol):
         )
         if self._running:
             return
-        self._queue = asyncio.Queue()
+        self._queue = BoundedEventQueue(capacity=self.queue_capacity, feed="alpaca")
         self._stream_tasks.clear()
         self._failure = None
+        self._consumer_loop = asyncio.get_running_loop()
         self._running = True
 
         # Create stock stream if we have stock symbols
@@ -238,7 +244,7 @@ class AlpacaDataFeed(DataFeedProtocol):
                 )
 
         # Signal consumer to exit
-        self._queue.put_nowait(None)
+        self._queue.finish(discard=True)
 
         logger.info(
             f"AlpacaDataFeed: Stopped. "
@@ -285,6 +291,32 @@ class AlpacaDataFeed(DataFeedProtocol):
             metadata=metadata,
         )
 
+    def _enqueue(self, event: MarketEvent) -> None:
+        """Move provider-thread callbacks onto the engine event loop before buffering."""
+        try:
+            current_loop = asyncio.get_running_loop()
+        except RuntimeError:
+            current_loop = None
+        if self._consumer_loop is not None and current_loop is not self._consumer_loop:
+            self._consumer_loop.call_soon_threadsafe(self._enqueue_on_consumer_loop, event)
+            return
+        self._enqueue_on_consumer_loop(event)
+
+    def _enqueue_on_consumer_loop(self, event: MarketEvent) -> None:
+        if not self._running:
+            return
+        try:
+            self._queue.put_nowait(event)
+        except FeedOverflowError as error:
+            self._stream_failed(error)
+            return
+        if event.kind is MarketEventKind.BAR:
+            self._bar_count += 1
+        elif event.kind is MarketEventKind.QUOTE:
+            self._quote_count += 1
+        elif event.kind is MarketEventKind.TRADE:
+            self._trade_count += 1
+
     async def _on_stock_bar(self, bar: Any) -> None:
         """Handle stock bar data.
 
@@ -313,8 +345,7 @@ class AlpacaDataFeed(DataFeedProtocol):
                 "feed": self._feed,
             },
         )
-        self._queue.put_nowait(event)
-        self._bar_count += 1
+        self._enqueue(event)
 
     async def _on_stock_quote(self, quote: Any) -> None:
         """Handle stock quote data.
@@ -336,8 +367,7 @@ class AlpacaDataFeed(DataFeedProtocol):
             ),
             metadata={"market": "equity", "feed": self._feed},
         )
-        self._queue.put_nowait(event)
-        self._quote_count += 1
+        self._enqueue(event)
 
     async def _on_stock_trade(self, trade: Any) -> None:
         """Handle stock trade data.
@@ -359,8 +389,7 @@ class AlpacaDataFeed(DataFeedProtocol):
                 "feed": self._feed,
             },
         )
-        self._queue.put_nowait(event)
-        self._trade_count += 1
+        self._enqueue(event)
 
     # === Crypto Handlers ===
 
@@ -391,8 +420,7 @@ class AlpacaDataFeed(DataFeedProtocol):
                 "market": "crypto",
             },
         )
-        self._queue.put_nowait(event)
-        self._bar_count += 1
+        self._enqueue(event)
 
     async def _on_crypto_quote(self, quote: Any) -> None:
         """Handle crypto quote data.
@@ -414,8 +442,7 @@ class AlpacaDataFeed(DataFeedProtocol):
             ),
             metadata={"market": "crypto"},
         )
-        self._queue.put_nowait(event)
-        self._quote_count += 1
+        self._enqueue(event)
 
     async def _on_crypto_trade(self, trade: Any) -> None:
         """Handle crypto trade data.
@@ -437,8 +464,7 @@ class AlpacaDataFeed(DataFeedProtocol):
                 "market": "crypto",
             },
         )
-        self._queue.put_nowait(event)
-        self._trade_count += 1
+        self._enqueue(event)
 
     # === Stream Runners ===
 
@@ -501,7 +527,9 @@ class AlpacaDataFeed(DataFeedProtocol):
                         f"stream stop also failed: {type(stop_error).__name__}: "
                         f"{redact_sensitive(str(stop_error))}"
                     )
-        self._queue.put_nowait(None)
+        failure = RuntimeError("Alpaca stream failed")
+        failure.__cause__ = error
+        self._queue.fail(failure, discard=True)
 
     # === Async Iterator ===
 
@@ -535,9 +563,8 @@ class AlpacaDataFeed(DataFeedProtocol):
         Raises:
             StopAsyncIteration: When feed is stopped
         """
-        if not self._running and self._queue.empty():
-            if self._failure is not None:
-                raise RuntimeError("Alpaca stream failed") from self._failure
+        queue_state = self._queue.snapshot()
+        if not self._running and self._queue.empty() and not queue_state.failed:
             raise StopAsyncIteration
 
         item = await self._queue.get()
@@ -570,4 +597,5 @@ class AlpacaDataFeed(DataFeedProtocol):
             "crypto_symbols": self._crypto_symbols,
             "data_type": self._data_type,
             "feed": self._feed,
+            "queue": self._queue.snapshot().to_dict(),
         }

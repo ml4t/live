@@ -150,6 +150,11 @@ engine = LiveEngine(
 
 Recovery releases the feed and broker before each bounded reconnect attempt. It does not repeat
 `on_start` or `on_prepare`, and it retains strategy intent and rule state in the existing runtime.
+The engine also retains the last accepted market-event identity. It skips exact replays, but an
+explicit gap, older sequence, backwards timestamp, conflicting completed event, or new event
+without continuity evidence after reconnect raises `FeedContinuityError` before another strategy
+callback. Queue overflow raises `FeedOverflowError` with gap and queue evidence. Both conditions
+record `feed_safety_halt` and require operator reconciliation.
 `operational_events` contains the recovery reason, attempt, duration, last processed event count,
 cleanup result, and terminal state. Exhausted recovery raises `RuntimeFailureError` and leaves
 `runtime_state=failed`. A resource release failure raises `RuntimeCleanupError`; call `stop()` again

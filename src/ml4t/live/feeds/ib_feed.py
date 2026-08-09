@@ -37,6 +37,7 @@ from ml4t.specs import (
 )
 
 from ml4t.live.feeds.events import sequence_unavailable, utc_datetime
+from ml4t.live.feeds.queue import BoundedEventQueue, FeedOverflowError
 from ml4t.live.persistence import redact_sensitive
 from ml4t.live.protocols import DataFeedProtocol
 
@@ -76,6 +77,7 @@ class IBDataFeed(DataFeedProtocol):
         exchange: str = "SMART",
         currency: str = "USD",
         tick_throttle_ms: int = 100,  # Min time between emits
+        queue_capacity: int = 1_024,
     ):
         """Initialize IB data feed.
 
@@ -86,6 +88,7 @@ class IBDataFeed(DataFeedProtocol):
             currency: Currency (default: USD)
             tick_throttle_ms: Minimum milliseconds between tick emissions
                 (prevents overwhelming strategy with rapid ticks)
+            queue_capacity: Maximum pending events before a fail-closed overflow.
         """
         if not symbols or any(
             not isinstance(symbol, str) or not symbol.strip() for symbol in symbols
@@ -105,7 +108,8 @@ class IBDataFeed(DataFeedProtocol):
         self.tick_throttle_ms = tick_throttle_ms
 
         # State
-        self._queue: asyncio.Queue[MarketEvent | None] = asyncio.Queue()
+        self.queue_capacity = queue_capacity
+        self._queue = BoundedEventQueue(capacity=queue_capacity, feed="interactive_brokers")
         self._running = False
         self._contracts: dict[str, Stock] = {}
         self._tickers: dict[str, Ticker] = {}
@@ -132,7 +136,10 @@ class IBDataFeed(DataFeedProtocol):
             return
 
         logger.info(f"IBDataFeed: Starting feed for {len(self.symbols)} symbols")
-        self._queue = asyncio.Queue()
+        self._queue = BoundedEventQueue(
+            capacity=self.queue_capacity,
+            feed="interactive_brokers",
+        )
         self._contracts.clear()
         self._tickers.clear()
         self._running = True
@@ -183,7 +190,7 @@ class IBDataFeed(DataFeedProtocol):
             self._callback_registered = False
 
         # Signal consumer to exit
-        self._queue.put_nowait(None)
+        self._queue.finish(discard=True)
 
         logger.info(
             f"IBDataFeed: Stopped. Ticks: {self._tick_count}, Throttled: {self._throttled_count}"
@@ -234,7 +241,7 @@ class IBDataFeed(DataFeedProtocol):
             emitted = 0
             if ticker.last is not None:
                 try:
-                    self._queue.put_nowait(
+                    self._enqueue(
                         MarketEvent(
                             version=LifecycleVersion.V1,
                             event_time=event_time,
@@ -257,7 +264,7 @@ class IBDataFeed(DataFeedProtocol):
                     logger.warning("IBDataFeed: Rejected trade snapshot: %s", type(error).__name__)
             if ticker.bid is not None or ticker.ask is not None:
                 try:
-                    self._queue.put_nowait(
+                    self._enqueue(
                         MarketEvent(
                             version=LifecycleVersion.V1,
                             event_time=event_time,
@@ -281,6 +288,13 @@ class IBDataFeed(DataFeedProtocol):
                     self._rejected_count += 1
                     logger.warning("IBDataFeed: Rejected quote snapshot: %s", type(error).__name__)
             self._tick_count += emitted
+
+    def _enqueue(self, event: MarketEvent) -> None:
+        try:
+            self._queue.put_nowait(event)
+        except FeedOverflowError:
+            self._running = False
+            raise
 
     async def __aiter__(self) -> AsyncIterator[MarketEvent]:
         """Async iterator yielding market data.
@@ -318,4 +332,5 @@ class IBDataFeed(DataFeedProtocol):
             "throttled_count": self._throttled_count,
             "rejected_count": self._rejected_count,
             "symbols": self.symbols,
+            "queue": self._queue.snapshot().to_dict(),
         }

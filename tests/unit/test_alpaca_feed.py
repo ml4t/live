@@ -17,6 +17,7 @@ from ml4t.specs import (
 
 from ml4t.live.feeds.alpaca_feed import AlpacaDataFeed
 from ml4t.live.feeds.events import FeedContractError
+from ml4t.live.feeds.queue import FeedOverflowError
 
 
 def typed_bar(timestamp: datetime | None = None) -> MarketEvent:
@@ -467,6 +468,34 @@ class TestAlpacaDataFeedHandlers:
             await feed._on_stock_bar(MockAlpacaBar(timestamp=datetime(2024, 1, 1)))
 
         assert feed._queue.empty()
+
+    @pytest.mark.asyncio
+    async def test_overflow_halts_feed_without_delivering_pending_bars(self):
+        feed = AlpacaDataFeed(
+            api_key="PKTEST",
+            secret_key="SECRET",
+            symbols=["AAPL"],
+            queue_capacity=2,
+        )
+        feed._running = True
+
+        await feed._on_stock_bar(MockAlpacaBar(symbol="AAPL"))
+        await feed._on_stock_bar(MockAlpacaBar(symbol="AAPL"))
+        await feed._on_stock_bar(MockAlpacaBar(symbol="AAPL"))
+
+        assert feed._running is False
+        assert feed.stats["bar_count"] == 2
+        assert feed.stats["queue"] == {
+            "capacity": 2,
+            "occupancy": 0,
+            "high_watermark": 2,
+            "overflow_count": 1,
+            "oldest_event_lag_seconds": None,
+            "failed": True,
+            "finished": True,
+        }
+        with pytest.raises(FeedOverflowError):
+            await feed.__anext__()
 
     @pytest.mark.asyncio
     async def test_on_stock_quote(self):

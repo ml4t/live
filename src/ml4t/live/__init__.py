@@ -21,9 +21,10 @@ from .feeds.aggregator import BarAggregator, BarBuffer
 from .feeds.alpaca_feed import AlpacaDataFeed
 from .feeds.crypto_feed import CryptoFeed
 from .feeds.databento_feed import DataBentoFeed
-from .feeds.events import FeedContractError
+from .feeds.events import FeedContinuityError, FeedContractError
 from .feeds.ib_feed import IBDataFeed
 from .feeds.okx_feed import OKXFundingFeed
+from .feeds.queue import FeedOverflowError, FeedQueueSnapshot
 from .lifecycle import LifecycleInvocation, LiveLifecycleDispatcher, callback_trace
 from .orders import (
     BrokerOrderContractError,
@@ -71,6 +72,9 @@ __all__ = [
     "CryptoFeed",
     "DataBentoFeed",
     "FeedContractError",
+    "FeedContinuityError",
+    "FeedOverflowError",
+    "FeedQueueSnapshot",
     "IBDataFeed",
     "OKXFundingFeed",
     # Engine

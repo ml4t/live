@@ -30,6 +30,7 @@ from ml4t.live.feeds.events import (
     utc_datetime,
     validate_event_timing,
 )
+from ml4t.live.feeds.queue import BoundedEventQueue
 
 if TYPE_CHECKING:
     from ml4t.live.protocols import DataFeedProtocol
@@ -133,6 +134,7 @@ class BarAggregator:
         bar_size_minutes: int = 1,
         assets: list[str] | None = None,
         flush_timeout_seconds: float = 2.0,
+        queue_capacity: int = 256,
     ):
         """Initialize BarAggregator.
 
@@ -141,6 +143,7 @@ class BarAggregator:
             bar_size_minutes: Output bar size in minutes (default: 1)
             assets: List of assets to track (default: all from source)
             flush_timeout_seconds: Seconds after bar end before forcing emit (default: 2.0)
+            queue_capacity: Maximum pending bars before a fail-closed overflow.
         """
         if isinstance(bar_size_minutes, bool) or not isinstance(bar_size_minutes, int):
             raise TypeError("bar_size_minutes must be an integer")
@@ -157,6 +160,7 @@ class BarAggregator:
         self.bar_size = timedelta(minutes=bar_size_minutes)
         self.assets = assets or []
         self.flush_timeout = flush_timeout_seconds
+        self.queue_capacity = queue_capacity
 
         # Per-asset bar buffers
         self._buffers: dict[str, BarBuffer] = {}
@@ -166,7 +170,7 @@ class BarAggregator:
         self._last_data_time: float = 0  # Track when we last got data
 
         # Output queue (use None sentinel for shutdown instead of timeout)
-        self._queue: asyncio.Queue[MarketEvent | None] = asyncio.Queue()
+        self._queue = BoundedEventQueue(capacity=queue_capacity, feed="bar_aggregator")
         self._running = False
         self._aggregate_task: asyncio.Task | None = None
         self._flush_task: asyncio.Task | None = None
@@ -177,6 +181,7 @@ class BarAggregator:
         if self._running:
             return
         self._failure = None
+        self._queue = BoundedEventQueue(capacity=self.queue_capacity, feed="bar_aggregator")
         self._running = True
         await self.source.start()
 
@@ -190,7 +195,7 @@ class BarAggregator:
         if self._flush_task:
             self._flush_task.cancel()
         if self._aggregate_task is None:
-            self._signal_stop()
+            self._queue.finish(discard=True)
 
     async def _aggregate_loop(self) -> None:
         """Main aggregation loop."""
@@ -282,13 +287,14 @@ class BarAggregator:
             if self._flush_task:
                 self._flush_task.cancel()
                 self._flush_task = None
-            for asset, bar_start in tuple(self._current_bar_start.items()):
-                completion = (
-                    EventCompletion.COMPLETE
-                    if datetime.now(UTC) >= bar_start + self.bar_size
-                    else EventCompletion.EVOLVING
-                )
-                await self._emit_asset_bar(asset, bar_start, completion=completion)
+            if not self._queue.snapshot().failed:
+                for asset, bar_start in tuple(self._current_bar_start.items()):
+                    completion = (
+                        EventCompletion.COMPLETE
+                        if datetime.now(UTC) >= bar_start + self.bar_size
+                        else EventCompletion.EVOLVING
+                    )
+                    await self._emit_asset_bar(asset, bar_start, completion=completion)
             self._current_bar_start.clear()
             self._running = False
             self._aggregate_task = None
@@ -314,7 +320,7 @@ class BarAggregator:
 
     def _signal_stop(self) -> None:
         """Signal consumers that iteration should stop."""
-        self._queue.put_nowait(None)
+        self._queue.finish(discard=False)
 
     def _truncate_to_bar(self, dt: datetime) -> datetime:
         """Truncate datetime to bar boundary.
@@ -393,3 +399,14 @@ class BarAggregator:
                     raise self._failure
                 break
             yield item
+
+    @property
+    def stats(self) -> dict[str, Any]:
+        """Return aggregation and bounded-queue state."""
+        return {
+            "running": self._running,
+            "bar_size_seconds": self.bar_size.total_seconds(),
+            "tracked_assets": sorted(self._current_bar_start),
+            "completed_assets": sorted(self._last_completed_bar),
+            "queue": self._queue.snapshot().to_dict(),
+        }

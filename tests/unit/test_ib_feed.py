@@ -8,6 +8,7 @@ from ib_async import Stock
 from ml4t.specs import MarketEventKind, QuotePayload, TradePayload
 
 from ml4t.live.feeds.ib_feed import IBDataFeed
+from ml4t.live.feeds.queue import FeedOverflowError
 
 
 class MockIB:
@@ -298,6 +299,39 @@ class TestIBDataFeed:
 
         event = await asyncio.wait_for(anext(feed.__aiter__()), timeout=1.0)
         assert event.kind is MarketEventKind.TRADE
+        feed.stop()
+
+    async def test_multi_symbol_overflow_halts_with_bounded_memory(self):
+        mock_ib = MockIB()
+        feed = IBDataFeed(
+            mock_ib,
+            symbols=["SPY", "QQQ"],
+            tick_throttle_ms=0,
+            queue_capacity=2,
+        )
+        await feed.start()
+        tickers = [
+            MockTicker(Stock("SPY", "SMART", "USD")),
+            MockTicker(Stock("QQQ", "SMART", "USD")),
+        ]
+        for ticker in tickers:
+            ticker.last = 450.0
+            ticker.lastSize = 100
+            ticker.bid = 449.0
+            ticker.ask = 451.0
+            ticker.bidSize = 10
+            ticker.askSize = 10
+
+        with pytest.raises(FeedOverflowError):
+            mock_ib.pendingTickersEvent.emit(tickers)
+
+        assert feed._running is False
+        assert feed.stats["queue"]["capacity"] == 2
+        assert feed.stats["queue"]["occupancy"] == 0
+        assert feed.stats["queue"]["high_watermark"] == 2
+        assert feed.stats["queue"]["overflow_count"] == 1
+        with pytest.raises(FeedOverflowError):
+            await anext(feed.__aiter__())
         feed.stop()
 
     async def test_multiple_symbols(self):
