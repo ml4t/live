@@ -70,8 +70,9 @@ def _report(provider: str, phase: str, commit: str) -> dict:
         "candidate": {
             "commit": commit,
             "qualification_run_id": 41,
-            "version": "0.1.0b4",
+            "version": "0.1.0",
             "wheel_sha256": "b" * 64,
+            "sdist_sha256": "c" * 64,
         },
         "started_at": "2026-08-07T20:00:00+00:00",
         "completed_at": "2026-08-07T20:01:00+00:00",
@@ -91,8 +92,9 @@ def _archive(commit: str = COMMIT) -> bytes:
         "candidate": {
             "commit": commit,
             "qualification_run_id": 41,
-            "version": "0.1.0b4",
+            "version": "0.1.0",
             "wheel_sha256": "b" * 64,
+            "sdist_sha256": "c" * 64,
         },
         "providers": {
             provider: {phase: _report(provider, phase, commit) for phase in ("exercise", "restart")}
@@ -220,6 +222,7 @@ def test_exact_fresh_successful_paper_evidence_passes() -> None:
         "artifact": f"paper-{COMMIT}-42",
         "qualification_run_id": 41,
         "wheel_sha256": "b" * 64,
+        "sdist_sha256": "c" * 64,
     }
 
 

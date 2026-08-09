@@ -1,1 +1,1 @@
-"""Beta qualification automation."""
+"""Stable qualification automation."""

@@ -1,4 +1,4 @@
-"""Public-boundary tests for feeds outside the beta support contract."""
+"""Public-boundary tests for feeds outside the stable support contract."""
 
 from inspect import signature
 from pathlib import Path
@@ -34,7 +34,7 @@ def test_alpaca_and_ib_require_explicit_experimental_opt_in() -> None:
         IBDataFeed(IB(), ["SPY"])
 
 
-def test_public_claims_separate_experimental_feeds_from_beta_support() -> None:
+def test_public_claims_separate_experimental_feeds_from_stable_support() -> None:
     public_text = {
         "README": (ROOT / "README.md").read_text(),
         "feed guide": (ROOT / "docs/user-guide/feeds.md").read_text(),

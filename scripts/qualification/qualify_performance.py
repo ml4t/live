@@ -1,4 +1,4 @@
-"""Qualify sustained LiveEngine behavior against the beta reference workloads."""
+"""Qualify sustained LiveEngine behavior against the stable reference workloads."""
 
 from __future__ import annotations
 

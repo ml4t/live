@@ -1,4 +1,4 @@
-"""Run the complete credential-free beta qualification gate."""
+"""Run the complete credential-free stable qualification gate."""
 
 from __future__ import annotations
 
@@ -14,11 +14,14 @@ from pathlib import Path
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 SOURCE_SCOPES = ("src", "tests", "examples", "scripts")
 COVERAGE_MINIMUM = "85"
-CANDIDATE_ENVIRONMENT = {"SETUPTOOLS_SCM_PRETEND_VERSION": "0.1.0b4"}
+CANDIDATE_ENVIRONMENT = {"SETUPTOOLS_SCM_PRETEND_VERSION": "0.1.0"}
 STAGE_GROUPS = {
-    "source": frozenset({"ruff-format", "ruff", "types", "pre-commit", "workflow-policy"}),
+    "source": frozenset(
+        {"ruff-format", "ruff", "types", "pre-commit", "workflow-policy", "release-recovery"}
+    ),
     "dependency": frozenset({"dependency-audit", "dependency-compatibility"}),
-    "artifact": frozenset({"artifact-qualification"}),
+    "artifact": frozenset({"build", "distribution-metadata", "artifact-qualification"}),
+    "security": frozenset({"build", "distribution-metadata", "security-qualification"}),
     "deterministic": frozenset(
         {"deterministic-tests-and-branch-coverage", "stable-coverage-policy"}
     ),
@@ -74,17 +77,16 @@ def qualification_stages(temporary_directory: Path, repetitions: int = 5) -> lis
             ("uv", "run", "python", "scripts/qualification/check_workflows.py"),
         ),
         Stage(
+            "release-recovery",
+            ("uv", "run", "python", "scripts/qualification/check_release_recovery.py"),
+        ),
+        Stage(
             "dependency-audit",
             ("uv", "run", "python", "scripts/qualification/audit_dependencies.py"),
         ),
         Stage(
             "dependency-compatibility",
             ("uv", "run", "python", "scripts/qualification/check_dependency_matrix.py"),
-            CANDIDATE_ENVIRONMENT,
-        ),
-        Stage(
-            "artifact-qualification",
-            ("uv", "run", "python", "scripts/qualification/qualify_artifacts.py"),
             CANDIDATE_ENVIRONMENT,
         ),
         Stage(
@@ -203,6 +205,32 @@ def qualification_stages(temporary_directory: Path, repetitions: int = 5) -> lis
                     str(distribution_directory / "*"),
                 ),
             ),
+            Stage(
+                "artifact-qualification",
+                (
+                    "uv",
+                    "run",
+                    "python",
+                    "scripts/qualification/qualify_artifacts.py",
+                    "--artifacts-dir",
+                    str(distribution_directory),
+                ),
+                CANDIDATE_ENVIRONMENT,
+            ),
+            Stage(
+                "security-qualification",
+                (
+                    "uv",
+                    "run",
+                    "python",
+                    "scripts/qualification/qualify_security.py",
+                    "--artifacts-dir",
+                    str(distribution_directory),
+                    "--output-directory",
+                    str(temporary_directory / "security"),
+                ),
+                CANDIDATE_ENVIRONMENT,
+            ),
         )
     )
     return stages
@@ -275,7 +303,7 @@ def execute_stages(
 
     after = status()
     mutated = before != after
-    print("\nBeta qualification summary")
+    print("\nStable qualification summary")
     for result in results:
         outcome = "PASS" if result.returncode == 0 else f"FAIL ({result.returncode})"
         print(f"{result.name}: {outcome}")
@@ -294,7 +322,7 @@ def main() -> int:
         if args.group:
             stages = select_stage_groups(stages, args.group)
         return execute_stages(stages)
-    with tempfile.TemporaryDirectory(prefix="ml4t-live-beta-gate-") as temporary:
+    with tempfile.TemporaryDirectory(prefix="ml4t-live-stable-gate-") as temporary:
         stages = qualification_stages(Path(temporary))
         if args.group:
             stages = select_stage_groups(stages, args.group)

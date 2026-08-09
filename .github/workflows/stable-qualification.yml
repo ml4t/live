@@ -1,4 +1,4 @@
-name: Reusable beta qualification
+name: Reusable stable qualification
 
 on:
   workflow_call:
@@ -8,7 +8,7 @@ permissions: {}
 
 env:
   CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-  SETUPTOOLS_SCM_PRETEND_VERSION: "0.1.0b4"
+  SETUPTOOLS_SCM_PRETEND_VERSION: "0.1.0"
   UV_NO_SOURCES: "1"
   UV_VERSION: "0.10.9"
 
@@ -33,7 +33,7 @@ jobs:
           version: ${{ env.UV_VERSION }}
       - run: uv python install ${{ matrix.python-version }}
       - run: uv sync --python ${{ matrix.python-version }} --all-extras --dev --locked
-      - run: uv run python scripts/qualification/run_beta_gate.py --group source
+      - run: uv run python scripts/qualification/run_stable_gate.py --group source
 
   deterministic:
     name: Deterministic tests (Python ${{ matrix.python-version }})
@@ -55,7 +55,7 @@ jobs:
           version: ${{ env.UV_VERSION }}
       - run: uv python install ${{ matrix.python-version }}
       - run: uv sync --python ${{ matrix.python-version }} --all-extras --dev --locked
-      - run: uv run python scripts/qualification/run_beta_gate.py --group deterministic
+      - run: uv run python scripts/qualification/run_stable_gate.py --group deterministic
 
   dependency:
     name: Dependency audit and compatibility
@@ -73,7 +73,7 @@ jobs:
           version: ${{ env.UV_VERSION }}
       - run: uv python install 3.12
       - run: uv sync --python 3.12 --all-extras --dev --locked
-      - run: uv run python scripts/qualification/run_beta_gate.py --group dependency
+      - run: uv run python scripts/qualification/run_stable_gate.py --group dependency
 
   stress:
     name: Stress and controlled faults
@@ -91,7 +91,7 @@ jobs:
           version: ${{ env.UV_VERSION }}
       - run: uv python install 3.12
       - run: uv sync --python 3.12 --all-extras --dev --locked
-      - run: uv run python scripts/qualification/run_beta_gate.py --group stress
+      - run: uv run python scripts/qualification/run_stable_gate.py --group stress
 
   performance:
     name: Sustained performance qualification
@@ -110,7 +110,7 @@ jobs:
       - run: uv python install 3.12
       - run: uv sync --python 3.12 --all-extras --dev --locked
       - run: >-
-          uv run python scripts/qualification/run_beta_gate.py
+          uv run python scripts/qualification/run_stable_gate.py
           --group performance
           --evidence-directory "${{ runner.temp }}/ml4t-live-performance"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -136,7 +136,7 @@ jobs:
           version: ${{ env.UV_VERSION }}
       - run: uv python install 3.12
       - run: uv sync --python 3.12 --all-extras --dev --locked
-      - run: uv run python scripts/qualification/run_beta_gate.py --group documentation
+      - run: uv run python scripts/qualification/run_stable_gate.py --group documentation
 
   build:
     name: Build fixed candidate
@@ -205,5 +205,39 @@ jobs:
         with:
           name: qualification-${{ env.CANDIDATE_SHA }}
           path: artifact-qualification.json
+          if-no-files-found: error
+          retention-days: 30
+
+  security:
+    name: Security, provenance inputs, and recovery
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      actions: read
+      contents: read
+    needs: build
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          ref: ${{ env.CANDIDATE_SHA }}
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
+        with:
+          version: ${{ env.UV_VERSION }}
+      - run: uv python install 3.12
+      - run: uv sync --python 3.12 --all-extras --dev --locked
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: dist-${{ env.CANDIDATE_SHA }}
+          path: dist/
+      - name: Qualify exact-artifact security and provenance inputs
+        run: >-
+          uv run python scripts/qualification/qualify_security.py
+          --artifacts-dir dist
+          --output-directory security-evidence
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: security-${{ env.CANDIDATE_SHA }}
+          path: security-evidence/
           if-no-files-found: error
           retention-days: 30

@@ -169,6 +169,7 @@ def find_fresh_paper_run(
                 "artifact": expected_name,
                 "qualification_run_id": bundle["candidate"]["qualification_run_id"],
                 "wheel_sha256": bundle["candidate"]["wheel_sha256"],
+                "sdist_sha256": bundle["candidate"]["sdist_sha256"],
             }
     return None
 
@@ -206,11 +207,13 @@ def main() -> int:
     if args.github_output and evidence:
         with args.github_output.open("a") as output:
             output.write(f"wheel_sha256={evidence['wheel_sha256']}\n")
+            output.write(f"sdist_sha256={evidence['sdist_sha256']}\n")
     print(f"paper evidence: {'PASS' if evidence else 'FAIL'} for commit {args.commit}")
     if evidence:
         print(
             f"run_id={evidence['run_id']} created_at={evidence['created_at']} "
-            f"wheel_sha256={evidence['wheel_sha256']}"
+            f"wheel_sha256={evidence['wheel_sha256']} "
+            f"sdist_sha256={evidence['sdist_sha256']}"
         )
     return int(evidence is None)
 

@@ -133,7 +133,7 @@
   },
   "distribution": {
     "name": "ml4t-live",
-    "version": "0.1.0b4.dev57+ga4f521b0d.d20260809"
+    "version": "0.1.0b4.dev76+gcfb09634f.d20260809"
   },
   "entry_points": {
     "ml4t-live": "ml4t.live.cli.main:app"

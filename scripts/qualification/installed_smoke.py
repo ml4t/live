@@ -104,7 +104,7 @@ async def exercise() -> None:
         assert (root / "state.json").is_file()
         await safe.disconnect()
         assert not await venue.is_connected_async()
-        assert __version__.startswith("0.1.0b4")
+        assert __version__ == "0.1.0"
 
 
 def main() -> None:

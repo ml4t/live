@@ -15,7 +15,7 @@ From the repository root, run:
 
 ```bash
 uv sync --python 3.12 --all-extras --dev --locked
-uv run python scripts/qualification/run_beta_gate.py
+uv run python scripts/qualification/run_stable_gate.py
 ```
 
 The gate must leave the worktree unchanged. It checks source quality, Python 3.12-3.14 behavior,

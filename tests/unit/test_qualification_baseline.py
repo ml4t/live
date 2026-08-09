@@ -1,4 +1,4 @@
-"""Tests for beta qualification baseline capture."""
+"""Tests for qualification baseline capture."""
 
 from __future__ import annotations
 

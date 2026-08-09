@@ -121,5 +121,5 @@ minimal_shadow_example: |
 qualification:
   platform: Linux
   python: ["3.12", "3.13", "3.14"]
-  command: uv run python scripts/qualification/run_beta_gate.py
+  command: uv run python scripts/qualification/run_stable_gate.py
   release_effects: The command does not tag, publish, or place live-money orders.

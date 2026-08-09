@@ -1,4 +1,4 @@
-"""Tests for the authoritative beta qualification command."""
+"""Tests for the authoritative stable qualification command."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any, cast
 
-SCRIPT = Path(__file__).parents[2] / "scripts" / "qualification" / "run_beta_gate.py"
+SCRIPT = Path(__file__).parents[2] / "scripts" / "qualification" / "run_stable_gate.py"
 NAMESPACE = runpy.run_path(str(SCRIPT))
 Stage = NAMESPACE["Stage"]
 
@@ -54,26 +54,35 @@ def test_gate_has_explicit_topology_and_rotates_critical_fault_order(tmp_path: P
         "types",
         "pre-commit",
         "workflow-policy",
+        "release-recovery",
         "dependency-audit",
         "dependency-compatibility",
-        "artifact-qualification",
         "deterministic-tests-and-branch-coverage",
         "stable-coverage-policy",
         "stress",
         "performance",
     ]
-    assert names[-3:] == ["documentation", "build", "distribution-metadata"]
+    assert names[-5:] == [
+        "documentation",
+        "build",
+        "distribution-metadata",
+        "artifact-qualification",
+        "security-qualification",
+    ]
     assert len(critical) == 5
     assert len({stage.command[6] for stage in critical}) == 5
     by_name = {stage.name: stage for stage in stages}
     assert by_name["dependency-compatibility"].environment == {
-        "SETUPTOOLS_SCM_PRETEND_VERSION": "0.1.0b4"
+        "SETUPTOOLS_SCM_PRETEND_VERSION": "0.1.0"
     }
     assert by_name["artifact-qualification"].environment == {
-        "SETUPTOOLS_SCM_PRETEND_VERSION": "0.1.0b4"
+        "SETUPTOOLS_SCM_PRETEND_VERSION": "0.1.0"
+    }
+    assert by_name["security-qualification"].environment == {
+        "SETUPTOOLS_SCM_PRETEND_VERSION": "0.1.0"
     }
     assert by_name["build"].environment == {
-        "SETUPTOOLS_SCM_PRETEND_VERSION": "0.1.0b4",
+        "SETUPTOOLS_SCM_PRETEND_VERSION": "0.1.0",
         "SOURCE_DATE_EPOCH": NAMESPACE["source_date_epoch"](),
     }
 

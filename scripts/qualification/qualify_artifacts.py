@@ -36,7 +36,7 @@ BUILD_CONSTRAINTS = REPOSITORY_ROOT / "build-constraints.txt"
 INSTALLED_SMOKE = Path(__file__).with_name("installed_smoke.py")
 SUPPORTED_PYTHONS = ("3.12", "3.13", "3.14")
 REJECTED_PYTHON = "3.15"
-CANDIDATE_VERSION = "0.1.0b4"
+CANDIDATE_VERSION = "0.1.0"
 EXPECTED_URLS = {
     "Homepage": "https://www.ml4trading.io/docs/live/",
     "Documentation": "https://www.ml4trading.io/docs/live/",
@@ -45,7 +45,7 @@ EXPECTED_URLS = {
     "Changelog": "https://github.com/ml4t/live/releases",
 }
 EXPECTED_CLASSIFIERS = {
-    "Development Status :: 4 - Beta",
+    "Development Status :: 5 - Production/Stable",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",

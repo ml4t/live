@@ -711,11 +711,13 @@ def validate_feed_bundle(bundle: dict[str, Any], *, expected_commit: str) -> Non
     if (
         not isinstance(candidate, dict)
         or candidate.get("commit") != expected_commit
-        or set(candidate) != {"commit", "qualification_run_id", "version", "wheel_sha256"}
+        or set(candidate)
+        != {"commit", "qualification_run_id", "version", "wheel_sha256", "sdist_sha256"}
         or not _paper.COMMIT_PATTERN.fullmatch(str(candidate.get("commit", "")))
         or not isinstance(candidate.get("qualification_run_id"), int)
         or not isinstance(candidate.get("version"), str)
         or not _paper.HASH_PATTERN.fullmatch(str(candidate.get("wheel_sha256", "")))
+        or not _paper.HASH_PATTERN.fullmatch(str(candidate.get("sdist_sha256", "")))
     ):
         raise FeedQualificationError("feed bundle targets a different candidate")
     _paper._evidence_time(bundle.get("generated_at"))

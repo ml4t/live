@@ -38,7 +38,7 @@ OBSERVABILITY_TESTS = (
 STRESS_TEST = Path("tests/stress/test_engine_sustained.py")
 EXPECTED_DISTRIBUTIONS = {
     "ml4t-backtest": "0.1.0",
-    "ml4t-live": "0.1.0b4",
+    "ml4t-live": "0.1.0",
     "ml4t-specs": "0.1.1",
 }
 PYTEST_INI = """\

@@ -32,9 +32,9 @@ def _candidate() -> dict:
         "repository": "ml4t/live",
         "commit": COMMIT,
         "qualification_run_id": 42,
-        "version": "0.1.0b4",
-        "wheel": {"filename": "ml4t_live-0.1.0b4-py3-none-any.whl", "sha256": WHEEL_HASH},
-        "sdist": {"filename": "ml4t_live-0.1.0b4.tar.gz", "sha256": "c" * 64},
+        "version": "0.1.0",
+        "wheel": {"filename": "ml4t_live-0.1.0-py3-none-any.whl", "sha256": WHEEL_HASH},
+        "sdist": {"filename": "ml4t_live-0.1.0.tar.gz", "sha256": "c" * 64},
         "passed": True,
     }
 
@@ -55,8 +55,9 @@ def _report(provider: str, phase: str) -> dict:
     identity = {
         "commit": COMMIT,
         "qualification_run_id": 42,
-        "version": "0.1.0b4",
+        "version": "0.1.0",
         "wheel_sha256": WHEEL_HASH,
+        "sdist_sha256": "c" * 64,
     }
     snapshots = (
         {"initial": _snapshot(), "reconnect": _snapshot(), "final": _snapshot()}
@@ -87,7 +88,7 @@ def _reports() -> list[dict]:
     ]
 
 
-def _write_wheel(path: Path, version: str = "0.1.0b4") -> None:
+def _write_wheel(path: Path, version: str = "0.1.0") -> None:
     with zipfile.ZipFile(path, "w") as archive:
         archive.writestr(
             f"ml4t_live-{version}.dist-info/METADATA",
@@ -108,8 +109,8 @@ def test_ib_validation_warning_remains_a_tagged_working_order() -> None:
 
 
 def test_candidate_manifest_binds_successful_run_and_artifact_hashes(tmp_path: Path) -> None:
-    wheel = tmp_path / "ml4t_live-0.1.0b4-py3-none-any.whl"
-    sdist = tmp_path / "ml4t_live-0.1.0b4.tar.gz"
+    wheel = tmp_path / "ml4t_live-0.1.0-py3-none-any.whl"
+    sdist = tmp_path / "ml4t_live-0.1.0.tar.gz"
     _write_wheel(wheel)
     sdist.write_bytes(b"fixed sdist")
 
@@ -128,7 +129,7 @@ def test_candidate_manifest_binds_successful_run_and_artifact_hashes(tmp_path: P
     )
 
     assert manifest["commit"] == COMMIT
-    assert manifest["version"] == "0.1.0b4"
+    assert manifest["version"] == "0.1.0"
     assert len(manifest["wheel"]["sha256"]) == 64
     assert len(manifest["sdist"]["sha256"]) == 64
 

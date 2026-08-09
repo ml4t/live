@@ -10,8 +10,8 @@ permissions: {}
 
 jobs:
   qualification:
-    name: Complete beta qualification
+    name: Complete stable qualification
     permissions:
       actions: read
       contents: read
-    uses: ./.github/workflows/qualification.yml
+    uses: ./.github/workflows/stable-qualification.yml

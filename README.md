@@ -350,7 +350,7 @@ boundaries. Alpaca, IB, DataBento, and generic CCXT feeds require explicit exper
 git clone https://github.com/ml4t/live.git
 cd ml4t-live
 uv sync --all-extras --dev
-uv run python scripts/qualification/run_beta_gate.py
+uv run python scripts/qualification/run_stable_gate.py
 ```
 
 ## Safety Notice

@@ -40,12 +40,12 @@ def test_artifact_manifest_normalization(tmp_path: Path) -> None:
     wheel_path = tmp_path / "package.whl"
     with zipfile.ZipFile(wheel_path, "w") as archive:
         archive.writestr("ml4t/live/py.typed", b"")
-        archive.writestr("ml4t_live-0.1.0b4.dist-info/METADATA", b"metadata")
+        archive.writestr("ml4t_live-0.1.0.dist-info/METADATA", b"metadata")
 
     sdist_path = tmp_path / "package.tar.gz"
     with tarfile.open(sdist_path, "w:gz") as archive:
         payload = b"source"
-        member = tarfile.TarInfo("ml4t_live-0.1.0b4/src/ml4t/live/__init__.py")
+        member = tarfile.TarInfo("ml4t_live-0.1.0/src/ml4t/live/__init__.py")
         member.size = len(payload)
         archive.addfile(member, io.BytesIO(payload))
 
@@ -68,12 +68,12 @@ def test_external_artifact_input_requires_one_pair(tmp_path: Path) -> None:
         distribution_pair(tmp_path)
 
 
-def test_metadata_contract_accepts_declared_beta_candidate() -> None:
+def test_metadata_contract_accepts_declared_stable_candidate() -> None:
     with (REPOSITORY_ROOT / "pyproject.toml").open("rb") as stream:
         project = tomllib.load(stream)["project"]
     message = email.message.Message()
     message["Name"] = "ml4t-live"
-    message["Version"] = "0.1.0b4"
+    message["Version"] = "0.1.0"
     message["Requires-Python"] = ">=3.12,<3.15"
     message["License-Expression"] = "MIT"
     for classifier in EXPECTED_CLASSIFIERS:
@@ -83,15 +83,15 @@ def test_metadata_contract_accepts_declared_beta_candidate() -> None:
     for dependency in project["dependencies"]:
         message["Requires-Dist"] = dependency
 
-    assert validate_metadata(message, project) == "0.1.0b4"
+    assert validate_metadata(message, project) == "0.1.0"
 
 
-def test_metadata_contract_rejects_development_build_of_beta_candidate() -> None:
+def test_metadata_contract_rejects_development_build_of_stable_candidate() -> None:
     with (REPOSITORY_ROOT / "pyproject.toml").open("rb") as stream:
         project = tomllib.load(stream)["project"]
     message = email.message.Message()
     message["Name"] = "ml4t-live"
-    message["Version"] = "0.1.0b4.dev1"
+    message["Version"] = "0.1.0.dev1"
     message["Requires-Python"] = ">=3.12,<3.15"
     message["License-Expression"] = "MIT"
     for classifier in EXPECTED_CLASSIFIERS:
@@ -108,7 +108,7 @@ def test_metadata_contract_rejects_development_build_of_beta_candidate() -> None
 def test_metadata_contract_rejects_unbounded_python() -> None:
     message = email.message.Message()
     message["Name"] = "ml4t-live"
-    message["Version"] = "0.1.0b4"
+    message["Version"] = "0.1.0"
     message["Requires-Python"] = ">=3.12"
     message["License-Expression"] = "MIT"
 
@@ -160,7 +160,7 @@ def test_install_matrix_continues_after_profile_failure(
 
     monkeypatch.setattr(qualify_artifacts, "install_profile", fake_install)
 
-    results = qualify_install_profiles((wheel, sdist), "0.1.0b4", tmp_path / "profiles")
+    results = qualify_install_profiles((wheel, sdist), "0.1.0", tmp_path / "profiles")
 
     assert len(calls) == 6
     assert len(results) == 6

@@ -31,13 +31,14 @@ def test_every_external_action_is_immutable_and_updateable() -> None:
         ("performance", "every mandatory"),
         ("documentation", "every mandatory"),
         ("artifact", "candidate build"),
-        ("publish", "complete reusable"),
+        ("security", "candidate build"),
+        ("publish", "complete stable"),
         ("paper-hash", "paper-qualified wheel hash"),
         ("always", "success dependency"),
     ],
 )
 def test_seeded_mandatory_failure_cannot_reach_publish(mutation: str, expected: str) -> None:
-    qualification = load_workflow(WORKFLOW_ROOT / "qualification.yml")
+    qualification = load_workflow(WORKFLOW_ROOT / "stable-qualification.yml")
     release = load_workflow(WORKFLOW_ROOT / "release.yml")
     seeded_qualification = deepcopy(qualification)
     seeded_release = deepcopy(release)
@@ -55,6 +56,8 @@ def test_seeded_mandatory_failure_cannot_reach_publish(mutation: str, expected: 
         )
     elif mutation == "artifact":
         seeded_qualification["jobs"]["artifact-qualification"]["needs"] = []
+    elif mutation == "security":
+        seeded_qualification["jobs"]["security"]["needs"] = []
     elif mutation == "publish":
         seeded_release["jobs"]["publish"]["needs"] = "github-release"
     elif mutation == "paper-hash":

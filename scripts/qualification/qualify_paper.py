@@ -101,7 +101,7 @@ def build_candidate_manifest(
         raise PaperQualificationError("qualification run does not target the candidate commit")
     if run_record.get("conclusion") != "success" or run_record.get("status") != "completed":
         raise PaperQualificationError("qualification run is not complete and successful")
-    if run_record.get("name") not in {"CI", "Reusable beta qualification"}:
+    if run_record.get("name") not in {"CI", "Reusable stable qualification"}:
         raise PaperQualificationError(
             "artifact did not come from an authoritative qualification workflow"
         )
@@ -160,6 +160,7 @@ def _candidate_identity(manifest: dict[str, Any]) -> dict[str, Any]:
         "qualification_run_id": manifest["qualification_run_id"],
         "version": manifest["version"],
         "wheel_sha256": manifest["wheel"]["sha256"],
+        "sdist_sha256": manifest["sdist"]["sha256"],
     }
 
 
@@ -808,10 +809,13 @@ def validate_bundle(bundle: dict[str, Any], *, expected_commit: str | None = Non
         "qualification_run_id",
         "version",
         "wheel_sha256",
+        "sdist_sha256",
     }:
         raise PaperQualificationError("paper evidence candidate identity is invalid")
-    if not COMMIT_PATTERN.fullmatch(str(candidate.get("commit", ""))) or not HASH_PATTERN.fullmatch(
-        str(candidate.get("wheel_sha256", ""))
+    if (
+        not COMMIT_PATTERN.fullmatch(str(candidate.get("commit", "")))
+        or not HASH_PATTERN.fullmatch(str(candidate.get("wheel_sha256", "")))
+        or not HASH_PATTERN.fullmatch(str(candidate.get("sdist_sha256", "")))
     ):
         raise PaperQualificationError("paper evidence candidate hashes are invalid")
     if expected_commit is not None and candidate["commit"] != expected_commit:

@@ -1,4 +1,4 @@
-"""Capture or verify a credential-safe beta qualification baseline."""
+"""Capture or verify a credential-safe qualification baseline."""
 
 from __future__ import annotations
 
