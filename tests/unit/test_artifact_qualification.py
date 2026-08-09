@@ -183,8 +183,12 @@ def test_installed_example_runner_requires_each_expected_output(
     ]
 
 
-def test_risk_guard_demo_adapter_declares_execution_capabilities() -> None:
-    namespace = runpy.run_path(str(REPOSITORY_ROOT / "examples/risk_guard_demo.py"))
+@pytest.mark.parametrize(
+    "name",
+    ("risk_guard_demo.py", "shadow_mode_demo.py", "startup_reconciliation_demo.py"),
+)
+def test_deterministic_demo_adapters_declare_execution_capabilities(name: str) -> None:
+    namespace = runpy.run_path(str(REPOSITORY_ROOT / "examples" / name))
     broker = namespace["DemoBroker"]()
 
     assert broker.execution_capabilities == frozenset()

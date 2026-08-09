@@ -31,6 +31,7 @@ from pathlib import Path
 
 from ml4t.backtest import Strategy
 from ml4t.backtest.types import OrderSide, Position
+from ml4t.specs import ExecutionCapability
 
 from ml4t.live import LiveEngine, LiveRiskConfig, SafeBroker
 
@@ -53,6 +54,11 @@ class DemoBroker:
     @property
     def pending_orders(self) -> list:
         return list(self._pending_orders)
+
+    @property
+    def execution_capabilities(self) -> frozenset[ExecutionCapability]:
+        """Declare that this demo uses only baseline market orders."""
+        return frozenset()
 
     async def connect(self) -> None:
         self._connected = True
