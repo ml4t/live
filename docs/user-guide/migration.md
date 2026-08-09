@@ -71,3 +71,37 @@ or different target policy is a migration failure even when both strategies emit
 
 See [Backtest to Live](backtest-to-live.md) for the portability boundary and
 [Candidate Qualification](../qualification.md) for the complete package gate.
+
+## Migrate From The Published Beta
+
+The published `0.1.0b3` package remains the prerelease API migration baseline. The first stable
+candidate removes no root export from that release, but the following changes require review:
+
+- Custom broker implementations must satisfy the complete async broker protocol, including
+  connection state, positions, pending orders, cancellation, replacement, and paper-identity
+  checks. Strategy-facing brokers also expose canonical target and position-rule operations.
+- `AlpacaDataFeed`, `IBDataFeed`, `BarAggregator`, and `OKXFundingFeed` accept an optional bounded
+  `queue_capacity`. Existing calls remain valid. Configure the capacity when overload policy must
+  be explicit.
+- `BarBuffer.volume` is a float and `update()` accepts fractional volume. Code that serializes or
+  validates volume as an integer must accept a finite float.
+- Risk limits in `LiveRiskConfig` accept `None` only as an explicit disable value. The beta defaults
+  remain numeric. The configuration also adds reducing-risk, persistence-journal, and replacement
+  recovery controls.
+- `LiveEngine` accepts lifecycle, execution-policy, and maximum-event-age inputs and exposes typed
+  runtime state and retained operational transitions.
+- The beta risk-state JSON is unversioned. Do not edit or replace it during migration. The stable
+  candidate must qualify its pre-connection upgrade or rejection path before release.
+- Generic CCXT and DataBento feeds require an explicit experimental opt-in. They are not part of the
+  stable feed contract.
+
+## Compatibility After The First Stable Release
+
+`compatibility-policy.toml` defines the enforceable contract. A stable symbol, callable signature,
+default, protocol member, dataclass field, enum value, exception base, CLI argument, entry point, or
+persisted schema cannot change without an intentional baseline update and migration record.
+
+An incompatible removal requires a `DeprecationWarning` through at least one prior minor release,
+this guide must identify the replacement, and removal requires a major release. A security or
+financial-safety correction may use the policy's urgent exception only when the release notes state
+the incompatibility, explain why the normal interval is unsafe, and provide the safe migration.
