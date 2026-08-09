@@ -8,8 +8,8 @@ classifiers = [
 ]
 requires-python = ">=3.12"
 dependencies = [
-    "ml4t-backtest @ git+https://github.com/ml4t/backtest.git@7f9e0ab0666578f05fe69c49d917830825060706",
-    "ml4t-specs @ git+https://github.com/ml4t/specs.git@923deaca5ba7a9975052733c20f103b81e4816b9",
+    "ml4t-backtest @ git+https://github.com/ml4t/backtest.git@12bcbc5684112a6137b0778350d7f44588544164",
+    "ml4t-specs @ git+https://github.com/ml4t/specs.git@85d3476683a70b4f17e5e8cb82dd23d05b373dc8",
     "ib-async>=1.0.0",
     "alpaca-py>=0.30.0",
     "httpx>=0.27.0",

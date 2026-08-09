@@ -1,7 +1,21 @@
 # Data Feeds
 
-`ml4t-live` exposes five primary feed classes plus `BarAggregator` for resampling tick-style feeds.
-Each feed yields `(timestamp, data, context)` tuples through `DataFeedProtocol`.
+`AlpacaDataFeed`, `IBDataFeed`, `OKXFundingFeed`, and `BarAggregator` emit the shared
+`ml4t.specs.MarketEvent` contract. `LiveEngine` validates event timing and adapts each event to the
+existing `on_data(timestamp, data, context, broker)` strategy callback. `CryptoFeed` and
+`DataBentoFeed` retain the experimental tuple contract for now.
+
+| Feed | Event kinds | Event time | Completion | Sequence capability | Default maximum age |
+| --- | --- | --- | --- | --- | --- |
+| `AlpacaDataFeed` | bar, quote, trade | provider UTC timestamp | bars complete; quotes and trades evolving | provider sequence or explicit unavailable evidence | 120s bars; 30s quotes/trades |
+| `IBDataFeed` | quote, trade | provider UTC time when present; otherwise receipt time | evolving snapshot | explicit unavailable evidence | 5s |
+| `OKXFundingFeed` | bar, funding | candle open time; local receipt time for observed funding | provider candle flag; funding complete | candle/funding schedule identity or explicit unavailable evidence | two intervals plus poll delay |
+| `BarAggregator` | bar | UTC interval start | complete after interval end; evolving when shutdown flushes the current interval | propagated gap or explicit unavailable evidence | inherited at engine boundary |
+
+Every event has separate `event_time` and `receipt_time`. The engine adds `processing_time` under
+`context["_market_event"]`, together with event kind, completion, source, provider sequence, and gap
+evidence. Naive or non-UTC timestamps, stale events, invalid OHLC ranges, nonpositive prices,
+negative sizes, crossed quotes, and non-finite values are rejected before strategy dispatch.
 
 ## Choosing A Feed
 
@@ -47,7 +61,10 @@ feed = IBDataFeed(
 )
 ```
 
-`IBDataFeed` emits tick-style updates shaped like `{symbol: {"price", "size"}}`. Wrap it in `BarAggregator` if your strategy expects OHLCV bars. The feed does not own a reconnect loop; watchdog-driven stop/restart belongs in `LiveEngine` when enabled.
+`IBDataFeed` emits separate trade and quote events. `LiveEngine` adapts a trade to
+`{symbol: {"price", "size"}}` and a quote to bid/ask fields plus a midpoint `price`. Wrap the feed in
+`BarAggregator` if your strategy expects OHLCV bars. The feed does not own a reconnect loop;
+watchdog-driven stop/restart belongs in `LiveEngine` when enabled.
 
 ## DataBentoFeed
 
@@ -103,7 +120,10 @@ feed = OKXFundingFeed(
 )
 ```
 
-`OKXFundingFeed` combines OHLCV bars from `/api/v5/market/candles` with funding-rate context from `/api/v5/public/funding-rate`. Minute granularity is supported, and emitted timestamps align to UTC minute boundaries.
+`OKXFundingFeed` emits candle and funding records as separate events. `fundingTime` identifies the
+scheduled settlement and appears in metadata; it is not used as the occurrence time of a rate that
+was observed earlier. Minute granularity is supported, and candle timestamps align to UTC minute
+boundaries. Identical complete candles and identical evolving revisions emit once.
 
 ## BarAggregator
 
@@ -124,6 +144,10 @@ Optional symbol filtering:
 ```python
 feed = BarAggregator(raw_feed, bar_size_minutes=5, assets=["SPY", "QQQ"])
 ```
+
+The aggregator emits one event per asset so sparse symbols retain independent interval boundaries.
+An elapsed interval emits once as `complete`. If shutdown occurs before the current interval ends,
+its buffered value emits once as `evolving`. Late input cannot reopen an already completed interval.
 
 If you need lower-level aggregation state, `BarBuffer` is also part of the public surface and appears
 in the [API Reference](../api/index.md).

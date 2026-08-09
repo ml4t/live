@@ -34,20 +34,24 @@ from datetime import UTC, datetime, timedelta
 from datetime import time as dt_time
 from enum import Enum
 from time import monotonic
-from typing import Any
+from typing import Any, cast
 from zoneinfo import ZoneInfo
 
 from ml4t.backtest import Strategy
 from ml4t.specs import (
     LIFECYCLE_V1,
+    EventCompletion,
     ExecutionPolicy,
     HistoricalStrategyCompatibilityError,
     LifecyclePhase,
     LifecycleVersion,
+    MarketEvent,
+    MarketEventKind,
     negotiate_lifecycle_version,
     require_historical_strategy_compatibility,
 )
 
+from .feeds.events import strategy_input, utc_datetime, validate_event_timing
 from .lifecycle import LiveLifecycleDispatcher
 from .persistence import redact_sensitive
 from .protocols import AsyncBrokerProtocol, DataFeedProtocol
@@ -180,6 +184,7 @@ class LiveEngine:
         auto_recover: bool = False,
         recovery_cooldown_seconds: float = 5.0,
         max_recovery_attempts: int = 3,
+        max_event_age_seconds: float | None = None,
         on_health_change: Callable[[str, dict[str, Any]], None] | None = None,
         lifecycle_version: LifecycleVersion | str = LifecycleVersion.V1,
         execution_policy: ExecutionPolicy | None = None,
@@ -199,6 +204,8 @@ class LiveEngine:
             auto_recover: Attempt reconnect/restart when watchdog detects a recoverable state.
             recovery_cooldown_seconds: Delay between recovery attempts.
             max_recovery_attempts: Maximum recovery attempts before stopping.
+            max_event_age_seconds: Maximum provider-event age before dispatch. When omitted, use
+                the supported feed's declared limit if present.
             on_health_change: Optional callback invoked when runtime health changes.
             lifecycle_version: Portable strategy lifecycle version.
             execution_policy: Explicit live execution capabilities and behavior.
@@ -222,6 +229,12 @@ class LiveEngine:
         self.auto_recover = auto_recover
         self.recovery_cooldown_seconds = recovery_cooldown_seconds
         self.max_recovery_attempts = max_recovery_attempts
+        self.max_event_age_seconds = (
+            max_event_age_seconds
+            if max_event_age_seconds is not None
+            else getattr(feed, "max_event_age_seconds", None)
+        )
+        self._validate_event_age(self.max_event_age_seconds)
         self.on_health_change = on_health_change
         self.lifecycle_version = negotiated_version
         self.execution_policy = execution_policy or default_live_execution_policy()
@@ -252,15 +265,19 @@ class LiveEngine:
         self._operational_events: list[dict[str, Any]] = []
         self._broker_connect_attempted = False
         self._feed_start_attempted = False
+        self._feed_close_required = False
         self._terminal_failure_reason: str | None = None
         self._stop_requested_reason: str | None = None
-        self._run_bar_count = 0
+        self._run_event_count = 0
         self._last_cleanup_result: dict[str, str] | None = None
         self._release_failures: dict[str, str] = {}
 
         self._bar_count = 0
+        self._event_count = 0
+        self._event_kind_counts = dict.fromkeys(MarketEventKind, 0)
         self._error_count = 0
         self._last_bar_time: datetime | None = None
+        self._last_event_time: datetime | None = None
         self._last_bar_received_at: datetime | None = None
         self._last_health = "stopped"
         self._recovery_requested_reason: str | None = None
@@ -328,6 +345,7 @@ class LiveEngine:
         )
         self._transition(RuntimeState.STARTING_FEED, reason="feed_start", attempt=attempt)
         self._feed_start_attempted = True
+        self._feed_close_required = True
         await self.feed.start()
         self._transition(ready_state, reason="runtime_acquired", attempt=attempt)
 
@@ -345,7 +363,7 @@ class LiveEngine:
         self._recovery_attempts = 0
         self._terminal_failure_reason = None
         self._stop_requested_reason = None
-        self._run_bar_count = 0
+        self._run_event_count = 0
         self._shutdown_event.clear()
         logger.info("LiveEngine: Starting main loop")
 
@@ -370,22 +388,53 @@ class LiveEngine:
                 name="ml4t-live-watchdog",
             )
             while not self._shutdown_event.is_set():
-                async for timestamp, data, context in self.feed:
+                async for item in self.feed:
                     if self._shutdown_event.is_set():
                         logger.info("LiveEngine: Shutdown requested")
                         break
 
-                    self._bar_count += 1
-                    self._run_bar_count += 1
-                    self._last_bar_time = timestamp
-                    self._last_bar_received_at = datetime.now(UTC)
+                    processing_time = datetime.now(UTC)
+                    typed_event = item if isinstance(item, MarketEvent) else None
+                    if typed_event is not None:
+                        validate_event_timing(
+                            typed_event,
+                            processing_time=processing_time,
+                            max_age_seconds=self.max_event_age_seconds,
+                        )
+                        timestamp, data, context = strategy_input(
+                            typed_event,
+                            processing_time=processing_time,
+                        )
+                        event_kind = typed_event.kind
+                    else:
+                        timestamp, data, context = self._validate_legacy_feed_item(item)
+                        event_kind = MarketEventKind.BAR
 
+                    self._event_count += 1
+                    self._run_event_count += 1
+                    self._event_kind_counts[event_kind] += 1
+                    self._last_event_time = timestamp
+                    if event_kind is MarketEventKind.BAR:
+                        self._bar_count += 1
+                        self._last_bar_time = timestamp
+                    self._last_bar_received_at = processing_time
+
+                    complete_or_non_bar = (
+                        typed_event is None
+                        or event_kind is not MarketEventKind.BAR
+                        or typed_event.completion is EventCompletion.COMPLETE
+                    )
                     record_market_data = getattr(self.broker, "_record_market_data", None)
-                    if callable(record_market_data):
+                    if callable(record_market_data) and complete_or_non_bar:
                         record_market_data(timestamp, data, context)
 
                     try:
-                        await self.strategy_runtime.process_market_event(timestamp, data, context)
+                        if event_kind is MarketEventKind.BAR and complete_or_non_bar:
+                            await self.strategy_runtime.process_market_event(
+                                timestamp,
+                                data,
+                                context,
+                            )
                         await self._dispatch_strategy(
                             LifecyclePhase.MARKET_EVENT,
                             timestamp,
@@ -471,7 +520,7 @@ class LiveEngine:
             if failure is None:
                 try:
                     self.lifecycle_dispatcher.validate_completed_run(
-                        self._run_bar_count,
+                        self._run_event_count,
                         baseline=callback_baseline,
                     )
                 except BaseException as finalization_error:
@@ -750,14 +799,41 @@ class LiveEngine:
         self._release_failures.pop("broker", None)
         return "released"
 
+    async def _close_feed_once(self) -> str:
+        if not self._feed_close_required:
+            return "not_acquired"
+        close = getattr(self.feed, "close", None)
+        if not callable(close):
+            self._feed_close_required = False
+            return "not_supported"
+        try:
+            result = close()
+            if inspect.isawaitable(result):
+                await result
+        except BaseException as error:
+            logger.warning(
+                "LiveEngine: Feed close failed: %s",
+                redact_sensitive(str(error)),
+            )
+            failure = f"failed:{type(error).__name__}"
+            self._release_failures["feed_close"] = failure
+            return failure
+        self._feed_close_required = False
+        self._release_failures.pop("feed_close", None)
+        return "released"
+
     async def _release_runtime_resources(self) -> dict[str, str]:
         """Release feed then broker in reverse acquisition order."""
         feed = self._stop_feed_once()
+        feed_close = await self._close_feed_once()
         broker = await self._disconnect_broker_once()
-        return {
+        result = {
             "feed": self._release_failures.get("feed", feed),
             "broker": self._release_failures.get("broker", broker),
         }
+        if feed_close != "not_supported":
+            result["feed_close"] = self._release_failures.get("feed_close", feed_close)
+        return result
 
     async def _finalize_runtime(
         self,
@@ -770,6 +846,7 @@ class LiveEngine:
             if (
                 self._runtime_state is terminal_state
                 and not self._feed_start_attempted
+                and not self._feed_close_required
                 and not self._broker_connect_attempted
                 and not self._signals_installed
             ):
@@ -913,6 +990,35 @@ class LiveEngine:
             or max_recovery_attempts < 0
         ):
             raise ValueError("max_recovery_attempts must be a non-negative integer")
+
+    @staticmethod
+    def _validate_event_age(value: float | None) -> None:
+        if value is None:
+            return
+        if (
+            isinstance(value, bool)
+            or not isinstance(value, int | float)
+            or not math.isfinite(value)
+            or value <= 0
+        ):
+            raise ValueError("max_event_age_seconds must be finite and positive or None")
+
+    @staticmethod
+    def _validate_legacy_feed_item(
+        item: object,
+    ) -> tuple[datetime, dict[str, dict[str, Any]], dict[str, Any]]:
+        """Validate the temporary tuple contract retained for experimental feeds."""
+        if not isinstance(item, tuple) or len(item) != 3:
+            raise TypeError("feed must emit MarketEvent or a three-item experimental tuple")
+        timestamp, data, context = item
+        timestamp = utc_datetime(timestamp, "legacy feed timestamp")
+        if not isinstance(data, dict) or not all(
+            isinstance(asset, str) and isinstance(payload, dict) for asset, payload in data.items()
+        ):
+            raise TypeError("legacy feed data must map asset strings to payload mappings")
+        if not isinstance(context, dict):
+            raise TypeError("legacy feed context must be a mapping")
+        return timestamp, cast("dict[str, dict[str, Any]]", data), cast("dict[str, Any]", context)
 
     @staticmethod
     def _validate_strategy_lifecycle(strategy: Strategy) -> None:
@@ -1142,8 +1248,13 @@ class LiveEngine:
             "running": self._running,
             "runtime_state": self._runtime_state.value,
             "terminal_failure_reason": self._terminal_failure_reason,
+            "event_count": self._event_count,
+            "event_kind_counts": {
+                kind.value: count for kind, count in self._event_kind_counts.items()
+            },
             "bar_count": self._bar_count,
             "error_count": self._error_count,
+            "last_event_time": self._last_event_time,
             "last_bar_time": self._last_bar_time,
             "last_bar_received_at": self._last_bar_received_at,
             "last_bar_age_seconds": last_bar_age_seconds,
@@ -1154,6 +1265,7 @@ class LiveEngine:
             "health": health,
             "halt_on_unhealthy": self.halt_on_unhealthy,
             "auto_recover": self.auto_recover,
+            "max_event_age_seconds": self.max_event_age_seconds,
             "recovery_requested": self._recovery_requested_reason,
             "recovery_attempts": self._recovery_attempts,
             "lifecycle_version": self.lifecycle_version.value,

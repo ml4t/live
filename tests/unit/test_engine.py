@@ -10,14 +10,23 @@ import pytest
 from ml4t.backtest import Strategy
 from ml4t.backtest.types import Order, OrderSide, OrderStatus, OrderType, Position
 from ml4t.specs import (
+    BarPayload,
+    EventCompletion,
+    FundingPayload,
+    GapEvidence,
     HistoricalStrategyCompatibilityError,
     LifecyclePhase,
+    LifecycleVersion,
+    MarketEvent,
+    MarketEventKind,
+    QuotePayload,
+    TradePayload,
     UnsupportedLifecycleVersionError,
 )
 
 from ml4t.live.engine import LiveEngine
 from ml4t.live.orders import CanonicalOrderRequest
-from ml4t.live.protocols import AsyncBrokerProtocol, DataFeedProtocol
+from ml4t.live.protocols import AsyncBrokerProtocol, DataFeedProtocol, FeedItem
 from ml4t.live.safety import LiveRiskConfig, SafeBroker
 
 # === Mock Implementations ===
@@ -34,9 +43,13 @@ class MockAsyncBroker:
         self._account_value = 100_000.0
         self.submit_calls = 0
         self.runtime_events: list[tuple[str, dict[str, Any]]] = []
+        self.market_data_calls: list[tuple[datetime, dict, dict]] = []
 
     def record_event(self, event: str, **payload: Any) -> None:
         self.runtime_events.append((event, payload))
+
+    def _record_market_data(self, timestamp: datetime, data: dict, context: dict) -> None:
+        self.market_data_calls.append((timestamp, data, context))
 
     # Properties (expected by ThreadSafeBrokerWrapper)
     @property
@@ -168,7 +181,7 @@ assert isinstance(MockAsyncBroker(), AsyncBrokerProtocol)
 class MockDataFeed:
     """Mock data feed for testing."""
 
-    def __init__(self, bars: list[tuple[datetime, dict, dict]], delay: float = 0.01):
+    def __init__(self, bars: list[FeedItem], delay: float = 0.01):
         self.bars = bars
         self.delay = delay
         self._started = False
@@ -184,18 +197,29 @@ class MockDataFeed:
         """Stop feed."""
         self._stopped = True
 
-    def __aiter__(self) -> AsyncIterator[tuple[datetime, dict[str, dict], dict]]:
+    def __aiter__(self) -> AsyncIterator[FeedItem]:
         """Return async iterator."""
         return self
 
-    async def __anext__(self) -> tuple[datetime, dict[str, dict], dict]:
+    async def __anext__(self) -> FeedItem:
         """Get next bar."""
         if not self.bars or self._stopped:
             raise StopAsyncIteration
 
-        timestamp, data, context = self.bars.pop(0)
+        item = self.bars.pop(0)
         await asyncio.sleep(self.delay)
-        return timestamp, data, context
+        return item
+
+
+class CloseableDataFeed(MockDataFeed):
+    """Feed fixture with an async transport release hook."""
+
+    def __init__(self, bars: list[FeedItem]) -> None:
+        super().__init__(bars)
+        self.close_count = 0
+
+    async def close(self) -> None:
+        self.close_count += 1
 
 
 class RecoverableFeed:
@@ -402,17 +426,17 @@ async def test_run_with_data():
     # Create test bars
     bars = [
         (
-            datetime(2024, 1, 1, 9, 30),
+            datetime(2024, 1, 1, 9, 30, tzinfo=UTC),
             {"AAPL": {"open": 150.0, "high": 151.0, "low": 149.0, "close": 150.5}},
             {"bar_type": "1min"},
         ),
         (
-            datetime(2024, 1, 1, 9, 31),
+            datetime(2024, 1, 1, 9, 31, tzinfo=UTC),
             {"AAPL": {"open": 150.5, "high": 151.5, "low": 150.0, "close": 151.0}},
             {"bar_type": "1min"},
         ),
         (
-            datetime(2024, 1, 1, 9, 32),
+            datetime(2024, 1, 1, 9, 32, tzinfo=UTC),
             {"AAPL": {"open": 151.0, "high": 152.0, "low": 151.0, "close": 151.5}},
             {"bar_type": "1min"},
         ),
@@ -425,14 +449,100 @@ async def test_run_with_data():
 
     # All bars processed
     assert len(strategy.on_data_calls) == 3
-    assert strategy.on_data_calls[0][0] == datetime(2024, 1, 1, 9, 30)
-    assert strategy.on_data_calls[1][0] == datetime(2024, 1, 1, 9, 31)
-    assert strategy.on_data_calls[2][0] == datetime(2024, 1, 1, 9, 32)
+    assert strategy.on_data_calls[0][0] == datetime(2024, 1, 1, 9, 30, tzinfo=UTC)
+    assert strategy.on_data_calls[1][0] == datetime(2024, 1, 1, 9, 31, tzinfo=UTC)
+    assert strategy.on_data_calls[2][0] == datetime(2024, 1, 1, 9, 32, tzinfo=UTC)
 
     # Stats updated
     assert engine.stats["bar_count"] == 3
     assert engine.stats["error_count"] == 0
-    assert engine.stats["last_bar_time"] == datetime(2024, 1, 1, 9, 32)
+    assert engine.stats["last_bar_time"] == datetime(2024, 1, 1, 9, 32, tzinfo=UTC)
+
+
+@pytest.mark.asyncio
+async def test_typed_events_dispatch_by_kind_and_preserve_causal_context() -> None:
+    strategy = RecordingStrategy()
+    broker = MockAsyncBroker()
+    now = datetime.now(UTC)
+    event_parameters = [
+        (MarketEventKind.BAR, EventCompletion.COMPLETE, BarPayload(149, 151, 148, 150, 100)),
+        (MarketEventKind.QUOTE, EventCompletion.EVOLVING, QuotePayload(149, 151, 10, 20)),
+        (MarketEventKind.TRADE, EventCompletion.COMPLETE, TradePayload(150, 5)),
+        (MarketEventKind.FUNDING, EventCompletion.COMPLETE, FundingPayload(0.0001)),
+        (MarketEventKind.BAR, EventCompletion.EVOLVING, BarPayload(150, 152, 149, 151, 50)),
+    ]
+    events = [
+        MarketEvent(
+            version=LifecycleVersion.V1,
+            event_time=now + timedelta(microseconds=index),
+            receipt_time=now + timedelta(microseconds=index),
+            kind=kind,
+            completion=completion,
+            source="fixture",
+            asset="AAPL",
+            payload=payload,
+            provider_sequence=index,
+            metadata={"fixture_index": index},
+        )
+        for index, (kind, completion, payload) in enumerate(event_parameters, start=1)
+    ]
+    engine = LiveEngine(strategy, broker, MockDataFeed(events))
+
+    await engine.connect()
+    await engine.run()
+
+    assert len(strategy.on_data_calls) == 5
+    assert [call[2]["_market_event"]["kind"] for call in strategy.on_data_calls] == [
+        "bar",
+        "quote",
+        "trade",
+        "funding",
+        "bar",
+    ]
+    assert strategy.on_data_calls[1][1]["AAPL"]["price"] == 150.0
+    assert strategy.on_data_calls[3][1] == {"AAPL": {"funding_rate": 0.0001}}
+    assert strategy.on_data_calls[-1][2]["_market_event"]["completion"] == "evolving"
+    assert len(broker.market_data_calls) == 4
+    assert engine.stats["event_count"] == 5
+    assert engine.stats["bar_count"] == 2
+    assert engine.stats["event_kind_counts"] == {
+        "bar": 2,
+        "trade": 1,
+        "quote": 1,
+        "funding": 1,
+    }
+
+
+@pytest.mark.asyncio
+async def test_stale_typed_event_cannot_reach_strategy_or_broker_state() -> None:
+    strategy = RecordingStrategy()
+    broker = MockAsyncBroker()
+    old = datetime.now(UTC) - timedelta(minutes=5)
+    event = MarketEvent(
+        version=LifecycleVersion.V1,
+        event_time=old,
+        receipt_time=old,
+        kind=MarketEventKind.TRADE,
+        completion=EventCompletion.COMPLETE,
+        source="fixture",
+        asset="AAPL",
+        payload=TradePayload(150, 5),
+        gap=GapEvidence(False, "fixture sequence unavailable"),
+    )
+    engine = LiveEngine(
+        strategy,
+        broker,
+        MockDataFeed([event]),
+        max_event_age_seconds=1.0,
+    )
+
+    await engine.connect()
+    with pytest.raises(ValueError, match="event is stale"):
+        await engine.run()
+
+    assert strategy.on_data_calls == []
+    assert broker.market_data_calls == []
+    assert engine.stats["event_count"] == 0
 
 
 @pytest.mark.asyncio
@@ -446,7 +556,7 @@ async def test_shared_lifecycle_dispatches_all_callbacks_on_one_worker_thread() 
         entry_time=datetime(2024, 1, 1, tzinfo=UTC),
         current_price=100.0,
     )
-    feed = MockDataFeed([(datetime(2024, 1, 1, 9, 30), {"AAPL": {"close": 150.0}}, {})])
+    feed = MockDataFeed([(datetime(2024, 1, 1, 9, 30, tzinfo=UTC), {"AAPL": {"close": 150.0}}, {})])
     loop_thread = threading.get_ident()
     engine = LiveEngine(strategy, broker, feed)
 
@@ -526,7 +636,7 @@ async def test_strategy_receives_wrapper():
     broker = MockAsyncBroker()
     bars = [
         (
-            datetime(2024, 1, 1, 9, 30),
+            datetime(2024, 1, 1, 9, 30, tzinfo=UTC),
             {"AAPL": {"close": 150.0}},
             {},
         )
@@ -551,7 +661,11 @@ async def test_graceful_shutdown_via_stop():
 
     # Long-running feed (100 minutes worth of bars)
     bars = [
-        (datetime(2024, 1, 1, 9 + i // 60, i % 60), {"AAPL": {"close": 150.0}}, {})
+        (
+            datetime(2024, 1, 1, 9 + i // 60, i % 60, tzinfo=UTC),
+            {"AAPL": {"close": 150.0}},
+            {},
+        )
         for i in range(30, 130)  # 9:30 to 11:10
     ]
     feed = MockDataFeed(bars, delay=0.05)
@@ -578,9 +692,9 @@ async def test_strategy_error_aborts_and_runs_cleanup_once():
     strategy = ErrorStrategy(error_on_bar=2)  # Raise error on 2nd bar
     broker = MockAsyncBroker()
     bars = [
-        (datetime(2024, 1, 1, 9, 30), {"AAPL": {"close": 150.0}}, {}),
-        (datetime(2024, 1, 1, 9, 31), {"AAPL": {"close": 151.0}}, {}),
-        (datetime(2024, 1, 1, 9, 32), {"AAPL": {"close": 152.0}}, {}),
+        (datetime(2024, 1, 1, 9, 30, tzinfo=UTC), {"AAPL": {"close": 150.0}}, {}),
+        (datetime(2024, 1, 1, 9, 31, tzinfo=UTC), {"AAPL": {"close": 151.0}}, {}),
+        (datetime(2024, 1, 1, 9, 32, tzinfo=UTC), {"AAPL": {"close": 152.0}}, {}),
     ]
     feed = MockDataFeed(bars)
 
@@ -621,9 +735,9 @@ async def test_error_handling_halt():
     strategy = ErrorStrategy(error_on_bar=2)  # Raise error on 2nd bar
     broker = MockAsyncBroker()
     bars = [
-        (datetime(2024, 1, 1, 9, 30), {"AAPL": {"close": 150.0}}, {}),
-        (datetime(2024, 1, 1, 9, 31), {"AAPL": {"close": 151.0}}, {}),
-        (datetime(2024, 1, 1, 9, 32), {"AAPL": {"close": 152.0}}, {}),
+        (datetime(2024, 1, 1, 9, 30, tzinfo=UTC), {"AAPL": {"close": 150.0}}, {}),
+        (datetime(2024, 1, 1, 9, 31, tzinfo=UTC), {"AAPL": {"close": 151.0}}, {}),
+        (datetime(2024, 1, 1, 9, 32, tzinfo=UTC), {"AAPL": {"close": 152.0}}, {}),
     ]
     feed = MockDataFeed(bars)
 
@@ -698,13 +812,25 @@ async def test_repeated_runs_leave_no_lifecycle_threads_or_watchdog_tasks() -> N
 
 
 @pytest.mark.asyncio
+async def test_runtime_closes_feed_transport_after_stop() -> None:
+    feed = CloseableDataFeed([])
+    engine = LiveEngine(RecordingStrategy(), MockAsyncBroker(), feed)
+
+    await engine.connect()
+    await engine.run()
+
+    assert feed.close_count == 1
+    assert engine.stats["last_cleanup_result"]["feed_close"] == "released"
+
+
+@pytest.mark.asyncio
 async def test_stats_property():
     """Test stats property returns correct info."""
     strategy = RecordingStrategy()
     broker = MockAsyncBroker()
     bars = [
-        (datetime(2024, 1, 1, 9, 30), {"AAPL": {"close": 150.0}}, {}),
-        (datetime(2024, 1, 1, 9, 31), {"AAPL": {"close": 151.0}}, {}),
+        (datetime(2024, 1, 1, 9, 30, tzinfo=UTC), {"AAPL": {"close": 150.0}}, {}),
+        (datetime(2024, 1, 1, 9, 31, tzinfo=UTC), {"AAPL": {"close": 151.0}}, {}),
     ]
     feed = MockDataFeed(bars)
 
@@ -725,7 +851,7 @@ async def test_stats_property():
     assert stats["running"] is False
     assert stats["bar_count"] == 2
     assert stats["error_count"] == 0
-    assert stats["last_bar_time"] == datetime(2024, 1, 1, 9, 31)
+    assert stats["last_bar_time"] == datetime(2024, 1, 1, 9, 31, tzinfo=UTC)
 
 
 def test_runtime_status_reports_feed_silence_for_open_equity_session():
@@ -755,8 +881,20 @@ async def test_watchdog_auto_recovers_after_feed_silence():
     broker = MockAsyncBroker()
     feed = RecoverableFeed(
         [
-            [(datetime(2024, 1, 1, 9, 30), {"AAPL": {"close": 150.0}}, {})],
-            [(datetime(2024, 1, 1, 9, 31), {"AAPL": {"close": 151.0}}, {})],
+            [
+                (
+                    datetime(2024, 1, 1, 9, 30, tzinfo=UTC),
+                    {"AAPL": {"close": 150.0}},
+                    {},
+                )
+            ],
+            [
+                (
+                    datetime(2024, 1, 1, 9, 31, tzinfo=UTC),
+                    {"AAPL": {"close": 151.0}},
+                    {},
+                )
+            ],
         ],
         delay=0.01,
     )
@@ -812,7 +950,15 @@ async def test_watchdog_halts_when_unhealthy_without_auto_recover():
     strategy = RecordingStrategy()
     broker = MockAsyncBroker()
     feed = RecoverableFeed(
-        [[(datetime(2024, 1, 1, 9, 30), {"AAPL": {"close": 150.0}}, {})]],
+        [
+            [
+                (
+                    datetime(2024, 1, 1, 9, 30, tzinfo=UTC),
+                    {"AAPL": {"close": 150.0}},
+                    {},
+                )
+            ]
+        ],
         delay=0.01,
     )
 
@@ -907,8 +1053,8 @@ async def test_shadow_mode_end_to_end_uses_virtual_portfolio(tmp_path):
     strategy = ShadowEntryStrategy()
     broker = MockAsyncBroker()
     bars = [
-        (datetime(2024, 1, 1, 9, 30), {"AAPL": {"close": 150.0}}, {}),
-        (datetime(2024, 1, 1, 9, 31), {"AAPL": {"close": 151.0}}, {}),
+        (datetime(2024, 1, 1, 9, 30, tzinfo=UTC), {"AAPL": {"close": 150.0}}, {}),
+        (datetime(2024, 1, 1, 9, 31, tzinfo=UTC), {"AAPL": {"close": 151.0}}, {}),
     ]
     feed = MockDataFeed(bars)
     safe_broker = SafeBroker(

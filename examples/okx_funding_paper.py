@@ -30,6 +30,8 @@ SRC = ROOT / "src"
 if SRC.exists():
     sys.path.insert(0, str(SRC))
 
+from ml4t.specs import BarPayload, FundingPayload, MarketEventKind
+
 from ml4t.live import OKXFundingFeed
 
 SYMBOLS = ["BTC-USDT-SWAP", "ETH-USDT-SWAP", "SOL-USDT-SWAP"]
@@ -52,6 +54,7 @@ async def main() -> int:
     )
     started_at = time.monotonic()
     next_heartbeat = 5.0
+    latest_funding: dict[str, FundingPayload] = {}
 
     print("Starting OKX funding demo with 1-minute bars.")
     await feed.start()
@@ -64,7 +67,7 @@ async def main() -> int:
 
             timeout = max(0.1, min(5.0, DURATION_SECONDS - elapsed))
             try:
-                timestamp, data, context = await asyncio.wait_for(feed.__anext__(), timeout=timeout)
+                event = await asyncio.wait_for(feed.__anext__(), timeout=timeout)
             except TimeoutError:
                 heartbeat_elapsed = int(time.monotonic() - started_at)
                 if heartbeat_elapsed >= next_heartbeat:
@@ -74,17 +77,22 @@ async def main() -> int:
                     next_heartbeat += 5.0
                 continue
 
-            for symbol in SYMBOLS:
-                bar = data.get(symbol)
-                funding = context.get(symbol)
-                if bar is None or funding is None:
-                    continue
-                rate = funding["funding_rate"]
-                next_time = funding.get("next_funding_time")
+            if event.kind is MarketEventKind.FUNDING:
+                assert isinstance(event.payload, FundingPayload)
+                latest_funding[event.asset] = event.payload
                 print(
-                    f"{timestamp.isoformat()} {symbol} close={bar['close']:.2f}"
-                    f" funding={rate:+.5%} signal={funding_signal(rate)}"
-                    f" next_funding={next_time.isoformat() if next_time else 'n/a'}"
+                    f"{event.event_time.isoformat()} {event.asset}"
+                    f" funding={event.payload.rate:+.5%}"
+                    f" signal={funding_signal(event.payload.rate)}"
+                    f" scheduled={event.metadata.get('funding_time') or 'n/a'}"
+                )
+            elif event.kind is MarketEventKind.BAR:
+                assert isinstance(event.payload, BarPayload)
+                funding = latest_funding.get(event.asset)
+                funding_text = f"{funding.rate:+.5%}" if funding is not None else "n/a"
+                print(
+                    f"{event.event_time.isoformat()} {event.asset} close={event.payload.close:.2f}"
+                    f" completion={event.completion.value} funding={funding_text}"
                 )
     finally:
         feed.stop()

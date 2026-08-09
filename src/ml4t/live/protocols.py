@@ -20,10 +20,13 @@ from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 from ml4t.backtest import IntentReconciliation
 from ml4t.backtest.types import Order, OrderSide, OrderType, Position
-from ml4t.specs import CanonicalChildOrderIntent, CanonicalTargetIntent
+from ml4t.specs import CanonicalChildOrderIntent, CanonicalTargetIntent, MarketEvent
 
 if TYPE_CHECKING:
     from ml4t.backtest.risk.position import PositionRule
+
+LegacyFeedItem = tuple[datetime, dict[str, dict[str, Any]], dict[str, Any]]
+FeedItem = MarketEvent | LegacyFeedItem
 
 
 @runtime_checkable
@@ -316,7 +319,8 @@ class AsyncBrokerProtocol(Protocol):
 class DataFeedProtocol(Protocol):
     """Protocol for real-time data feeds.
 
-    Data feeds provide an async iterator of (timestamp, data, context) tuples.
+    Beta-supported feeds provide an async iterator of validated ``MarketEvent`` objects.
+    The legacy tuple member of ``FeedItem`` is temporary compatibility for experimental feeds.
     The feed handles:
     - Subscribing to market data
     - Aggregating ticks to bars (if needed)
@@ -331,9 +335,7 @@ class DataFeedProtocol(Protocol):
                 return self
 
             async def __anext__(self):
-                # Wait for next bar
-                bar = await self._bar_queue.get()
-                return bar.timestamp, bar.data, {}
+                return await self._event_queue.get()
 
             def stop(self):
                 self._running = False
@@ -359,22 +361,19 @@ class DataFeedProtocol(Protocol):
 
     def __aiter__(
         self,
-    ) -> AsyncIterator[tuple[datetime, dict[str, dict[str, Any]], dict[str, Any]]]:
+    ) -> AsyncIterator[FeedItem]:
         """Return async iterator.
 
         Yields:
-            (timestamp, data, context) tuples where:
-            - timestamp: Bar timestamp (datetime)
-            - data: Dict of {asset: {open, high, low, close, volume}}
-            - context: Optional metadata dict
+            A validated market event, or a temporary legacy tuple from an experimental feed.
         """
         ...
 
-    async def __anext__(self) -> tuple[datetime, dict[str, Any], dict[str, Any]]:
-        """Get next bar.
+    async def __anext__(self) -> FeedItem:
+        """Get next market event.
 
         Returns:
-            (timestamp, data, context) tuple
+            A validated market event, or a temporary legacy tuple from an experimental feed.
 
         Raises:
             StopAsyncIteration: When feed ends

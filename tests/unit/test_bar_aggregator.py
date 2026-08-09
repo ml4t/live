@@ -1,478 +1,266 @@
-"""Unit tests for BarAggregator."""
+"""Causal contract tests for BarAggregator."""
 
 import asyncio
+from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import pytest
+from ml4t.specs import (
+    BarPayload,
+    EventCompletion,
+    GapEvidence,
+    LifecycleVersion,
+    MarketEvent,
+    MarketEventKind,
+    TradePayload,
+)
 
 from ml4t.live.feeds.aggregator import BarAggregator, BarBuffer
+from ml4t.live.feeds.events import FeedContractError
 
 
 class MockDataFeed:
-    """Mock data feed for testing."""
+    """Finite typed or legacy source used to exercise real async iteration."""
 
-    def __init__(self, data_sequence: list[tuple[datetime, dict, dict]]):
-        """Initialize with sequence of (timestamp, data, context) tuples."""
-        self.data = data_sequence
-        self.index = 0
+    def __init__(self, data: list[Any]) -> None:
+        self.data = data
         self._started = False
         self._stopped = False
 
-    async def start(self):
-        """Start the mock feed."""
+    async def start(self) -> None:
         self._started = True
+        self._stopped = False
 
-    def stop(self):
-        """Stop the mock feed."""
+    def stop(self) -> None:
         self._stopped = True
 
-    async def __aiter__(self):
-        """Async iteration over mock data."""
-        while self.index < len(self.data) and not self._stopped:
-            timestamp, data, context = self.data[self.index]
-            self.index += 1
-            yield timestamp, data, context
-            await asyncio.sleep(0.01)  # Small delay to simulate real feed
+    async def __aiter__(self) -> AsyncIterator[Any]:
+        for item in self.data:
+            if self._stopped:
+                return
+            yield item
+            await asyncio.sleep(0)
+
+
+def trade(asset: str, timestamp: datetime, price: float, size: float = 0.0) -> MarketEvent:
+    """Create one independently validated provider trade fixture."""
+    return MarketEvent(
+        version=LifecycleVersion.V1,
+        event_time=timestamp,
+        receipt_time=timestamp,
+        kind=MarketEventKind.TRADE,
+        completion=EventCompletion.COMPLETE,
+        source="fixture",
+        asset=asset,
+        payload=TradePayload(price=price, size=size),
+        provider_sequence=int(timestamp.timestamp() * 1_000_000),
+    )
+
+
+def bar(asset: str, timestamp: datetime, **payload: float) -> MarketEvent:
+    """Create one independently validated provider bar fixture."""
+    return MarketEvent(
+        version=LifecycleVersion.V1,
+        event_time=timestamp,
+        receipt_time=timestamp,
+        kind=MarketEventKind.BAR,
+        completion=EventCompletion.COMPLETE,
+        source="fixture",
+        asset=asset,
+        payload=BarPayload(**payload),
+        gap=GapEvidence(False, "fixture sequence unavailable"),
+    )
+
+
+async def collect(aggregator: BarAggregator) -> list[MarketEvent]:
+    """Run the real aggregator to source exhaustion and retain all output."""
+    await aggregator.start()
+    return [event async for event in aggregator]
 
 
 @pytest.mark.asyncio
 class TestBarAggregator:
-    """Test suite for BarAggregator."""
-
-    async def test_initialization(self):
-        """Test BarAggregator initialization."""
-        mock_feed = MockDataFeed([])
-        aggregator = BarAggregator(mock_feed, bar_size_minutes=1)
+    async def test_initialization_and_configuration_validation(self) -> None:
+        source = MockDataFeed([])
+        aggregator = BarAggregator(source, bar_size_minutes=1)
 
         assert aggregator.bar_size == timedelta(minutes=1)
         assert aggregator.flush_timeout == 2.0
         assert aggregator._buffers == {}
-        assert aggregator._current_bar_start is None
+        assert aggregator._current_bar_start == {}
         assert not aggregator._running
+        with pytest.raises(ValueError, match="positive"):
+            BarAggregator(source, bar_size_minutes=0)
+        with pytest.raises(ValueError, match="non-negative"):
+            BarAggregator(source, flush_timeout_seconds=-1)
 
-    async def test_custom_bar_size(self):
-        """Test BarAggregator with custom bar size."""
-        mock_feed = MockDataFeed([])
-        aggregator = BarAggregator(mock_feed, bar_size_minutes=5)
+    async def test_truncates_to_configured_boundary(self) -> None:
+        aggregator = BarAggregator(MockDataFeed([]), bar_size_minutes=5)
+        timestamp = datetime(2024, 1, 1, 10, 37, 42, 123456, tzinfo=UTC)
 
-        assert aggregator.bar_size == timedelta(minutes=5)
+        assert aggregator._truncate_to_bar(timestamp) == datetime(2024, 1, 1, 10, 35, tzinfo=UTC)
 
-    async def test_truncate_to_bar_1min(self):
-        """Test _truncate_to_bar for 1-minute bars."""
-        mock_feed = MockDataFeed([])
-        aggregator = BarAggregator(mock_feed, bar_size_minutes=1)
+    async def test_boundary_and_shutdown_emit_exact_completed_bars(self) -> None:
+        start = datetime(2024, 1, 1, 10, tzinfo=UTC)
+        events = await collect(
+            BarAggregator(
+                MockDataFeed(
+                    [
+                        trade("AAPL", start, 150.0, 100),
+                        trade("AAPL", start + timedelta(seconds=30), 151.0, 50),
+                        trade("AAPL", start + timedelta(minutes=1), 152.0, 75),
+                    ]
+                )
+            )
+        )
 
-        dt = datetime(2024, 1, 1, 10, 35, 42, 123456)
-        truncated = aggregator._truncate_to_bar(dt)
-
-        assert truncated == datetime(2024, 1, 1, 10, 35, 0, 0)
-
-    async def test_truncate_to_bar_5min(self):
-        """Test _truncate_to_bar for 5-minute bars."""
-        mock_feed = MockDataFeed([])
-        aggregator = BarAggregator(mock_feed, bar_size_minutes=5)
-
-        # 10:37:42 should truncate to 10:35:00 (nearest 5-min boundary)
-        dt = datetime(2024, 1, 1, 10, 37, 42)
-        truncated = aggregator._truncate_to_bar(dt)
-        assert truncated == datetime(2024, 1, 1, 10, 35, 0, 0)
-
-        # 10:33:00 should truncate to 10:30:00
-        dt = datetime(2024, 1, 1, 10, 33, 0)
-        truncated = aggregator._truncate_to_bar(dt)
-        assert truncated == datetime(2024, 1, 1, 10, 30, 0, 0)
-
-    async def test_single_tick_single_asset(self):
-        """Test aggregation of single tick for single asset."""
-        base_time = datetime(2024, 1, 1, 10, 0, 0)
-        mock_data = [
-            (base_time, {"AAPL": {"price": 150.0, "size": 100}}, {}),
+        assert [event.event_time for event in events] == [
+            start,
+            start + timedelta(minutes=1),
         ]
-        mock_feed = MockDataFeed(mock_data)
-        aggregator = BarAggregator(mock_feed)
+        assert all(event.kind is MarketEventKind.BAR for event in events)
+        assert all(event.completion is EventCompletion.COMPLETE for event in events)
+        assert events[0].payload == BarPayload(150.0, 151.0, 150.0, 151.0, 150.0)
+        assert events[0].metadata["bar_end"] == (start + timedelta(minutes=1)).isoformat()
+        assert events[1].payload == BarPayload(152.0, 152.0, 152.0, 152.0, 75.0)
 
-        await aggregator.start()
-        bars = []
+    async def test_bar_input_preserves_range_and_resets_between_intervals(self) -> None:
+        start = datetime(2024, 1, 1, 10, tzinfo=UTC)
+        events = await collect(
+            BarAggregator(
+                MockDataFeed(
+                    [
+                        bar(
+                            "AAPL",
+                            start,
+                            open=149.0,
+                            high=151.0,
+                            low=148.0,
+                            close=150.0,
+                            volume=1_000.0,
+                        ),
+                        trade("AAPL", start + timedelta(minutes=1), 145.0, 75),
+                    ]
+                )
+            )
+        )
 
-        # Collect bars (should be empty as no bar boundary crossed)
-        try:
-            async with asyncio.timeout(0.5):
-                async for timestamp, data, context in aggregator:
-                    bars.append((timestamp, data, context))
-        except TimeoutError:
-            pass
+        assert events[0].payload == BarPayload(149.0, 151.0, 148.0, 150.0, 1_000.0)
+        assert events[1].payload == BarPayload(145.0, 145.0, 145.0, 145.0, 75.0)
 
-        aggregator.stop()
+    async def test_sparse_assets_have_independent_boundaries(self) -> None:
+        start = datetime(2024, 1, 1, 10, tzinfo=UTC)
+        events = await collect(
+            BarAggregator(
+                MockDataFeed(
+                    [
+                        trade("AAPL", start, 150.0, 100),
+                        trade("GOOGL", start + timedelta(seconds=30), 2_800.0, 50),
+                        trade("AAPL", start + timedelta(minutes=1), 151.0, 75),
+                        trade("GOOGL", start + timedelta(minutes=2), 2_805.0, 20),
+                    ]
+                )
+            )
+        )
 
-        # No bars emitted yet (need next minute to emit)
-        assert len(bars) == 0
-
-    async def test_bar_boundary_emission(self):
-        """Test bar emission when crossing minute boundary."""
-        base_time = datetime(2024, 1, 1, 10, 0, 0)
-        mock_data = [
-            (base_time, {"AAPL": {"price": 150.0, "size": 100}}, {}),
-            (base_time + timedelta(seconds=30), {"AAPL": {"price": 151.0, "size": 50}}, {}),
-            (base_time + timedelta(minutes=1), {"AAPL": {"price": 152.0, "size": 75}}, {}),
+        identities = [(event.asset, event.event_time) for event in events]
+        assert identities == [
+            ("AAPL", start),
+            ("GOOGL", start),
+            ("AAPL", start + timedelta(minutes=1)),
+            ("GOOGL", start + timedelta(minutes=2)),
         ]
-        mock_feed = MockDataFeed(mock_data)
-        aggregator = BarAggregator(mock_feed)
 
-        await aggregator.start()
-        bars = []
+    async def test_assets_filter_excludes_unselected_source_events(self) -> None:
+        start = datetime(2024, 1, 1, 10, tzinfo=UTC)
+        events = await collect(
+            BarAggregator(
+                MockDataFeed([trade("AAPL", start, 150.0), trade("GOOGL", start, 2_800.0)]),
+                assets=["AAPL"],
+            )
+        )
 
-        try:
-            async with asyncio.timeout(1.0):
-                async for timestamp, data, context in aggregator:
-                    bars.append((timestamp, data, context))
-        except TimeoutError:
-            pass
+        assert [event.asset for event in events] == ["AAPL"]
 
-        aggregator.stop()
+    async def test_late_input_cannot_reopen_completed_bar(self) -> None:
+        start = datetime(2024, 1, 1, 10, tzinfo=UTC)
+        events = await collect(
+            BarAggregator(
+                MockDataFeed(
+                    [
+                        trade("AAPL", start, 150.0),
+                        trade("AAPL", start + timedelta(minutes=1), 151.0),
+                        trade("AAPL", start + timedelta(seconds=30), 999.0),
+                    ]
+                )
+            )
+        )
 
-        # Should have one bar for 10:00
-        assert len(bars) == 1
-        timestamp, data, context = bars[0]
-        assert timestamp == datetime(2024, 1, 1, 10, 0, 0)
-        assert "AAPL" in data
-        assert data["AAPL"]["open"] == 150.0
-        assert data["AAPL"]["high"] == 151.0
-        assert data["AAPL"]["low"] == 150.0
-        assert data["AAPL"]["close"] == 151.0
-        assert data["AAPL"]["volume"] == 150
+        assert [event.event_time for event in events] == [start, start + timedelta(minutes=1)]
+        assert events[0].payload.close == 150.0
+        assert events[1].payload.close == 151.0
 
-    async def test_multiple_assets(self):
-        """Test aggregation of multiple assets."""
-        base_time = datetime(2024, 1, 1, 10, 0, 0)
-        mock_data = [
-            (
-                base_time,
-                {"AAPL": {"price": 150.0, "size": 100}, "GOOGL": {"price": 2800.0, "size": 50}},
-                {},
-            ),
-            (base_time + timedelta(minutes=1), {"AAPL": {"price": 151.0, "size": 75}}, {}),
-        ]
-        mock_feed = MockDataFeed(mock_data)
-        aggregator = BarAggregator(mock_feed)
+    async def test_current_interval_shutdown_flush_is_evolving(self) -> None:
+        now = datetime.now(UTC)
+        start = now.replace(second=0, microsecond=0)
+        event = MarketEvent(
+            version=LifecycleVersion.V1,
+            event_time=now,
+            receipt_time=now,
+            kind=MarketEventKind.TRADE,
+            completion=EventCompletion.COMPLETE,
+            source="fixture",
+            asset="AAPL",
+            payload=TradePayload(price=150.0, size=10.0),
+            provider_sequence=1,
+        )
 
-        await aggregator.start()
-        bars = []
+        events = await collect(BarAggregator(MockDataFeed([event])))
 
-        try:
-            async with asyncio.timeout(1.0):
-                async for timestamp, data, context in aggregator:
-                    bars.append((timestamp, data, context))
-        except TimeoutError:
-            pass
+        assert len(events) == 1
+        assert events[0].event_time == start
+        assert events[0].completion is EventCompletion.EVOLVING
 
-        aggregator.stop()
-
-        assert len(bars) == 1
-        timestamp, data, context = bars[0]
-        assert "AAPL" in data
-        assert "GOOGL" in data
-        assert data["AAPL"]["open"] == 150.0
-        assert data["GOOGL"]["open"] == 2800.0
-
-    async def test_assets_filter(self):
-        """Test that the optional assets filter is applied."""
-        base_time = datetime(2024, 1, 1, 10, 0, 0)
-        mock_data = [
-            (
-                base_time,
-                {"AAPL": {"price": 150.0, "size": 100}, "GOOGL": {"price": 2800.0, "size": 50}},
-                {},
-            ),
-            (
-                base_time + timedelta(minutes=1),
-                {"AAPL": {"price": 151.0, "size": 75}, "GOOGL": {"price": 2805.0, "size": 20}},
-                {},
-            ),
-        ]
-        mock_feed = MockDataFeed(mock_data)
-        aggregator = BarAggregator(mock_feed, assets=["AAPL"])
-
-        await aggregator.start()
-        bars = []
-
-        async for timestamp, data, context in aggregator:
-            bars.append((timestamp, data, context))
-
-        assert len(bars) == 1
-        assert "AAPL" in bars[0][1]
-        assert "GOOGL" not in bars[0][1]
-
-    async def test_ohlcv_bar_input(self):
-        """Test handling OHLCV bar input (not just ticks)."""
-        base_time = datetime(2024, 1, 1, 10, 0, 0)
-        mock_data = [
-            (
-                base_time,
-                {
-                    "AAPL": {
-                        "open": 149.0,
-                        "high": 151.0,
-                        "low": 148.0,
-                        "close": 150.0,
-                        "volume": 1000,
-                    }
-                },
-                {},
-            ),
-            (base_time + timedelta(minutes=1), {"AAPL": {"close": 152.0, "volume": 500}}, {}),
-        ]
-        mock_feed = MockDataFeed(mock_data)
-        aggregator = BarAggregator(mock_feed)
-
-        await aggregator.start()
-        bars = []
-
-        try:
-            async with asyncio.timeout(1.0):
-                async for timestamp, data, context in aggregator:
-                    bars.append((timestamp, data, context))
-        except TimeoutError:
-            pass
-
-        aggregator.stop()
-
-        assert len(bars) == 1
-        timestamp, data, context = bars[0]
-        # Should aggregate based on 'close' field
-        assert data["AAPL"]["close"] == 150.0
-        assert data["AAPL"]["volume"] == 1000
-
-    async def test_multiple_bars(self):
-        """Test emission of multiple consecutive bars."""
-        base_time = datetime(2024, 1, 1, 10, 0, 0)
-        mock_data = [
-            (base_time, {"AAPL": {"price": 150.0, "size": 100}}, {}),
-            (base_time + timedelta(minutes=1), {"AAPL": {"price": 151.0, "size": 50}}, {}),
-            (base_time + timedelta(minutes=2), {"AAPL": {"price": 152.0, "size": 75}}, {}),
-            (base_time + timedelta(minutes=3), {"AAPL": {"price": 153.0, "size": 25}}, {}),
-        ]
-        mock_feed = MockDataFeed(mock_data)
-        aggregator = BarAggregator(mock_feed)
-
-        await aggregator.start()
-        bars = []
-
-        try:
-            async with asyncio.timeout(1.0):
-                async for timestamp, data, context in aggregator:
-                    bars.append((timestamp, data, context))
-        except TimeoutError:
-            pass
-
-        aggregator.stop()
-
-        # Should have 3 bars (10:00, 10:01, 10:02)
-        assert len(bars) == 3
-        assert bars[0][0] == datetime(2024, 1, 1, 10, 0, 0)
-        assert bars[1][0] == datetime(2024, 1, 1, 10, 1, 0)
-        assert bars[2][0] == datetime(2024, 1, 1, 10, 2, 0)
-
-    async def test_buffer_reset_between_bars(self):
-        """Test that buffers are reset between bars."""
-        base_time = datetime(2024, 1, 1, 10, 0, 0)
-        mock_data = [
-            (base_time, {"AAPL": {"price": 150.0, "size": 100}}, {}),
-            (base_time + timedelta(seconds=30), {"AAPL": {"price": 155.0, "size": 50}}, {}),
-            (base_time + timedelta(minutes=1), {"AAPL": {"price": 145.0, "size": 75}}, {}),
-            (base_time + timedelta(minutes=2), {"AAPL": {"price": 148.0, "size": 25}}, {}),
-        ]
-        mock_feed = MockDataFeed(mock_data)
-        aggregator = BarAggregator(mock_feed)
-
-        await aggregator.start()
-        bars = []
-
-        try:
-            async with asyncio.timeout(1.0):
-                async for timestamp, data, context in aggregator:
-                    bars.append((timestamp, data, context))
-        except TimeoutError:
-            pass
-
-        aggregator.stop()
-
-        assert len(bars) == 2
-
-        # First bar (10:00): high should be 155, low 150
-        assert bars[0][1]["AAPL"]["high"] == 155.0
-        assert bars[0][1]["AAPL"]["low"] == 150.0
-
-        # Second bar (10:01): should be independent, not carry over previous high
-        assert bars[1][1]["AAPL"]["open"] == 145.0
-        assert bars[1][1]["AAPL"]["high"] == 145.0  # Only one tick
-        assert bars[1][1]["AAPL"]["low"] == 145.0
-
-    async def test_5minute_bars(self):
-        """Test 5-minute bar aggregation."""
-        base_time = datetime(2024, 1, 1, 10, 0, 0)
-        mock_data = [
-            (base_time, {"AAPL": {"price": 150.0, "size": 100}}, {}),
-            (base_time + timedelta(minutes=2), {"AAPL": {"price": 151.0, "size": 50}}, {}),
-            (base_time + timedelta(minutes=4), {"AAPL": {"price": 152.0, "size": 75}}, {}),
-            (base_time + timedelta(minutes=5), {"AAPL": {"price": 153.0, "size": 25}}, {}),
-        ]
-        mock_feed = MockDataFeed(mock_data)
-        aggregator = BarAggregator(mock_feed, bar_size_minutes=5)
-
-        await aggregator.start()
-        bars = []
-
-        try:
-            async with asyncio.timeout(1.0):
-                async for timestamp, data, context in aggregator:
-                    bars.append((timestamp, data, context))
-        except TimeoutError:
-            pass
-
-        aggregator.stop()
-
-        # Should have 1 bar (10:00-10:05)
-        assert len(bars) == 1
-        timestamp, data, context = bars[0]
-        assert timestamp == datetime(2024, 1, 1, 10, 0, 0)
-        assert data["AAPL"]["open"] == 150.0
-        assert data["AAPL"]["high"] == 152.0
-        assert data["AAPL"]["low"] == 150.0
-        assert data["AAPL"]["close"] == 152.0
-        assert data["AAPL"]["volume"] == 225
-
-    async def test_stop_signal(self):
-        """Test that stop() terminates iteration."""
-        base_time = datetime(2024, 1, 1, 10, 0, 0)
-        # Infinite data source
-        mock_data = [
-            (base_time + timedelta(seconds=i), {"AAPL": {"price": 150.0, "size": 10}}, {})
-            for i in range(1000)
-        ]
-        mock_feed = MockDataFeed(mock_data)
-        aggregator = BarAggregator(mock_feed)
-
-        await aggregator.start()
-        bars = []
-
-        # Collect a few bars then stop
-        count = 0
-        async for timestamp, data, context in aggregator:
-            bars.append((timestamp, data, context))
-            count += 1
-            if count >= 2:
-                aggregator.stop()
-                break
-
-        # Should have stopped cleanly
-        assert len(bars) >= 2
-
-    async def test_flush_checker_handles_timezone_aware_bars(self):
-        """Test flush checker works with timezone-aware timestamps."""
-        mock_feed = MockDataFeed([])
-        aggregator = BarAggregator(mock_feed, flush_timeout_seconds=0.0)
+    async def test_flush_checker_completes_elapsed_interval(self) -> None:
+        aggregator = BarAggregator(MockDataFeed([]), flush_timeout_seconds=0.0)
+        start = datetime(2024, 1, 1, 10, tzinfo=UTC)
         aggregator._running = True
-        aggregator._current_bar_start = datetime(2024, 1, 1, 10, 0, 0, tzinfo=UTC)
+        aggregator._current_bar_start["AAPL"] = start
         aggregator._buffers["AAPL"] = BarBuffer()
         aggregator._buffers["AAPL"].update(150.0, 100)
 
-        flush_task = asyncio.create_task(aggregator._flush_checker())
+        task = asyncio.create_task(aggregator._flush_checker())
         try:
-            bar_time, data, _context = await asyncio.wait_for(aggregator._queue.get(), timeout=1.5)
+            event = await asyncio.wait_for(aggregator._queue.get(), timeout=1.5)
         finally:
             aggregator._running = False
-            flush_task.cancel()
-            try:
-                await flush_task
-            except asyncio.CancelledError:
-                pass
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
 
-        assert bar_time == datetime(2024, 1, 1, 10, 0, 0, tzinfo=UTC)
-        assert data["AAPL"]["close"] == 150.0
+        assert isinstance(event, MarketEvent)
+        assert event.event_time == start
+        assert event.completion is EventCompletion.COMPLETE
+        assert event.payload.close == 150.0
 
-    async def test_empty_feed(self):
-        """Test handling of empty data feed."""
-        mock_feed = MockDataFeed([])
-        aggregator = BarAggregator(mock_feed)
-
-        await aggregator.start()
-        bars = []
-
-        try:
-            async with asyncio.timeout(0.5):
-                async for timestamp, data, context in aggregator:
-                    bars.append((timestamp, data, context))
-        except TimeoutError:
-            pass
-
-        aggregator.stop()
-
-        assert len(bars) == 0
-
-    async def test_asset_appears_midstream(self):
-        """Test asset appearing mid-stream (not in first tick)."""
-        base_time = datetime(2024, 1, 1, 10, 0, 0)
-        mock_data = [
-            (base_time, {"AAPL": {"price": 150.0, "size": 100}}, {}),
-            (
-                base_time + timedelta(seconds=30),
-                {
-                    "AAPL": {"price": 151.0, "size": 50},
-                    "GOOGL": {"price": 2800.0, "size": 25},  # New asset
-                },
-                {},
-            ),
-            (base_time + timedelta(minutes=1), {"AAPL": {"price": 152.0, "size": 75}}, {}),
-        ]
-        mock_feed = MockDataFeed(mock_data)
-        aggregator = BarAggregator(mock_feed)
+    async def test_invalid_legacy_payload_failure_reaches_consumer(self) -> None:
+        start = datetime(2024, 1, 1, 10, tzinfo=UTC)
+        aggregator = BarAggregator(MockDataFeed([(start, {"AAPL": {"price": float("nan")}}, {})]))
 
         await aggregator.start()
-        bars = []
+        with pytest.raises(ValueError, match="finite"):
+            _ = [event async for event in aggregator]
 
-        try:
-            async with asyncio.timeout(1.0):
-                async for timestamp, data, context in aggregator:
-                    bars.append((timestamp, data, context))
-        except TimeoutError:
-            pass
-
-        aggregator.stop()
-
-        assert len(bars) == 1
-        timestamp, data, context = bars[0]
-        assert "AAPL" in data
-        assert "GOOGL" in data
-        assert data["GOOGL"]["open"] == 2800.0
-
-    async def test_no_data_for_asset_in_bar(self):
-        """Test that assets with no data in a bar are not included."""
-        base_time = datetime(2024, 1, 1, 10, 0, 0)
-        mock_data = [
-            (base_time, {"AAPL": {"price": 150.0, "size": 100}}, {}),
-            (base_time + timedelta(minutes=1), {"GOOGL": {"price": 2800.0, "size": 50}}, {}),
-            (base_time + timedelta(minutes=2), {"AAPL": {"price": 151.0, "size": 75}}, {}),
-        ]
-        mock_feed = MockDataFeed(mock_data)
-        aggregator = BarAggregator(mock_feed)
+    async def test_naive_legacy_timestamp_failure_reaches_consumer(self) -> None:
+        start = datetime(2024, 1, 1, 10)
+        aggregator = BarAggregator(MockDataFeed([(start, {"AAPL": {"price": 150.0}}, {})]))
 
         await aggregator.start()
-        bars = []
+        with pytest.raises(FeedContractError, match="timezone-aware UTC"):
+            _ = [event async for event in aggregator]
 
-        try:
-            async with asyncio.timeout(1.0):
-                async for timestamp, data, context in aggregator:
-                    bars.append((timestamp, data, context))
-        except TimeoutError:
-            pass
+    async def test_empty_feed_stops_without_events(self) -> None:
+        aggregator = BarAggregator(MockDataFeed([]))
 
-        aggregator.stop()
-
-        # Should have 2 bars
-        assert len(bars) == 2
-        # First bar only has AAPL
-        assert "AAPL" in bars[0][1]
-        assert "GOOGL" not in bars[0][1]
-        # Second bar only has GOOGL
-        assert "GOOGL" in bars[1][1]
-        assert "AAPL" not in bars[1][1]
+        assert await collect(aggregator) == []

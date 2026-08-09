@@ -22,6 +22,7 @@ from ml4t.live import (
     CryptoFeed,
     DataBentoFeed,
     DataFeedProtocol,
+    FeedContractError,
     IBBroker,
     IBDataFeed,
     LiveEngine,
@@ -51,7 +52,7 @@ from ml4t.live import (
 | Engine | `LiveEngine`, `RuntimeState`, `RuntimeTransition`, `RuntimeFailureError`, `RuntimeCleanupError` |
 | Brokers | `IBBroker`, `AlpacaBroker` |
 | Feeds | `IBDataFeed`, `AlpacaDataFeed`, `DataBentoFeed`, `CryptoFeed`, `OKXFundingFeed` |
-| Feed helpers | `BarAggregator`, `BarBuffer` |
+| Feed helpers | `BarAggregator`, `BarBuffer`, `FeedContractError` |
 | Orders | `CanonicalOrderRequest`, `OrderValidationError`, `BrokerOrderContractError` |
 | Safety | `LiveRiskConfig`, `SafeBroker`, `RiskState`, `RiskLimitError`, `PersistenceSafetyError`, `AuditJournalError`, `AcceptedOrderPersistenceError`, `VirtualPortfolio` |
 | Sync/async bridge | `ThreadSafeBrokerWrapper` |
@@ -134,6 +135,10 @@ from ml4t.live import (
       show_root_heading: true
 
 ::: ml4t.live.feeds.aggregator.BarBuffer
+    options:
+      show_root_heading: true
+
+::: ml4t.live.feeds.events.FeedContractError
     options:
       show_root_heading: true
 

@@ -6,11 +6,30 @@ for strategy consumption. BarBuffer handles the OHLCV aggregation logic.
 
 import asyncio
 import logging
+import math
 import time
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
+
+from ml4t.specs import (
+    BarPayload,
+    EventCompletion,
+    GapEvidence,
+    LifecycleVersion,
+    MarketEvent,
+    MarketEventKind,
+    TradePayload,
+)
+
+from ml4t.live.feeds.events import (
+    FeedContractError,
+    sequence_unavailable,
+    strategy_input,
+    utc_datetime,
+    validate_event_timing,
+)
 
 if TYPE_CHECKING:
     from ml4t.live.protocols import DataFeedProtocol
@@ -34,9 +53,9 @@ class BarBuffer:
     high: float = float("-inf")
     low: float = float("inf")
     close: float = 0.0
-    volume: int = 0
+    volume: float = 0.0
 
-    def update(self, price: float, size: int = 0) -> None:
+    def update(self, price: float, size: float = 0) -> None:
         """Add a tick to the bar.
 
         Args:
@@ -49,6 +68,19 @@ class BarBuffer:
         self.low = min(self.low, price)
         self.close = price
         self.volume += size
+
+    def update_bar(self, payload: dict[str, Any]) -> None:
+        """Merge one validated OHLCV payload without discarding its range."""
+        open_price = float(payload["open"])
+        high = float(payload["high"])
+        low = float(payload["low"])
+        close = float(payload["close"])
+        if self.open is None:
+            self.open = open_price
+        self.high = max(self.high, high)
+        self.low = min(self.low, low)
+        self.close = close
+        self.volume += float(payload.get("volume", 0.0))
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to OHLCV dict.
@@ -71,7 +103,7 @@ class BarBuffer:
         self.high = float("-inf")
         self.low = float("inf")
         self.close = 0.0
-        self.volume = 0
+        self.volume = 0.0
 
 
 class BarAggregator:
@@ -91,9 +123,8 @@ class BarAggregator:
         raw_feed = IBTickFeed(ib, assets=['AAPL'])
         aggregated_feed = BarAggregator(raw_feed, bar_size_minutes=1)
 
-        async for timestamp, data, context in aggregated_feed:
-            # data contains completed minute bars only
-            strategy.on_data(timestamp, data, context, broker)
+        async for event in aggregated_feed:
+            consume(event)
     """
 
     def __init__(
@@ -111,6 +142,17 @@ class BarAggregator:
             assets: List of assets to track (default: all from source)
             flush_timeout_seconds: Seconds after bar end before forcing emit (default: 2.0)
         """
+        if isinstance(bar_size_minutes, bool) or not isinstance(bar_size_minutes, int):
+            raise TypeError("bar_size_minutes must be an integer")
+        if bar_size_minutes <= 0:
+            raise ValueError("bar_size_minutes must be positive")
+        if (
+            isinstance(flush_timeout_seconds, bool)
+            or not isinstance(flush_timeout_seconds, int | float)
+            or not math.isfinite(flush_timeout_seconds)
+            or flush_timeout_seconds < 0
+        ):
+            raise ValueError("flush_timeout_seconds must be finite and non-negative")
         self.source = source_feed
         self.bar_size = timedelta(minutes=bar_size_minutes)
         self.assets = assets or []
@@ -118,17 +160,23 @@ class BarAggregator:
 
         # Per-asset bar buffers
         self._buffers: dict[str, BarBuffer] = {}
-        self._current_bar_start: datetime | None = None
+        self._current_bar_start: dict[str, datetime] = {}
+        self._source_events: dict[str, MarketEvent] = {}
+        self._last_completed_bar: dict[str, datetime] = {}
         self._last_data_time: float = 0  # Track when we last got data
 
         # Output queue (use None sentinel for shutdown instead of timeout)
-        self._queue: asyncio.Queue = asyncio.Queue()
+        self._queue: asyncio.Queue[MarketEvent | None] = asyncio.Queue()
         self._running = False
         self._aggregate_task: asyncio.Task | None = None
         self._flush_task: asyncio.Task | None = None
+        self._failure: Exception | None = None
 
     async def start(self) -> None:
         """Start aggregation."""
+        if self._running:
+            return
+        self._failure = None
         self._running = True
         await self.source.start()
 
@@ -139,12 +187,10 @@ class BarAggregator:
         """Stop aggregation."""
         self._running = False
         self.source.stop()
-        self._signal_stop()
-        if self._aggregate_task:
-            self._aggregate_task.cancel()
-        # Cancel flush task
         if self._flush_task:
             self._flush_task.cancel()
+        if self._aggregate_task is None:
+            self._signal_stop()
 
     async def _aggregate_loop(self) -> None:
         """Main aggregation loop."""
@@ -152,46 +198,101 @@ class BarAggregator:
         self._flush_task = asyncio.create_task(self._flush_checker())
 
         try:
-            async for timestamp, data, _context in self.source:
+            async for item in self.source:
                 if not self._running:
                     break
 
+                if isinstance(item, MarketEvent):
+                    if item.kind is MarketEventKind.FUNDING:
+                        continue
+                    processing_time = datetime.now(UTC)
+                    validate_event_timing(
+                        item,
+                        processing_time=processing_time,
+                        max_age_seconds=None,
+                    )
+                    timestamp, data, _context = strategy_input(
+                        item,
+                        processing_time=processing_time,
+                    )
+                    self._source_events[item.asset] = item
+                else:
+                    timestamp, data, _context = item
+                    timestamp = utc_datetime(timestamp, "aggregator input timestamp")
+
                 # Track when we got data (for flush timeout)
                 self._last_data_time = time.time()
-
-                # Determine bar boundary
-                bar_start = self._truncate_to_bar(timestamp)
-
-                # If bar boundary crossed, emit completed bar
-                if self._current_bar_start and bar_start > self._current_bar_start:
-                    await self._emit_bar(self._current_bar_start)
-
-                # Update current bar start
-                self._current_bar_start = bar_start
 
                 # Accumulate data into buffers
                 for asset, ohlcv in data.items():
                     if self.assets and asset not in self.assets:
                         continue
 
+                    bar_start = self._truncate_to_bar(timestamp)
+                    if bar_start <= self._last_completed_bar.get(
+                        asset, datetime.min.replace(tzinfo=UTC)
+                    ):
+                        logger.warning("BarAggregator: Rejected event for completed %s bar", asset)
+                        continue
+                    current_start = self._current_bar_start.get(asset)
+                    if current_start is not None and bar_start > current_start:
+                        await self._emit_asset_bar(asset, current_start)
+                    elif current_start is not None and bar_start < current_start:
+                        logger.warning("BarAggregator: Rejected late event for %s", asset)
+                        continue
+                    self._current_bar_start[asset] = bar_start
+
                     if asset not in self._buffers:
                         self._buffers[asset] = BarBuffer()
 
                     # Handle different data formats
-                    if "close" in ohlcv:
+                    if all(field in ohlcv for field in ("open", "high", "low", "close")):
                         # OHLCV bar data
-                        self._buffers[asset].update(ohlcv["close"], ohlcv.get("volume", 0))
+                        payload = BarPayload(
+                            open=ohlcv["open"],
+                            high=ohlcv["high"],
+                            low=ohlcv["low"],
+                            close=ohlcv["close"],
+                            volume=ohlcv.get("volume", 0.0),
+                        )
+                        self._buffers[asset].update_bar(
+                            {
+                                "open": payload.open,
+                                "high": payload.high,
+                                "low": payload.low,
+                                "close": payload.close,
+                                "volume": payload.volume,
+                            }
+                        )
                     elif "price" in ohlcv:
                         # Tick data
-                        self._buffers[asset].update(ohlcv["price"], ohlcv.get("size", 0))
+                        payload = TradePayload(
+                            price=ohlcv["price"],
+                            size=ohlcv.get("size", 0.0),
+                        )
+                        self._buffers[asset].update(payload.price, payload.size)
+                    else:
+                        raise FeedContractError(
+                            f"aggregator input for {asset!r} must contain OHLC or price fields"
+                        )
+        except Exception as exc:
+            self._failure = exc
+            logger.exception("Bar aggregation failed")
         finally:
-            self._aggregate_task = None
             if self._flush_task:
                 self._flush_task.cancel()
                 self._flush_task = None
-            if self._running:
-                self._running = False
-                self._signal_stop()
+            for asset, bar_start in tuple(self._current_bar_start.items()):
+                completion = (
+                    EventCompletion.COMPLETE
+                    if datetime.now(UTC) >= bar_start + self.bar_size
+                    else EventCompletion.EVOLVING
+                )
+                await self._emit_asset_bar(asset, bar_start, completion=completion)
+            self._current_bar_start.clear()
+            self._running = False
+            self._aggregate_task = None
+            self._signal_stop()
 
     async def _flush_checker(self) -> None:
         """Force emit bars if no data arrives (Gemini "stuck bar" fix).
@@ -203,15 +304,13 @@ class BarAggregator:
             await asyncio.sleep(1.0)
             if not self._current_bar_start:
                 continue
-
-            # Check if we're past the bar end time + flush timeout
-            now = datetime.now(tz=self._current_bar_start.tzinfo)
-            bar_end = self._current_bar_start + self.bar_size
-
-            if now > bar_end + timedelta(seconds=self.flush_timeout):
-                logger.debug(f"Flush: Emitting stale bar at {self._current_bar_start}")
-                await self._emit_bar(self._current_bar_start)
-                self._current_bar_start = None  # Prevent double emit
+            for asset, bar_start in tuple(self._current_bar_start.items()):
+                now = datetime.now(tz=bar_start.tzinfo)
+                bar_end = bar_start + self.bar_size
+                if now > bar_end + timedelta(seconds=self.flush_timeout):
+                    logger.debug("Flush: Emitting stale %s bar at %s", asset, bar_start)
+                    await self._emit_asset_bar(asset, bar_start)
+                    self._current_bar_start.pop(asset, None)
 
     def _signal_stop(self) -> None:
         """Signal consumers that iteration should stop."""
@@ -230,36 +329,67 @@ class BarAggregator:
         truncated_minutes = (dt.minute // minutes_per_bar) * minutes_per_bar
         return dt.replace(minute=truncated_minutes, second=0, microsecond=0)
 
-    async def _emit_bar(self, bar_time: datetime) -> None:
+    async def _emit_asset_bar(
+        self,
+        asset: str,
+        bar_time: datetime,
+        *,
+        completion: EventCompletion = EventCompletion.COMPLETE,
+    ) -> None:
         """Emit completed bar.
 
         Args:
             bar_time: Timestamp for the bar being emitted
         """
-        if not self._buffers:
+        buffer = self._buffers.get(asset)
+        if buffer is None or buffer.open is None:
             return
+        payload = BarPayload(**buffer.to_dict())
+        buffer.reset()
+        source_event = self._source_events.get(asset)
+        gap: GapEvidence = (
+            source_event.gap
+            if source_event is not None and source_event.gap is not None
+            else sequence_unavailable("BarAggregator", "multiple input events per bar")
+        )
+        event = MarketEvent(
+            version=LifecycleVersion.V1,
+            event_time=bar_time,
+            receipt_time=datetime.now(UTC),
+            kind=MarketEventKind.BAR,
+            completion=completion,
+            source="bar_aggregator",
+            asset=asset,
+            payload=payload,
+            gap=gap,
+            metadata={
+                "bar_start": bar_time.isoformat(),
+                "bar_end": (bar_time + self.bar_size).isoformat(),
+                "source": source_event.source if source_event is not None else "legacy",
+            },
+        )
+        await self._queue.put(event)
+        if completion is EventCompletion.COMPLETE:
+            self._last_completed_bar[asset] = bar_time
+        logger.debug("Emitted completed bar at %s: %s", bar_time, asset)
 
-        # Build bar data
-        data = {}
-        for asset, buffer in self._buffers.items():
-            if buffer.open is not None:  # Has data
-                data[asset] = buffer.to_dict()
-                buffer.reset()
+    async def _emit_bar(self, bar_time: datetime) -> None:
+        """Emit all populated assets for compatibility with the public helper."""
+        for asset in tuple(self._buffers):
+            await self._emit_asset_bar(asset, bar_time)
 
-        if data:
-            await self._queue.put((bar_time, data, {}))
-            logger.debug(f"Emitted bar at {bar_time}: {list(data.keys())}")
-
-    async def __aiter__(self) -> AsyncIterator[tuple[datetime, dict, dict]]:
+    async def __aiter__(self) -> AsyncIterator[MarketEvent]:
         """Async iterator interface.
 
         Uses None sentinel for shutdown (Gemini fix: avoids busy-wait with 1s timeout).
 
         Yields:
-            Tuple of (timestamp, data, context) where data is {asset: ohlcv_dict}
+            One validated bar event per asset and interval.
         """
         while True:
             item = await self._queue.get()
             if item is None:  # Shutdown sentinel
+                if self._failure is not None:
+                    raise self._failure
                 break
             yield item

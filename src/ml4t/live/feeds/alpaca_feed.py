@@ -16,9 +16,8 @@ Example:
     )
     await feed.start()
 
-    async for timestamp, data, context in feed:
-        # data = {'AAPL': {'open': 150, 'high': 151, ...}, ...}
-        strategy.on_data(timestamp, data, context, broker)
+    async for event in feed:
+        consume(event)
 """
 
 import asyncio
@@ -29,7 +28,17 @@ from typing import Any
 
 from alpaca.data.enums import DataFeed
 from alpaca.data.live import CryptoDataStream, StockDataStream
+from ml4t.specs import (
+    BarPayload,
+    EventCompletion,
+    LifecycleVersion,
+    MarketEvent,
+    MarketEventKind,
+    QuotePayload,
+    TradePayload,
+)
 
+from ml4t.live.feeds.events import sequence_unavailable, utc_datetime
 from ml4t.live.persistence import redact_sensitive
 from ml4t.live.protocols import DataFeedProtocol
 
@@ -52,9 +61,7 @@ class AlpacaDataFeed(DataFeedProtocol):
         sip: Premium (full market data, requires subscription)
 
     Data Format:
-        timestamp: datetime - Bar/quote/trade timestamp
-        data: dict[str, dict] - {symbol: {'open', 'high', 'low', 'close', 'volume'}}
-        context: dict - Additional metadata
+        Validated ``MarketEvent`` bars, quotes, or trades with UTC event and receipt times.
 
     Example:
         # Stocks only
@@ -73,8 +80,8 @@ class AlpacaDataFeed(DataFeedProtocol):
 
         await feed.start()
 
-        async for timestamp, data, context in feed:
-            strategy.on_data(timestamp, data, context, broker)
+        async for event in feed:
+            consume(event)
     """
 
     def __init__(
@@ -95,6 +102,14 @@ class AlpacaDataFeed(DataFeedProtocol):
             data_type: Type of data - 'bars' (default), 'quotes', or 'trades'
             feed: Data feed type - 'iex' (free) or 'sip' (premium)
         """
+        if not symbols or any(
+            not isinstance(symbol, str) or not symbol.strip() for symbol in symbols
+        ):
+            raise ValueError("symbols must contain at least one non-empty symbol")
+        if data_type not in {"bars", "quotes", "trades"}:
+            raise ValueError("data_type must be bars, quotes, or trades")
+        if feed.lower() not in {"iex", "sip"}:
+            raise ValueError("feed must be iex or sip")
         self._api_key = api_key
         self._secret_key = secret_key
         self._data_type = data_type
@@ -108,10 +123,12 @@ class AlpacaDataFeed(DataFeedProtocol):
         self._stock_stream: StockDataStream | None = None
         self._crypto_stream: CryptoDataStream | None = None
         self._stream_tasks: list[asyncio.Task] = []
+        self._failure: Exception | None = None
 
         # State
-        self._queue: asyncio.Queue = asyncio.Queue()
+        self._queue: asyncio.Queue[MarketEvent | None] = asyncio.Queue()
         self._running = False
+        self.max_event_age_seconds = 120.0 if data_type == "bars" else 30.0
 
         # Statistics
         self._bar_count = 0
@@ -138,6 +155,11 @@ class AlpacaDataFeed(DataFeedProtocol):
             f"AlpacaDataFeed: Starting feed for "
             f"{len(self._stock_symbols)} stocks, {len(self._crypto_symbols)} crypto"
         )
+        if self._running:
+            return
+        self._queue = asyncio.Queue()
+        self._stream_tasks.clear()
+        self._failure = None
         self._running = True
 
         # Create stock stream if we have stock symbols
@@ -225,6 +247,44 @@ class AlpacaDataFeed(DataFeedProtocol):
 
     # === Stock Handlers ===
 
+    def _event(
+        self,
+        message: Any,
+        *,
+        kind: MarketEventKind,
+        payload: BarPayload | QuotePayload | TradePayload,
+        metadata: dict[str, Any],
+    ) -> MarketEvent:
+        event_time = utc_datetime(getattr(message, "timestamp", None), "Alpaca timestamp")
+        provider_sequence = getattr(message, "sequence", None)
+        if provider_sequence is None:
+            provider_sequence = getattr(message, "id", None)
+        if provider_sequence is not None and (
+            isinstance(provider_sequence, bool) or not isinstance(provider_sequence, str | int)
+        ):
+            provider_sequence = str(provider_sequence)
+        return MarketEvent(
+            version=LifecycleVersion.V1,
+            event_time=event_time,
+            receipt_time=datetime.now(UTC),
+            kind=kind,
+            completion=(
+                EventCompletion.COMPLETE
+                if kind is MarketEventKind.BAR
+                else EventCompletion.EVOLVING
+            ),
+            source="alpaca",
+            asset=str(message.symbol).upper(),
+            payload=payload,
+            provider_sequence=provider_sequence,
+            gap=(
+                sequence_unavailable("Alpaca", f"{kind.value} stream")
+                if provider_sequence is None
+                else None
+            ),
+            metadata=metadata,
+        )
+
     async def _on_stock_bar(self, bar: Any) -> None:
         """Handle stock bar data.
 
@@ -234,29 +294,27 @@ class AlpacaDataFeed(DataFeedProtocol):
         if not self._running:
             return
 
+        event = self._event(
+            bar,
+            kind=MarketEventKind.BAR,
+            payload=BarPayload(
+                float(bar.open),
+                float(bar.high),
+                float(bar.low),
+                float(bar.close),
+                float(bar.volume),
+            ),
+            metadata={
+                "vwap": float(bar.vwap) if getattr(bar, "vwap", None) is not None else None,
+                "trade_count": (
+                    int(bar.trade_count) if getattr(bar, "trade_count", None) is not None else None
+                ),
+                "market": "equity",
+                "feed": self._feed,
+            },
+        )
+        self._queue.put_nowait(event)
         self._bar_count += 1
-        symbol = bar.symbol.upper()
-
-        timestamp = bar.timestamp if hasattr(bar, "timestamp") else datetime.now(UTC)
-        data = {
-            symbol: {
-                "open": float(bar.open),
-                "high": float(bar.high),
-                "low": float(bar.low),
-                "close": float(bar.close),
-                "volume": int(bar.volume),
-            }
-        }
-        context = {
-            symbol: {
-                "vwap": float(bar.vwap) if hasattr(bar, "vwap") and bar.vwap else None,
-                "trade_count": int(bar.trade_count)
-                if hasattr(bar, "trade_count") and bar.trade_count
-                else None,
-            }
-        }
-
-        self._queue.put_nowait((timestamp, data, context))
 
     async def _on_stock_quote(self, quote: Any) -> None:
         """Handle stock quote data.
@@ -267,31 +325,19 @@ class AlpacaDataFeed(DataFeedProtocol):
         if not self._running:
             return
 
+        event = self._event(
+            quote,
+            kind=MarketEventKind.QUOTE,
+            payload=QuotePayload(
+                float(quote.bid_price),
+                float(quote.ask_price),
+                float(quote.bid_size),
+                float(quote.ask_size),
+            ),
+            metadata={"market": "equity", "feed": self._feed},
+        )
+        self._queue.put_nowait(event)
         self._quote_count += 1
-        symbol = quote.symbol.upper()
-
-        timestamp = quote.timestamp if hasattr(quote, "timestamp") else datetime.now(UTC)
-
-        # Calculate mid price
-        bid = float(quote.bid_price) if quote.bid_price else 0.0
-        ask = float(quote.ask_price) if quote.ask_price else 0.0
-        mid = (bid + ask) / 2 if bid and ask else bid or ask
-
-        data = {
-            symbol: {
-                "price": mid,
-                "bid": bid,
-                "ask": ask,
-            }
-        }
-        context = {
-            symbol: {
-                "bid_size": int(quote.bid_size) if quote.bid_size else 0,
-                "ask_size": int(quote.ask_size) if quote.ask_size else 0,
-            }
-        }
-
-        self._queue.put_nowait((timestamp, data, context))
 
     async def _on_stock_trade(self, trade: Any) -> None:
         """Handle stock trade data.
@@ -302,24 +348,19 @@ class AlpacaDataFeed(DataFeedProtocol):
         if not self._running:
             return
 
+        event = self._event(
+            trade,
+            kind=MarketEventKind.TRADE,
+            payload=TradePayload(float(trade.price), float(trade.size)),
+            metadata={
+                "exchange": str(trade.exchange) if getattr(trade, "exchange", None) else None,
+                "conditions": [str(value) for value in (getattr(trade, "conditions", None) or [])],
+                "market": "equity",
+                "feed": self._feed,
+            },
+        )
+        self._queue.put_nowait(event)
         self._trade_count += 1
-        symbol = trade.symbol.upper()
-
-        timestamp = trade.timestamp if hasattr(trade, "timestamp") else datetime.now(UTC)
-        data = {
-            symbol: {
-                "price": float(trade.price),
-                "size": int(trade.size),
-            }
-        }
-        context = {
-            symbol: {
-                "exchange": trade.exchange if hasattr(trade, "exchange") else None,
-                "conditions": trade.conditions if hasattr(trade, "conditions") else None,
-            }
-        }
-
-        self._queue.put_nowait((timestamp, data, context))
 
     # === Crypto Handlers ===
 
@@ -332,29 +373,26 @@ class AlpacaDataFeed(DataFeedProtocol):
         if not self._running:
             return
 
+        event = self._event(
+            bar,
+            kind=MarketEventKind.BAR,
+            payload=BarPayload(
+                float(bar.open),
+                float(bar.high),
+                float(bar.low),
+                float(bar.close),
+                float(bar.volume),
+            ),
+            metadata={
+                "vwap": float(bar.vwap) if getattr(bar, "vwap", None) is not None else None,
+                "trade_count": (
+                    int(bar.trade_count) if getattr(bar, "trade_count", None) is not None else None
+                ),
+                "market": "crypto",
+            },
+        )
+        self._queue.put_nowait(event)
         self._bar_count += 1
-        symbol = bar.symbol.upper()
-
-        timestamp = bar.timestamp if hasattr(bar, "timestamp") else datetime.now(UTC)
-        data = {
-            symbol: {
-                "open": float(bar.open),
-                "high": float(bar.high),
-                "low": float(bar.low),
-                "close": float(bar.close),
-                "volume": float(bar.volume),  # Crypto uses float volume
-            }
-        }
-        context = {
-            symbol: {
-                "vwap": float(bar.vwap) if hasattr(bar, "vwap") and bar.vwap else None,
-                "trade_count": int(bar.trade_count)
-                if hasattr(bar, "trade_count") and bar.trade_count
-                else None,
-            }
-        }
-
-        self._queue.put_nowait((timestamp, data, context))
 
     async def _on_crypto_quote(self, quote: Any) -> None:
         """Handle crypto quote data.
@@ -365,30 +403,19 @@ class AlpacaDataFeed(DataFeedProtocol):
         if not self._running:
             return
 
+        event = self._event(
+            quote,
+            kind=MarketEventKind.QUOTE,
+            payload=QuotePayload(
+                float(quote.bid_price),
+                float(quote.ask_price),
+                float(quote.bid_size),
+                float(quote.ask_size),
+            ),
+            metadata={"market": "crypto"},
+        )
+        self._queue.put_nowait(event)
         self._quote_count += 1
-        symbol = quote.symbol.upper()
-
-        timestamp = quote.timestamp if hasattr(quote, "timestamp") else datetime.now(UTC)
-
-        bid = float(quote.bid_price) if quote.bid_price else 0.0
-        ask = float(quote.ask_price) if quote.ask_price else 0.0
-        mid = (bid + ask) / 2 if bid and ask else bid or ask
-
-        data = {
-            symbol: {
-                "price": mid,
-                "bid": bid,
-                "ask": ask,
-            }
-        }
-        context = {
-            symbol: {
-                "bid_size": float(quote.bid_size) if quote.bid_size else 0.0,
-                "ask_size": float(quote.ask_size) if quote.ask_size else 0.0,
-            }
-        }
-
-        self._queue.put_nowait((timestamp, data, context))
 
     async def _on_crypto_trade(self, trade: Any) -> None:
         """Handle crypto trade data.
@@ -399,23 +426,19 @@ class AlpacaDataFeed(DataFeedProtocol):
         if not self._running:
             return
 
+        event = self._event(
+            trade,
+            kind=MarketEventKind.TRADE,
+            payload=TradePayload(float(trade.price), float(trade.size)),
+            metadata={
+                "taker_side": (
+                    str(trade.taker_side) if getattr(trade, "taker_side", None) else None
+                ),
+                "market": "crypto",
+            },
+        )
+        self._queue.put_nowait(event)
         self._trade_count += 1
-        symbol = trade.symbol.upper()
-
-        timestamp = trade.timestamp if hasattr(trade, "timestamp") else datetime.now(UTC)
-        data = {
-            symbol: {
-                "price": float(trade.price),
-                "size": float(trade.size),  # Crypto uses float
-            }
-        }
-        context = {
-            symbol: {
-                "taker_side": trade.taker_side if hasattr(trade, "taker_side") else None,
-            }
-        }
-
-        self._queue.put_nowait((timestamp, data, context))
 
     # === Stream Runners ===
 
@@ -437,6 +460,7 @@ class AlpacaDataFeed(DataFeedProtocol):
             if self._stock_stream:
                 self._stock_stream.stop()
         except Exception as e:
+            self._stream_failed(e)
             logger.error("AlpacaDataFeed: Stock stream error: %s", redact_sensitive(str(e)))
 
     async def _run_crypto_stream(self) -> None:
@@ -457,46 +481,69 @@ class AlpacaDataFeed(DataFeedProtocol):
             if self._crypto_stream:
                 self._crypto_stream.stop()
         except Exception as e:
+            self._stream_failed(e)
             logger.error("AlpacaDataFeed: Crypto stream error: %s", redact_sensitive(str(e)))
+
+    def _stream_failed(self, error: Exception) -> None:
+        """Wake the engine when a provider stream exits with an error."""
+        self._failure = error
+        self._running = False
+        current = asyncio.current_task()
+        for task in self._stream_tasks:
+            if task is not current and not task.done():
+                task.cancel()
+        for stream in (self._stock_stream, self._crypto_stream):
+            if stream is not None:
+                try:
+                    stream.stop()
+                except Exception as stop_error:
+                    error.add_note(
+                        f"stream stop also failed: {type(stop_error).__name__}: "
+                        f"{redact_sensitive(str(stop_error))}"
+                    )
+        self._queue.put_nowait(None)
 
     # === Async Iterator ===
 
-    async def __aiter__(self) -> AsyncIterator[tuple[datetime, dict, dict]]:
+    async def __aiter__(self) -> AsyncIterator[MarketEvent]:
         """Async iterator yielding market data.
 
         Yields:
-            Tuple of (timestamp, data, context) where:
-            - timestamp: datetime of bar/quote/trade
-            - data: {symbol: {'open', 'high', 'low', 'close', 'volume'}} for bars
-            - context: {symbol: additional metadata}
+            Validated bar, quote, or trade events.
 
         Stops when:
             - stop() is called (None sentinel)
             - Feed is not running
         """
-        while self._running:
+        while True:
             item = await self._queue.get()
 
             # None sentinel signals shutdown
             if item is None:
+                if self._failure is not None:
+                    raise RuntimeError("Alpaca stream failed") from self._failure
                 break
 
             yield item
 
-    async def __anext__(self) -> tuple[datetime, dict[str, Any], dict[str, Any]]:
+    async def __anext__(self) -> MarketEvent:
         """Get next data item.
 
         Returns:
-            Tuple of (timestamp, data, context)
+            A validated bar, quote, or trade event.
 
         Raises:
             StopAsyncIteration: When feed is stopped
         """
-        if not self._running:
+        if not self._running and self._queue.empty():
+            if self._failure is not None:
+                raise RuntimeError("Alpaca stream failed") from self._failure
             raise StopAsyncIteration
 
         item = await self._queue.get()
         if item is None:
+            if self._failure is not None:
+                raise RuntimeError("Alpaca stream failed") from self._failure
             raise StopAsyncIteration
 
         return item

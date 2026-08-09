@@ -1,9 +1,11 @@
 """Unit tests for IBDataFeed."""
 
 import asyncio
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from ib_async import Stock
+from ml4t.specs import MarketEventKind, QuotePayload, TradePayload
 
 from ml4t.live.feeds.ib_feed import IBDataFeed
 
@@ -71,6 +73,7 @@ class MockTicker:
         self.bidSize = None
         self.askSize = None
         self.volume = None
+        self.time = None
 
 
 @pytest.mark.asyncio
@@ -104,6 +107,13 @@ class TestIBDataFeed:
 
         assert feed.exchange == "NYSE"
         assert feed.tick_throttle_ms == 500
+
+    async def test_invalid_configuration_is_rejected(self):
+        mock_ib = MockIB()
+        with pytest.raises(ValueError, match="at least one"):
+            IBDataFeed(mock_ib, symbols=[])
+        with pytest.raises(ValueError, match="non-negative"):
+            IBDataFeed(mock_ib, symbols=["SPY"], tick_throttle_ms=-1)
 
     async def test_start_success(self):
         """Test successful feed start."""
@@ -169,12 +179,16 @@ class TestIBDataFeed:
         item = await asyncio.wait_for(feed._queue.get(), timeout=1.0)
         assert item is not None
 
-        timestamp, data, context = item
-        assert "SPY" in data
-        assert data["SPY"]["price"] == 450.0
-        assert data["SPY"]["size"] == 100
-        assert context["SPY"]["bid"] == 449.99
-        assert context["SPY"]["ask"] == 450.01
+        assert item.kind is MarketEventKind.TRADE
+        assert item.asset == "SPY"
+        assert item.payload == TradePayload(450.0, 100.0)
+        assert item.event_time.tzinfo is not None
+        assert item.metadata["event_time_capability"].startswith("local receipt")
+        quote = await asyncio.wait_for(feed._queue.get(), timeout=1.0)
+        assert quote is not None
+        assert quote.kind is MarketEventKind.QUOTE
+        assert quote.payload == QuotePayload(449.99, 450.01, 200.0, 150.0)
+        assert quote.metadata["volume"] == 1_000_000.0
 
         feed.stop()
 
@@ -233,6 +247,59 @@ class TestIBDataFeed:
 
         feed.stop()
 
+    async def test_naive_provider_time_is_rejected(self):
+        mock_ib = MockIB()
+        feed = IBDataFeed(mock_ib, symbols=["SPY"], tick_throttle_ms=0)
+        await feed.start()
+        ticker = MockTicker(Stock("SPY", "SMART", "USD"))
+        ticker.last = 450.0
+        ticker.lastSize = 100
+        ticker.time = datetime(2024, 1, 1)
+
+        mock_ib.pendingTickersEvent.emit([ticker])
+
+        assert feed._queue.empty()
+        assert feed.stats["rejected_count"] == 1
+        feed.stop()
+
+    async def test_crossed_quote_is_rejected_without_dropping_valid_trade(self):
+        mock_ib = MockIB()
+        feed = IBDataFeed(mock_ib, symbols=["SPY"], tick_throttle_ms=0)
+        await feed.start()
+        ticker = MockTicker(Stock("SPY", "SMART", "USD"))
+        ticker.last = 450.0
+        ticker.lastSize = 100
+        ticker.bid = 451.0
+        ticker.ask = 450.0
+        ticker.bidSize = 10
+        ticker.askSize = 10
+        ticker.time = datetime.now(UTC) - timedelta(milliseconds=1)
+
+        mock_ib.pendingTickersEvent.emit([ticker])
+
+        event = feed._queue.get_nowait()
+        assert event is not None
+        assert event.kind is MarketEventKind.TRADE
+        assert feed._queue.empty()
+        assert feed.stats["rejected_count"] == 1
+        feed.stop()
+
+    async def test_restart_does_not_consume_previous_shutdown_sentinel(self):
+        mock_ib = MockIB()
+        feed = IBDataFeed(mock_ib, symbols=["SPY"])
+        await feed.start()
+        feed.stop()
+
+        await feed.start()
+        ticker = MockTicker(Stock("SPY", "SMART", "USD"))
+        ticker.last = 450.0
+        ticker.lastSize = 100
+        mock_ib.pendingTickersEvent.emit([ticker])
+
+        event = await asyncio.wait_for(anext(feed.__aiter__()), timeout=1.0)
+        assert event.kind is MarketEventKind.TRADE
+        feed.stop()
+
     async def test_multiple_symbols(self):
         """Test feed with multiple symbols."""
         mock_ib = MockIB()
@@ -254,14 +321,9 @@ class TestIBDataFeed:
         mock_ib.pendingTickersEvent.emit(tickers)
         await asyncio.sleep(0.05)
 
-        # Get queued data
-        item = await asyncio.wait_for(feed._queue.get(), timeout=1.0)
-        timestamp, data, context = item
-
-        assert len(data) == 3
-        assert "SPY" in data
-        assert "QQQ" in data
-        assert "IWM" in data
+        events = [await asyncio.wait_for(feed._queue.get(), timeout=1.0) for _ in range(3)]
+        assert {event.asset for event in events if event is not None} == {"SPY", "QQQ", "IWM"}
+        assert all(event is not None and event.kind is MarketEventKind.TRADE for event in events)
 
         feed.stop()
 
@@ -282,16 +344,16 @@ class TestIBDataFeed:
         received = []
 
         async def collect_data():
-            async for timestamp, data, context in feed:
-                received.append((timestamp, data, context))
+            async for event in feed:
+                received.append(event)
                 if len(received) >= 1:
                     break
 
         await asyncio.wait_for(collect_data(), timeout=1.0)
 
         assert len(received) == 1
-        _, data, _ = received[0]
-        assert data["SPY"]["price"] == 450.0
+        assert received[0].asset == "SPY"
+        assert received[0].payload == TradePayload(450.0, 100.0)
 
         feed.stop()
 
@@ -340,7 +402,7 @@ class TestIBDataFeed:
 
         # Collect a few items then stop
         count = 0
-        async for timestamp, data, context in feed:
+        async for event in feed:
             count += 1
             if count >= 2:
                 feed.stop()

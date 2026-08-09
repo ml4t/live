@@ -1,12 +1,34 @@
 """Unit tests for OKXFundingFeed."""
 
 import asyncio
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from ml4t.specs import (
+    BarPayload,
+    EventCompletion,
+    FundingPayload,
+    LifecycleVersion,
+    MarketEvent,
+    MarketEventKind,
+)
 
 from ml4t.live.feeds.okx_feed import OKXFundingFeed
+
+
+def okx_bar(timestamp: datetime) -> MarketEvent:
+    return MarketEvent(
+        version=LifecycleVersion.V1,
+        event_time=timestamp,
+        receipt_time=timestamp,
+        kind=MarketEventKind.BAR,
+        completion=EventCompletion.COMPLETE,
+        source="okx",
+        asset="BTC-USDT-SWAP",
+        payload=BarPayload(44_000, 44_500, 43_900, 44_200, 150),
+        provider_sequence=int(timestamp.timestamp() * 1_000),
+    )
 
 
 class MockHttpxResponse:
@@ -79,16 +101,14 @@ class TestOKXFundingFeedInitialization:
         assert feed.timeframe == "4H"
         assert feed.poll_interval == 120.0
 
-    async def test_initial_timestamps_empty(self):
-        """Test that last_timestamps initialized for each symbol."""
+    async def test_initial_event_identity_sets_empty(self):
+        """Test that event identity sets start empty."""
         feed = OKXFundingFeed(
             symbols=["BTC-USDT-SWAP", "ETH-USDT-SWAP", "SOL-USDT-SWAP"],
         )
 
-        assert len(feed._last_timestamps) == 3
-        for symbol in feed.symbols:
-            assert symbol in feed._last_timestamps
-            assert feed._last_timestamps[symbol] is None
+        assert feed._emitted_bars == set()
+        assert feed._emitted_funding == set()
 
     async def test_initial_statistics(self):
         """Test initial statistics are zero."""
@@ -176,7 +196,7 @@ class TestOKXFundingFeedFetchOHLCV:
                 # Current (incomplete) bar
                 [str(ts_ms + 3600000), "45000", "45500", "44900", "45200", "100", "0", "0", "0"],
                 # Complete bar (use this one)
-                [str(ts_ms), "44000", "44500", "43900", "44200", "150", "0", "0", "0"],
+                [str(ts_ms), "44000", "44500", "43900", "44200", "150", "0", "0", "1"],
             ],
         }
 
@@ -186,13 +206,11 @@ class TestOKXFundingFeedFetchOHLCV:
         result = await feed._fetch_latest_ohlcv("BTC-USDT-SWAP")
 
         assert result is not None
-        timestamp, bar_data = result
-        assert timestamp == datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC)
-        assert bar_data["open"] == 44000.0
-        assert bar_data["high"] == 44500.0
-        assert bar_data["low"] == 43900.0
-        assert bar_data["close"] == 44200.0
-        assert bar_data["volume"] == 150.0
+        assert result.event_time == datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC)
+        assert result.kind is MarketEventKind.BAR
+        assert result.completion is EventCompletion.COMPLETE
+        assert result.payload == BarPayload(44000.0, 44500.0, 43900.0, 44200.0, 150.0)
+        assert result.provider_sequence == ts_ms
 
     async def test_fetch_ohlcv_api_error(self):
         """Test OHLCV fetch with API error response."""
@@ -259,8 +277,19 @@ class TestOKXFundingFeedFetchOHLCV:
         result = await feed._fetch_latest_ohlcv("BTC-USDT-SWAP")
 
         assert result is not None
-        timestamp, bar_data = result
-        assert bar_data["close"] == 44200.0
+        assert result.payload == BarPayload(44000.0, 44500.0, 43900.0, 44200.0, 150.0)
+        assert result.completion is EventCompletion.EVOLVING
+
+    async def test_fetch_ohlcv_rejects_malformed_or_nonpositive_payload(self):
+        feed = OKXFundingFeed(symbols=["BTC-USDT-SWAP"])
+        response_data = {
+            "code": "0",
+            "data": [["1704110400000", "0", "44500", "43900", "44200", "150"]],
+        }
+        feed._client = MockHttpxAsyncClient([MockHttpxResponse(response_data)])
+
+        assert await feed._fetch_latest_ohlcv("BTC-USDT-SWAP") is None
+        assert feed.stats["rejected_count"] == 1
 
 
 @pytest.mark.asyncio
@@ -289,9 +318,13 @@ class TestOKXFundingFeedFetchFundingRate:
         result = await feed._fetch_funding_rate("BTC-USDT-SWAP")
 
         assert result is not None
-        assert result["funding_rate"] == 0.0001
-        assert result["next_funding_rate"] == 0.00015
-        assert result["next_funding_time"] == datetime(2024, 1, 1, 16, 0, 0, tzinfo=UTC)
+        assert result.kind is MarketEventKind.FUNDING
+        assert result.payload == FundingPayload(0.0001)
+        assert result.metadata["next_funding_rate"] == 0.00015
+        assert (
+            result.metadata["next_funding_time"]
+            == datetime(2024, 1, 1, 16, 0, 0, tzinfo=UTC).isoformat()
+        )
         assert feed._funding_updates == 1
 
     async def test_fetch_funding_rate_missing_next(self):
@@ -313,9 +346,49 @@ class TestOKXFundingFeedFetchFundingRate:
         result = await feed._fetch_funding_rate("BTC-USDT-SWAP")
 
         assert result is not None
-        assert result["funding_rate"] == 0.0002
-        assert result["next_funding_rate"] is None
-        assert result["next_funding_time"] is None
+        assert result.payload == FundingPayload(0.0002)
+        assert result.metadata["next_funding_rate"] is None
+        assert result.metadata["next_funding_time"] is None
+
+    async def test_scheduled_funding_time_is_identity_not_future_event_time(self):
+        feed = OKXFundingFeed(symbols=["BTC-USDT-SWAP"])
+        scheduled = datetime.now(UTC) + timedelta(hours=4)
+        scheduled_ms = int(scheduled.timestamp() * 1_000)
+        feed._client = MockHttpxAsyncClient(
+            [
+                MockHttpxResponse(
+                    {
+                        "code": "0",
+                        "data": [
+                            {
+                                "fundingRate": "0.0001",
+                                "fundingTime": str(scheduled_ms),
+                            }
+                        ],
+                    }
+                )
+            ]
+        )
+
+        event = await feed._fetch_funding_rate("BTC-USDT-SWAP")
+
+        assert event is not None
+        assert event.event_time == event.receipt_time
+        assert event.event_time < scheduled
+        assert event.provider_sequence == scheduled_ms
+        assert (
+            event.metadata["funding_time"]
+            == datetime.fromtimestamp(scheduled_ms / 1_000, tz=UTC).isoformat()
+        )
+
+    async def test_missing_funding_rate_is_rejected(self):
+        feed = OKXFundingFeed(symbols=["BTC-USDT-SWAP"])
+        feed._client = MockHttpxAsyncClient(
+            [MockHttpxResponse({"code": "0", "data": [{"fundingTime": "1704110400000"}]})]
+        )
+
+        assert await feed._fetch_funding_rate("BTC-USDT-SWAP") is None
+        assert feed.stats["rejected_count"] == 1
 
     async def test_fetch_funding_rate_api_error(self):
         """Test funding rate fetch with API error."""
@@ -362,7 +435,7 @@ class TestOKXFundingFeedEmission:
             "code": "0",
             "data": [
                 [str(ts_ms + 3600000), "45000", "45500", "44900", "45200", "100", "0", "0", "0"],
-                [str(ts_ms), "44000", "44500", "43900", "44200", "150", "0", "0", "0"],
+                [str(ts_ms), "44000", "44500", "43900", "44200", "150", "0", "0", "1"],
             ],
         }
         funding_response = {
@@ -380,13 +453,13 @@ class TestOKXFundingFeedEmission:
         # Check data was queued
         item = await asyncio.wait_for(feed._queue.get(), timeout=1.0)
         assert item is not None
-        timestamp, data, context = item
-
-        assert timestamp == datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC)
-        assert "BTC-USDT-SWAP" in data
-        assert data["BTC-USDT-SWAP"]["close"] == 44200.0
-        assert "BTC-USDT-SWAP" in context
-        assert context["BTC-USDT-SWAP"]["funding_rate"] == 0.0001
+        assert item.event_time == datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC)
+        assert item.kind is MarketEventKind.BAR
+        assert item.payload == BarPayload(44000.0, 44500.0, 43900.0, 44200.0, 150.0)
+        funding = await asyncio.wait_for(feed._queue.get(), timeout=1.0)
+        assert funding is not None
+        assert funding.kind is MarketEventKind.FUNDING
+        assert funding.payload == FundingPayload(0.0001)
         assert feed._bar_count == 1
 
     async def test_duplicate_bar_filtering(self):
@@ -397,7 +470,7 @@ class TestOKXFundingFeedEmission:
         ohlcv_response = {
             "code": "0",
             "data": [
-                [str(ts_ms), "44000", "44500", "43900", "44200", "150", "0", "0", "0"],
+                [str(ts_ms), "44000", "44500", "43900", "44200", "150", "0", "0", "1"],
             ],
         }
         funding_response = {"code": "0", "data": [{"fundingRate": "0.0001"}]}
@@ -415,11 +488,60 @@ class TestOKXFundingFeedEmission:
         await feed._fetch_and_emit()
         assert feed._bar_count == 1  # Still 1, no duplicate
 
-        # Queue should only have one item
-        item = await asyncio.wait_for(feed._queue.get(), timeout=1.0)
-        assert item is not None
-        # Queue should be empty now
+        events = [await asyncio.wait_for(feed._queue.get(), timeout=1.0) for _ in range(2)]
+        assert [event.kind for event in events if event is not None] == [
+            MarketEventKind.BAR,
+            MarketEventKind.FUNDING,
+        ]
         assert feed._queue.empty()
+
+    async def test_identical_evolving_bar_is_deduplicated_but_revision_emits(self):
+        feed = OKXFundingFeed(symbols=["BTC-USDT-SWAP"])
+        timestamp = datetime(2024, 1, 1, 12, tzinfo=UTC)
+
+        def evolving(close: float) -> MarketEvent:
+            return MarketEvent(
+                version=LifecycleVersion.V1,
+                event_time=timestamp,
+                receipt_time=datetime.now(UTC),
+                kind=MarketEventKind.BAR,
+                completion=EventCompletion.EVOLVING,
+                source="okx",
+                asset="BTC-USDT-SWAP",
+                payload=BarPayload(44_000, 44_500, 43_900, close, 150),
+                provider_sequence=int(timestamp.timestamp() * 1_000),
+            )
+
+        with (
+            patch.object(
+                feed,
+                "_fetch_latest_ohlcv",
+                AsyncMock(side_effect=[evolving(44_200), evolving(44_200), evolving(44_300)]),
+            ),
+            patch.object(feed, "_fetch_funding_rate", AsyncMock(return_value=None)),
+        ):
+            await feed._fetch_and_emit()
+            await feed._fetch_and_emit()
+            await feed._fetch_and_emit()
+
+        assert feed.stats["bar_count"] == 2
+        events = [feed._queue.get_nowait(), feed._queue.get_nowait()]
+        assert [event.payload.close for event in events if event is not None] == [44_200, 44_300]
+
+    async def test_funding_emits_when_candle_endpoint_has_no_data(self):
+        feed = OKXFundingFeed(symbols=["BTC-USDT-SWAP"])
+        feed._client = MockHttpxAsyncClient(
+            [
+                MockHttpxResponse({"code": "0", "data": []}),
+                MockHttpxResponse({"code": "0", "data": [{"fundingRate": "0.0001"}]}),
+            ]
+        )
+
+        await feed._fetch_and_emit()
+
+        event = feed._queue.get_nowait()
+        assert event is not None
+        assert event.kind is MarketEventKind.FUNDING
 
     async def test_multiple_symbols(self):
         """Test fetching data for multiple symbols."""
@@ -428,12 +550,12 @@ class TestOKXFundingFeedEmission:
         ts_ms = int(datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC).timestamp() * 1000)
         btc_ohlcv = {
             "code": "0",
-            "data": [[str(ts_ms), "44000", "44500", "43900", "44200", "150", "0", "0", "0"]],
+            "data": [[str(ts_ms), "44000", "44500", "43900", "44200", "150", "0", "0", "1"]],
         }
         btc_funding = {"code": "0", "data": [{"fundingRate": "0.0001"}]}
         eth_ohlcv = {
             "code": "0",
-            "data": [[str(ts_ms), "2200", "2250", "2180", "2220", "1000", "0", "0", "0"]],
+            "data": [[str(ts_ms), "2200", "2250", "2180", "2220", "1000", "0", "0", "1"]],
         }
         eth_funding = {"code": "0", "data": [{"fundingRate": "0.0002"}]}
 
@@ -452,17 +574,11 @@ class TestOKXFundingFeedEmission:
         # Should have 2 items in queue
         assert feed._bar_count == 2
 
-        item1 = await asyncio.wait_for(feed._queue.get(), timeout=1.0)
-        item2 = await asyncio.wait_for(feed._queue.get(), timeout=1.0)
-
-        # Check both symbols were emitted
-        symbols_emitted = set()
-        for item in [item1, item2]:
-            _, data, _ = item
-            symbols_emitted.update(data.keys())
-
-        assert "BTC-USDT-SWAP" in symbols_emitted
-        assert "ETH-USDT-SWAP" in symbols_emitted
+        events = [await asyncio.wait_for(feed._queue.get(), timeout=1.0) for _ in range(4)]
+        bars = [
+            event for event in events if event is not None and event.kind is MarketEventKind.BAR
+        ]
+        assert {event.asset for event in bars} == {"BTC-USDT-SWAP", "ETH-USDT-SWAP"}
 
 
 @pytest.mark.asyncio
@@ -475,9 +591,8 @@ class TestOKXFundingFeedAsyncIteration:
 
         # Pre-populate queue
         ts = datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC)
-        data = {"BTC-USDT-SWAP": {"open": 44000, "close": 44200}}
-        context = {"BTC-USDT-SWAP": {"funding_rate": 0.0001}}
-        feed._queue.put_nowait((ts, data, context))
+        event = okx_bar(ts)
+        feed._queue.put_nowait(event)
         feed._queue.put_nowait(None)  # Sentinel
 
         items = []
@@ -485,9 +600,7 @@ class TestOKXFundingFeedAsyncIteration:
             items.append(item)
 
         assert len(items) == 1
-        timestamp, data, context = items[0]
-        assert timestamp == ts
-        assert data["BTC-USDT-SWAP"]["close"] == 44200
+        assert items == [event]
 
     async def test_stop_iteration_on_sentinel(self):
         """Test StopAsyncIteration when sentinel received."""
@@ -579,6 +692,9 @@ class TestOKXFundingFeedPollLoop:
 
             # Error causes loop to exit after first call
             assert call_count == 1
+            assert feed._running is False
+            with pytest.raises(RuntimeError, match="polling failed"):
+                await feed.__anext__()
 
 
 @pytest.mark.asyncio
@@ -617,11 +733,10 @@ class TestOKXFundingFeedMinuteBars:
             "limit": "2",
         }
         assert result is not None
-        timestamp, bar_data = result
-        assert timestamp == datetime(2024, 1, 1, 12, 34, 0, tzinfo=UTC)
-        assert timestamp.second == 0
-        assert timestamp.microsecond == 0
-        assert bar_data["close"] == 44950.0
+        assert result.event_time == datetime(2024, 1, 1, 12, 34, 0, tzinfo=UTC)
+        assert result.event_time.second == 0
+        assert result.event_time.microsecond == 0
+        assert result.payload == BarPayload(44900.0, 45000.0, 44850.0, 44950.0, 20.0)
 
     async def test_fetch_and_emit_minute_bar_keeps_funding_context(self):
         feed = OKXFundingFeed(symbols=["BTC-USDT-SWAP"], timeframe="1m")
@@ -651,10 +766,12 @@ class TestOKXFundingFeedMinuteBars:
         feed._client = mock_client
 
         await feed._fetch_and_emit()
-        timestamp, data, context = await asyncio.wait_for(feed._queue.get(), timeout=1.0)
+        bar_event = await asyncio.wait_for(feed._queue.get(), timeout=1.0)
+        funding_event = await asyncio.wait_for(feed._queue.get(), timeout=1.0)
 
-        assert timestamp == datetime(2024, 1, 1, 12, 35, 0, tzinfo=UTC)
-        assert timestamp.second == 0
-        assert data["BTC-USDT-SWAP"]["close"] == 44950.0
-        assert context["BTC-USDT-SWAP"]["funding_rate"] == 0.0001
-        assert context["BTC-USDT-SWAP"]["next_funding_rate"] == 0.0002
+        assert bar_event is not None
+        assert bar_event.event_time == datetime(2024, 1, 1, 12, 35, 0, tzinfo=UTC)
+        assert bar_event.payload == BarPayload(44900.0, 45000.0, 44850.0, 44950.0, 20.0)
+        assert funding_event is not None
+        assert funding_event.payload == FundingPayload(0.0001)
+        assert funding_event.metadata["next_funding_rate"] == 0.0002

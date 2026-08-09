@@ -21,6 +21,7 @@ from .feeds.aggregator import BarAggregator, BarBuffer
 from .feeds.alpaca_feed import AlpacaDataFeed
 from .feeds.crypto_feed import CryptoFeed
 from .feeds.databento_feed import DataBentoFeed
+from .feeds.events import FeedContractError
 from .feeds.ib_feed import IBDataFeed
 from .feeds.okx_feed import OKXFundingFeed
 from .lifecycle import LifecycleInvocation, LiveLifecycleDispatcher, callback_trace
@@ -69,6 +70,7 @@ __all__ = [
     "BarBuffer",
     "CryptoFeed",
     "DataBentoFeed",
+    "FeedContractError",
     "IBDataFeed",
     "OKXFundingFeed",
     # Engine

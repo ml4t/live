@@ -15,19 +15,28 @@ Example:
     feed = IBDataFeed(ib, symbols=['SPY', 'QQQ'])
     await feed.start()
 
-    async for timestamp, data, context in feed:
-        # data = {'SPY': {'price': 450.23, 'size': 100}, ...}
-        strategy.on_data(timestamp, data, context, broker)
+    async for event in feed:
+        consume(event)
 """
 
 import asyncio
 import logging
+import math
 from collections.abc import AsyncIterator
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from ib_async import IB, Stock, Ticker
+from ml4t.specs import (
+    EventCompletion,
+    LifecycleVersion,
+    MarketEvent,
+    MarketEventKind,
+    QuotePayload,
+    TradePayload,
+)
 
+from ml4t.live.feeds.events import sequence_unavailable, utc_datetime
 from ml4t.live.persistence import redact_sensitive
 from ml4t.live.protocols import DataFeedProtocol
 
@@ -38,12 +47,10 @@ class IBDataFeed(DataFeedProtocol):
     """Real-time market data feed from Interactive Brokers.
 
     Subscribes to tick-by-tick market data for specified symbols.
-    Emits data as (timestamp, data, context) tuples.
+    Emits validated trade and quote events.
 
     Data Format:
-        timestamp: datetime - Tick timestamp
-        data: dict[str, dict] - {symbol: {'price': float, 'size': int}}
-        context: dict - Additional metadata (bid, ask, etc.)
+        ``MarketEvent`` trade and quote snapshots with UTC provider or receipt time.
 
     Note:
         - IB must be connected before creating feed
@@ -80,22 +87,36 @@ class IBDataFeed(DataFeedProtocol):
             tick_throttle_ms: Minimum milliseconds between tick emissions
                 (prevents overwhelming strategy with rapid ticks)
         """
+        if not symbols or any(
+            not isinstance(symbol, str) or not symbol.strip() for symbol in symbols
+        ):
+            raise ValueError("symbols must contain at least one non-empty symbol")
+        if (
+            isinstance(tick_throttle_ms, bool)
+            or not isinstance(tick_throttle_ms, int | float)
+            or not math.isfinite(tick_throttle_ms)
+            or tick_throttle_ms < 0
+        ):
+            raise ValueError("tick_throttle_ms must be finite and non-negative")
         self.ib = ib
-        self.symbols = symbols
+        self.symbols = list(symbols)
         self.exchange = exchange
         self.currency = currency
         self.tick_throttle_ms = tick_throttle_ms
 
         # State
-        self._queue: asyncio.Queue = asyncio.Queue()
+        self._queue: asyncio.Queue[MarketEvent | None] = asyncio.Queue()
         self._running = False
         self._contracts: dict[str, Stock] = {}
         self._tickers: dict[str, Ticker] = {}
         self._last_emit_time = 0.0
+        self._callback_registered = False
+        self.max_event_age_seconds = 5.0
 
         # Statistics
         self._tick_count = 0
         self._throttled_count = 0
+        self._rejected_count = 0
 
     async def start(self) -> None:
         """Subscribe to market data for all symbols.
@@ -107,8 +128,13 @@ class IBDataFeed(DataFeedProtocol):
         """
         if not self.ib.isConnected():
             raise RuntimeError("IB must be connected before starting feed")
+        if self._running:
+            return
 
         logger.info(f"IBDataFeed: Starting feed for {len(self.symbols)} symbols")
+        self._queue = asyncio.Queue()
+        self._contracts.clear()
+        self._tickers.clear()
         self._running = True
 
         # Create contracts
@@ -128,6 +154,7 @@ class IBDataFeed(DataFeedProtocol):
 
         # Register callback for ticker updates
         self.ib.pendingTickersEvent += self._on_pending_tickers
+        self._callback_registered = True
 
         logger.info(f"IBDataFeed: Subscribed to {len(self._tickers)} symbols")
 
@@ -151,7 +178,9 @@ class IBDataFeed(DataFeedProtocol):
                 )
 
         # Remove callback
-        self.ib.pendingTickersEvent -= self._on_pending_tickers
+        if self._callback_registered:
+            self.ib.pendingTickersEvent -= self._on_pending_tickers
+            self._callback_registered = False
 
         # Signal consumer to exit
         self._queue.put_nowait(None)
@@ -178,56 +207,92 @@ class IBDataFeed(DataFeedProtocol):
             return
 
         self._last_emit_time = now
-        self._tick_count += 1
-
-        # Build data dict from all tickers
-        timestamp = datetime.now()
-        data: dict[str, dict] = {}
-        context: dict[str, dict] = {}
+        receipt_time = datetime.now(UTC)
 
         for ticker in tickers:
             if ticker.contract.symbol not in self.symbols:
                 continue
+            timestamp = getattr(ticker, "time", None)
+            if timestamp is None:
+                event_time = receipt_time
+                time_capability = "local receipt time; provider event time unavailable"
+            else:
+                try:
+                    event_time = utc_datetime(timestamp, "IB ticker time")
+                except (TypeError, ValueError) as error:
+                    self._rejected_count += 1
+                    logger.warning(
+                        "IBDataFeed: Rejected ticker timestamp: %s", type(error).__name__
+                    )
+                    continue
+                time_capability = "provider"
 
-            # Skip if no last price
-            if ticker.last is None or ticker.last <= 0:
-                continue
-
-            symbol = ticker.contract.symbol
-
-            # Core data (price, size)
-            data[symbol] = {
-                "price": float(ticker.last),
-                "size": int(ticker.lastSize) if ticker.lastSize else 0,
+            metadata = {
+                "event_time_capability": time_capability,
+                "volume": float(ticker.volume) if ticker.volume is not None else None,
             }
+            emitted = 0
+            if ticker.last is not None:
+                try:
+                    self._queue.put_nowait(
+                        MarketEvent(
+                            version=LifecycleVersion.V1,
+                            event_time=event_time,
+                            receipt_time=receipt_time,
+                            kind=MarketEventKind.TRADE,
+                            completion=EventCompletion.EVOLVING,
+                            source="interactive_brokers",
+                            asset=str(ticker.contract.symbol).upper(),
+                            payload=TradePayload(
+                                float(ticker.last),
+                                float(ticker.lastSize) if ticker.lastSize is not None else 0.0,
+                            ),
+                            gap=sequence_unavailable("IB", "pending ticker snapshot"),
+                            metadata=metadata,
+                        )
+                    )
+                    emitted += 1
+                except (TypeError, ValueError) as error:
+                    self._rejected_count += 1
+                    logger.warning("IBDataFeed: Rejected trade snapshot: %s", type(error).__name__)
+            if ticker.bid is not None or ticker.ask is not None:
+                try:
+                    self._queue.put_nowait(
+                        MarketEvent(
+                            version=LifecycleVersion.V1,
+                            event_time=event_time,
+                            receipt_time=receipt_time,
+                            kind=MarketEventKind.QUOTE,
+                            completion=EventCompletion.EVOLVING,
+                            source="interactive_brokers",
+                            asset=str(ticker.contract.symbol).upper(),
+                            payload=QuotePayload(
+                                float(ticker.bid),
+                                float(ticker.ask),
+                                float(ticker.bidSize) if ticker.bidSize is not None else 0.0,
+                                float(ticker.askSize) if ticker.askSize is not None else 0.0,
+                            ),
+                            gap=sequence_unavailable("IB", "pending ticker snapshot"),
+                            metadata=metadata,
+                        )
+                    )
+                    emitted += 1
+                except (TypeError, ValueError) as error:
+                    self._rejected_count += 1
+                    logger.warning("IBDataFeed: Rejected quote snapshot: %s", type(error).__name__)
+            self._tick_count += emitted
 
-            # Extended context (bid, ask, volume)
-            context[symbol] = {
-                "bid": float(ticker.bid) if ticker.bid else None,
-                "ask": float(ticker.ask) if ticker.ask else None,
-                "bid_size": int(ticker.bidSize) if ticker.bidSize else 0,
-                "ask_size": int(ticker.askSize) if ticker.askSize else 0,
-                "volume": int(ticker.volume) if ticker.volume else 0,
-            }
-
-        # Emit only if we have data
-        if data:
-            self._queue.put_nowait((timestamp, data, context))
-
-    async def __aiter__(self) -> AsyncIterator[tuple[datetime, dict, dict]]:
+    async def __aiter__(self) -> AsyncIterator[MarketEvent]:
         """Async iterator yielding market data.
 
         Yields:
-            Tuple of (timestamp, data, context) where:
-            - timestamp: datetime of tick
-            - data: {symbol: {'price': float, 'size': int}}
-            - context: {symbol: {'bid', 'ask', 'bid_size', 'ask_size', 'volume'}}
+            Validated trade and quote events.
 
         Stops when:
             - stop() is called (None sentinel)
             - Feed is not running
         """
-        while self._running:
+        while True:
             item = await self._queue.get()
 
             # None sentinel signals shutdown
@@ -251,5 +316,6 @@ class IBDataFeed(DataFeedProtocol):
             "running": self._running,
             "tick_count": self._tick_count,
             "throttled_count": self._throttled_count,
+            "rejected_count": self._rejected_count,
             "symbols": self.symbols,
         }

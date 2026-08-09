@@ -4,8 +4,34 @@ from datetime import UTC, datetime
 from unittest.mock import MagicMock, patch
 
 import pytest
+from ml4t.specs import (
+    BarPayload,
+    EventCompletion,
+    GapEvidence,
+    LifecycleVersion,
+    MarketEvent,
+    MarketEventKind,
+    QuotePayload,
+    TradePayload,
+)
 
 from ml4t.live.feeds.alpaca_feed import AlpacaDataFeed
+from ml4t.live.feeds.events import FeedContractError
+
+
+def typed_bar(timestamp: datetime | None = None) -> MarketEvent:
+    timestamp = timestamp or datetime.now(UTC)
+    return MarketEvent(
+        version=LifecycleVersion.V1,
+        event_time=timestamp,
+        receipt_time=timestamp,
+        kind=MarketEventKind.BAR,
+        completion=EventCompletion.COMPLETE,
+        source="fixture",
+        asset="AAPL",
+        payload=BarPayload(149.0, 151.0, 148.0, 150.0, 100.0),
+        gap=GapEvidence(False, "fixture has no sequence"),
+    )
 
 
 class MockAlpacaBar:
@@ -166,6 +192,18 @@ class TestAlpacaDataFeedSetup:
 
         assert feed._feed == "sip"
 
+    @pytest.mark.parametrize(
+        ("kwargs", "message"),
+        [
+            ({"symbols": []}, "at least one"),
+            ({"symbols": ["AAPL"], "data_type": "snapshots"}, "data_type"),
+            ({"symbols": ["AAPL"], "feed": "unknown"}, "feed"),
+        ],
+    )
+    def test_invalid_configuration_is_rejected(self, kwargs, message):
+        with pytest.raises(ValueError, match=message):
+            AlpacaDataFeed(api_key="PKTEST", secret_key="SECRET", **kwargs)
+
 
 class TestAlpacaDataFeedCryptoDetection:
     """Test suite for crypto symbol detection."""
@@ -175,7 +213,7 @@ class TestAlpacaDataFeedCryptoDetection:
         feed = AlpacaDataFeed(
             api_key="PKTEST",
             secret_key="SECRET",
-            symbols=[],
+            symbols=["AAPL"],
         )
 
         assert feed._is_crypto("BTC/USD") is True
@@ -185,7 +223,7 @@ class TestAlpacaDataFeedCryptoDetection:
         feed = AlpacaDataFeed(
             api_key="PKTEST",
             secret_key="SECRET",
-            symbols=[],
+            symbols=["AAPL"],
         )
 
         assert feed._is_crypto("ETH/USD") is True
@@ -195,7 +233,7 @@ class TestAlpacaDataFeedCryptoDetection:
         feed = AlpacaDataFeed(
             api_key="PKTEST",
             secret_key="SECRET",
-            symbols=[],
+            symbols=["AAPL"],
         )
 
         assert feed._is_crypto("AAPL") is False
@@ -205,7 +243,7 @@ class TestAlpacaDataFeedCryptoDetection:
         feed = AlpacaDataFeed(
             api_key="PKTEST",
             secret_key="SECRET",
-            symbols=[],
+            symbols=["AAPL"],
         )
 
         assert feed._is_crypto("btc/usd") is True
@@ -385,14 +423,18 @@ class TestAlpacaDataFeedHandlers:
 
         # Check data was queued
         assert feed._queue.qsize() == 1
-        timestamp, data, context = await feed._queue.get()
+        event = await feed._queue.get()
 
-        assert "AAPL" in data
-        assert data["AAPL"]["open"] == 150.0
-        assert data["AAPL"]["high"] == 152.0
-        assert data["AAPL"]["low"] == 149.0
-        assert data["AAPL"]["close"] == 151.0
-        assert data["AAPL"]["volume"] == 1000000
+        assert event is not None
+        assert event.kind is MarketEventKind.BAR
+        assert event.completion is EventCompletion.COMPLETE
+        assert event.asset == "AAPL"
+        assert event.payload == BarPayload(150.0, 152.0, 149.0, 151.0, 1_000_000.0)
+        assert event.event_time.tzinfo is UTC
+        assert event.receipt_time.tzinfo is UTC
+        assert event.gap == GapEvidence(False, "Alpaca provider sequence unavailable: bar stream")
+        assert event.metadata["vwap"] == 150.5
+        assert event.metadata["trade_count"] == 5000
         assert feed._bar_count == 1
 
     @pytest.mark.asyncio
@@ -411,6 +453,20 @@ class TestAlpacaDataFeedHandlers:
 
         # No data should be queued
         assert feed._queue.qsize() == 0
+
+    @pytest.mark.asyncio
+    async def test_naive_provider_timestamp_is_rejected_before_queueing(self):
+        feed = AlpacaDataFeed(
+            api_key="PKTEST",
+            secret_key="SECRET",
+            symbols=["AAPL"],
+        )
+        feed._running = True
+
+        with pytest.raises(FeedContractError, match="timezone-aware UTC"):
+            await feed._on_stock_bar(MockAlpacaBar(timestamp=datetime(2024, 1, 1)))
+
+        assert feed._queue.empty()
 
     @pytest.mark.asyncio
     async def test_on_stock_quote(self):
@@ -434,12 +490,12 @@ class TestAlpacaDataFeedHandlers:
         await feed._on_stock_quote(quote)
 
         assert feed._queue.qsize() == 1
-        timestamp, data, context = await feed._queue.get()
+        event = await feed._queue.get()
 
-        assert "AAPL" in data
-        assert data["AAPL"]["bid"] == 150.0
-        assert data["AAPL"]["ask"] == 150.10
-        assert data["AAPL"]["price"] == 150.05  # Mid price
+        assert event is not None
+        assert event.kind is MarketEventKind.QUOTE
+        assert event.completion is EventCompletion.EVOLVING
+        assert event.payload == QuotePayload(150.0, 150.10, 100.0, 150.0)
         assert feed._quote_count == 1
 
     @pytest.mark.asyncio
@@ -463,11 +519,13 @@ class TestAlpacaDataFeedHandlers:
         await feed._on_stock_trade(trade)
 
         assert feed._queue.qsize() == 1
-        timestamp, data, context = await feed._queue.get()
+        event = await feed._queue.get()
 
-        assert "AAPL" in data
-        assert data["AAPL"]["price"] == 150.05
-        assert data["AAPL"]["size"] == 100
+        assert event is not None
+        assert event.kind is MarketEventKind.TRADE
+        assert event.payload == TradePayload(150.05, 100.0)
+        assert event.metadata["exchange"] == "XNAS"
+        assert event.metadata["conditions"] == ["@"]
         assert feed._trade_count == 1
 
     @pytest.mark.asyncio
@@ -492,11 +550,12 @@ class TestAlpacaDataFeedHandlers:
         await feed._on_crypto_bar(bar)
 
         assert feed._queue.qsize() == 1
-        timestamp, data, context = await feed._queue.get()
+        event = await feed._queue.get()
 
-        assert "BTC/USD" in data
-        assert data["BTC/USD"]["open"] == 43000.0
-        assert data["BTC/USD"]["close"] == 43200.0
+        assert event is not None
+        assert event.asset == "BTC/USD"
+        assert event.payload == BarPayload(43000.0, 43500.0, 42800.0, 43200.0, 500.0)
+        assert event.metadata["market"] == "crypto"
 
 
 class TestAlpacaDataFeedIteration:
@@ -513,10 +572,8 @@ class TestAlpacaDataFeedIteration:
         feed._running = True
 
         # Queue some data
-        timestamp = datetime.now(UTC)
-        data = {"AAPL": {"close": 150.0}}
-        context = {}
-        feed._queue.put_nowait((timestamp, data, context))
+        event = typed_bar()
+        feed._queue.put_nowait(event)
 
         # Queue stop signal
         feed._queue.put_nowait(None)
@@ -527,7 +584,7 @@ class TestAlpacaDataFeedIteration:
             results.append(item)
 
         assert len(results) == 1
-        assert results[0][1] == {"AAPL": {"close": 150.0}}
+        assert results == [event]
 
     @pytest.mark.asyncio
     async def test_anext(self):
@@ -539,14 +596,12 @@ class TestAlpacaDataFeedIteration:
         )
         feed._running = True
 
-        timestamp = datetime.now(UTC)
-        data = {"AAPL": {"close": 150.0}}
-        context = {}
-        feed._queue.put_nowait((timestamp, data, context))
+        event = typed_bar()
+        feed._queue.put_nowait(event)
 
         result = await feed.__anext__()
 
-        assert result[1] == {"AAPL": {"close": 150.0}}
+        assert result == event
 
     @pytest.mark.asyncio
     async def test_anext_not_running(self):
@@ -573,6 +628,22 @@ class TestAlpacaDataFeedIteration:
         feed._queue.put_nowait(None)
 
         with pytest.raises(StopAsyncIteration):
+            await feed.__anext__()
+
+    @pytest.mark.asyncio
+    async def test_provider_stream_failure_reaches_consumer(self):
+        feed = AlpacaDataFeed(
+            api_key="PKTEST",
+            secret_key="SECRET",
+            symbols=["AAPL"],
+        )
+        feed._running = True
+        feed._stock_stream = MagicMock()
+        feed._stock_stream.run.side_effect = RuntimeError("provider disconnected")
+
+        await feed._run_stock_stream()
+
+        with pytest.raises(RuntimeError, match="stream failed"):
             await feed.__anext__()
 
 

@@ -9,9 +9,7 @@ Key Features:
 - Combined data + context for ML strategy consumption
 
 Data Format:
-    timestamp: Bar close time
-    data: {symbol: {'open', 'high', 'low', 'close', 'volume'}}
-    context: {symbol: {'funding_rate', 'next_funding_rate', 'next_funding_time'}}
+    Separate validated bar and funding events.
 
 Example:
     feed = OKXFundingFeed(
@@ -20,20 +18,27 @@ Example:
     )
     await feed.start()
 
-    async for timestamp, data, context in feed:
-        # data has OHLCV
-        btc_close = data['BTC-USDT-SWAP']['close']
-        # context has funding rate
-        btc_funding = context['BTC-USDT-SWAP']['funding_rate']
+    async for event in feed:
+        consume(event)
 """
 
 import asyncio
 import logging
+import math
 from datetime import UTC, datetime
 from typing import Any
 
 import httpx
+from ml4t.specs import (
+    BarPayload,
+    EventCompletion,
+    FundingPayload,
+    LifecycleVersion,
+    MarketEvent,
+    MarketEventKind,
+)
 
+from ml4t.live.feeds.events import sequence_unavailable
 from ml4t.live.persistence import redact_sensitive
 from ml4t.live.protocols import DataFeedProtocol
 
@@ -49,8 +54,7 @@ class OKXFundingFeed(DataFeedProtocol):
     Data Flow:
         1. Poll /market/candles for latest OHLCV bar
         2. Poll /public/funding-rate for current funding rate
-        3. Combine into (timestamp, data, context) tuple
-        4. Emit to strategy
+        3. Emit each causal record as its own event
 
     Symbol Format:
         OKX perpetual swaps use format: BTC-USDT-SWAP, ETH-USDT-SWAP
@@ -72,22 +76,38 @@ class OKXFundingFeed(DataFeedProtocol):
             timeframe: OHLCV bar timeframe ('1m', '1H', '4H', '1D')
             poll_interval_seconds: How often to poll for new data
         """
-        self.symbols = symbols
+        if not symbols or any(
+            not isinstance(symbol, str) or not symbol.strip() for symbol in symbols
+        ):
+            raise ValueError("symbols must contain at least one non-empty symbol")
+        if (
+            isinstance(poll_interval_seconds, bool)
+            or not isinstance(poll_interval_seconds, int | float)
+            or not math.isfinite(poll_interval_seconds)
+            or poll_interval_seconds <= 0
+        ):
+            raise ValueError("poll_interval_seconds must be finite and positive")
+        self.symbols = list(symbols)
         self.timeframe = timeframe
         self.poll_interval = poll_interval_seconds
 
         # State
-        self._queue: asyncio.Queue = asyncio.Queue()
+        self._queue: asyncio.Queue[MarketEvent | None] = asyncio.Queue()
         self._running = False
         self._poll_task: asyncio.Task | None = None
         self._client: httpx.AsyncClient | None = None
+        self._failure: Exception | None = None
 
-        # Track last emitted timestamp per symbol to avoid duplicates
-        self._last_timestamps: dict[str, datetime | None] = dict.fromkeys(symbols)
+        self._emitted_bars: set[tuple[str, datetime, EventCompletion]] = set()
+        self._emitted_evolving: dict[tuple[str, datetime], BarPayload] = {}
+        self._emitted_funding: set[tuple[str, str | int | None, float, str | None]] = set()
+        self.max_event_age_seconds = self._timeframe_seconds(timeframe) * 2 + poll_interval_seconds
 
         # Statistics
         self._bar_count = 0
         self._funding_updates = 0
+        self._rejected_count = 0
+        self._error_count = 0
 
     async def start(self) -> None:
         """Start the OKX data feed.
@@ -95,6 +115,11 @@ class OKXFundingFeed(DataFeedProtocol):
         Begins polling for OHLCV and funding rate data.
         """
         logger.info(f"OKXFundingFeed: Starting feed for {len(self.symbols)} symbols")
+        if self._running:
+            return
+        await self.close()
+        self._queue = asyncio.Queue()
+        self._failure = None
         self._running = True
 
         # Create async HTTP client
@@ -123,8 +148,16 @@ class OKXFundingFeed(DataFeedProtocol):
 
     async def close(self) -> None:
         """Close HTTP client."""
+        if self._poll_task is not None:
+            self._running = False
+            if not self._poll_task.done():
+                self._poll_task.cancel()
+            if self._poll_task is not asyncio.current_task():
+                await asyncio.gather(self._poll_task, return_exceptions=True)
+            self._poll_task = None
         if self._client:
             await self._client.aclose()
+            self._client = None
 
     async def _poll_loop(self) -> None:
         """Main polling loop for market data."""
@@ -136,6 +169,9 @@ class OKXFundingFeed(DataFeedProtocol):
         except asyncio.CancelledError:
             logger.info("OKXFundingFeed: Poll loop cancelled")
         except Exception as e:
+            self._failure = e
+            self._running = False
+            self._queue.put_nowait(None)
             logger.error("OKXFundingFeed: Error in poll loop: %s", redact_sensitive(str(e)))
 
     async def _fetch_and_emit(self) -> None:
@@ -145,45 +181,55 @@ class OKXFundingFeed(DataFeedProtocol):
             for symbol in self.symbols:
                 # Get latest OHLCV bar
                 ohlcv = await self._fetch_latest_ohlcv(symbol)
-                if ohlcv is None:
-                    continue
+                if ohlcv is not None:
+                    bar_key = (symbol, ohlcv.event_time, ohlcv.completion)
+                    evolving_key = (symbol, ohlcv.event_time)
+                    should_emit = bar_key not in self._emitted_bars
+                    if ohlcv.completion is EventCompletion.EVOLVING:
+                        should_emit = self._emitted_evolving.get(evolving_key) != ohlcv.payload
+                    if should_emit:
+                        self._queue.put_nowait(ohlcv)
+                        self._bar_count += 1
+                        if ohlcv.completion is EventCompletion.COMPLETE:
+                            self._emitted_bars.add(bar_key)
+                            self._emitted_evolving.pop(evolving_key, None)
+                        else:
+                            assert isinstance(ohlcv.payload, BarPayload)
+                            self._emitted_evolving[evolving_key] = ohlcv.payload
 
-                timestamp, bar_data = ohlcv
+                funding_event = await self._fetch_funding_rate(symbol)
+                if funding_event is not None:
+                    assert isinstance(funding_event.payload, FundingPayload)
+                    funding_key = (
+                        symbol,
+                        funding_event.provider_sequence,
+                        funding_event.payload.rate,
+                        funding_event.metadata.get("next_funding_time"),
+                    )
+                    if funding_key not in self._emitted_funding:
+                        self._queue.put_nowait(funding_event)
+                        self._emitted_funding.add(funding_key)
 
-                # Skip if we've already emitted this bar
-                if self._last_timestamps[symbol] == timestamp:
-                    continue
-
-                # Get current funding rate
-                funding_data = await self._fetch_funding_rate(symbol)
-
-                # Build data dict
-                data = {symbol: bar_data}
-
-                # Build context with funding info
-                context = {symbol: funding_data} if funding_data else {}
-
-                # Emit to queue
-                self._queue.put_nowait((timestamp, data, context))
-                self._bar_count += 1
-                self._last_timestamps[symbol] = timestamp
-
-                logger.debug(
-                    f"OKXFundingFeed: Emitted bar for {symbol} at {timestamp}, "
-                    f"funding_rate={funding_data.get('funding_rate', 'N/A') if funding_data else 'N/A'}"
-                )
+                if ohlcv is not None:
+                    logger.debug(
+                        "OKXFundingFeed: Processed %s bar for %s at %s",
+                        ohlcv.completion.value,
+                        symbol,
+                        ohlcv.event_time,
+                    )
 
         except Exception as e:
+            self._error_count += 1
             logger.error("OKXFundingFeed: Error fetching data: %s", redact_sensitive(str(e)))
 
-    async def _fetch_latest_ohlcv(self, symbol: str) -> tuple[datetime, dict] | None:
+    async def _fetch_latest_ohlcv(self, symbol: str) -> MarketEvent | None:
         """Fetch the most recent complete OHLCV bar.
 
         Args:
             symbol: OKX perpetual swap symbol
 
         Returns:
-            Tuple of (timestamp, {open, high, low, close, volume}) or None
+            A validated bar event or ``None`` when the endpoint has no usable record.
         """
         try:
             url = f"{self.BASE_URL}/market/candles"
@@ -201,6 +247,7 @@ class OKXFundingFeed(DataFeedProtocol):
             result = response.json()
 
             if result.get("code") != "0":
+                self._error_count += 1
                 logger.warning(f"OKX API error: {result.get('msg')}")
                 return None
 
@@ -208,28 +255,48 @@ class OKXFundingFeed(DataFeedProtocol):
             if not candles:
                 return None
 
-            # OKX returns newest first, candle format:
-            # [ts, o, h, l, c, vol, volCcy, volCcyQuote, confirm]
-            # Use the second candle (index 1) which is complete
-            # Index 0 is the current (incomplete) bar
-            candle = candles[1] if len(candles) > 1 else candles[0]
+            complete = [candle for candle in candles if len(candle) > 8 and candle[8] == "1"]
+            candle = complete[0] if complete else candles[0]
 
             timestamp = datetime.fromtimestamp(int(candle[0]) / 1000, tz=UTC)
-            bar_data = {
-                "open": float(candle[1]),
-                "high": float(candle[2]),
-                "low": float(candle[3]),
-                "close": float(candle[4]),
-                "volume": float(candle[5]),
-            }
+            completion = (
+                EventCompletion.COMPLETE
+                if len(candle) > 8 and candle[8] == "1"
+                else EventCompletion.EVOLVING
+            )
+            return MarketEvent(
+                version=LifecycleVersion.V1,
+                event_time=timestamp,
+                receipt_time=datetime.now(UTC),
+                kind=MarketEventKind.BAR,
+                completion=completion,
+                source="okx",
+                asset=symbol,
+                payload=BarPayload(
+                    float(candle[1]),
+                    float(candle[2]),
+                    float(candle[3]),
+                    float(candle[4]),
+                    float(candle[5]),
+                ),
+                provider_sequence=int(candle[0]),
+                metadata={"timeframe": self.timeframe},
+            )
 
-            return timestamp, bar_data
-
+        except (IndexError, KeyError, TypeError, ValueError) as e:
+            self._rejected_count += 1
+            logger.warning(
+                "Rejected OHLCV payload for %s: %s",
+                symbol,
+                redact_sensitive(str(e)),
+            )
+            return None
         except Exception as e:
+            self._error_count += 1
             logger.error("Error fetching OHLCV for %s: %s", symbol, redact_sensitive(str(e)))
             return None
 
-    async def _fetch_funding_rate(self, symbol: str) -> dict[str, Any] | None:
+    async def _fetch_funding_rate(self, symbol: str) -> MarketEvent | None:
         """Fetch current funding rate for a symbol.
 
         Args:
@@ -250,25 +317,58 @@ class OKXFundingFeed(DataFeedProtocol):
             result = response.json()
 
             if result.get("code") != "0":
+                self._error_count += 1
                 logger.warning(f"OKX funding rate API error: {result.get('msg')}")
                 return None
 
             data = result.get("data", [{}])[0]
+            receipt_time = datetime.now(UTC)
+            funding_time = data.get("fundingTime")
+            event = MarketEvent(
+                version=LifecycleVersion.V1,
+                event_time=receipt_time,
+                receipt_time=receipt_time,
+                kind=MarketEventKind.FUNDING,
+                completion=EventCompletion.COMPLETE,
+                source="okx",
+                asset=symbol,
+                payload=FundingPayload(float(data["fundingRate"])),
+                provider_sequence=int(funding_time) if funding_time else None,
+                gap=(
+                    sequence_unavailable("OKX", "fundingTime missing") if not funding_time else None
+                ),
+                metadata={
+                    "funding_time": (
+                        datetime.fromtimestamp(int(funding_time) / 1000, tz=UTC).isoformat()
+                        if funding_time
+                        else None
+                    ),
+                    "next_funding_rate": (
+                        float(data["nextFundingRate"]) if data.get("nextFundingRate") else None
+                    ),
+                    "next_funding_time": (
+                        datetime.fromtimestamp(
+                            int(data["nextFundingTime"]) / 1000,
+                            tz=UTC,
+                        ).isoformat()
+                        if data.get("nextFundingTime")
+                        else None
+                    ),
+                },
+            )
             self._funding_updates += 1
+            return event
 
-            return {
-                "funding_rate": float(data.get("fundingRate", 0)),
-                "next_funding_rate": (
-                    float(data["nextFundingRate"]) if data.get("nextFundingRate") else None
-                ),
-                "next_funding_time": (
-                    datetime.fromtimestamp(int(data["nextFundingTime"]) / 1000, tz=UTC)
-                    if data.get("nextFundingTime")
-                    else None
-                ),
-            }
-
+        except (IndexError, KeyError, TypeError, ValueError) as e:
+            self._rejected_count += 1
+            logger.warning(
+                "Rejected funding payload for %s: %s",
+                symbol,
+                redact_sensitive(str(e)),
+            )
+            return None
         except Exception as e:
+            self._error_count += 1
             logger.error(
                 "Error fetching funding rate for %s: %s",
                 symbol,
@@ -280,11 +380,11 @@ class OKXFundingFeed(DataFeedProtocol):
         """Return async iterator."""
         return self
 
-    async def __anext__(self) -> tuple[datetime, dict[str, Any], dict[str, Any]]:
+    async def __anext__(self) -> MarketEvent:
         """Get next bar with funding data.
 
         Returns:
-            (timestamp, data, context) tuple
+            A validated bar or funding event.
 
         Raises:
             StopAsyncIteration: When feed stops
@@ -292,9 +392,24 @@ class OKXFundingFeed(DataFeedProtocol):
         item = await self._queue.get()
 
         if item is None:  # Shutdown sentinel
+            if self._failure is not None:
+                raise RuntimeError("OKX polling failed") from self._failure
             raise StopAsyncIteration
 
         return item
+
+    @staticmethod
+    def _timeframe_seconds(timeframe: str) -> float:
+        units = {"m": 60, "H": 3_600, "D": 86_400}
+        if len(timeframe) < 2 or timeframe[-1] not in units:
+            raise ValueError("timeframe must end in m, H, or D")
+        try:
+            count = int(timeframe[:-1])
+        except ValueError as error:
+            raise ValueError("timeframe must begin with a positive integer") from error
+        if count <= 0:
+            raise ValueError("timeframe must begin with a positive integer")
+        return float(count * units[timeframe[-1]])
 
     @property
     def stats(self) -> dict[str, Any]:
@@ -305,5 +420,7 @@ class OKXFundingFeed(DataFeedProtocol):
             "timeframe": self.timeframe,
             "bar_count": self._bar_count,
             "funding_updates": self._funding_updates,
+            "rejected_count": self._rejected_count,
+            "error_count": self._error_count,
             "poll_interval": self.poll_interval,
         }
