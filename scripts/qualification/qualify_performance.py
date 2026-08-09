@@ -691,7 +691,7 @@ async def qualify(args: argparse.Namespace) -> dict[str, Any]:
     report: dict[str, Any] = {
         "schema_version": 1,
         "candidate": {
-            "revision": os.environ.get("GITHUB_SHA") or git_revision(),
+            "revision": candidate_revision(),
         },
         "environment": {
             "platform": platform.platform(),
@@ -727,6 +727,10 @@ def git_revision() -> str:
         capture_output=True,
         text=True,
     ).stdout.strip()
+
+
+def candidate_revision() -> str:
+    return os.environ.get("CANDIDATE_SHA") or git_revision()
 
 
 def parse_args() -> argparse.Namespace:

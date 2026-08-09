@@ -11,6 +11,7 @@ from scripts.qualification.qualify_performance import (
     ORDER_EVENTS,
     QUEUE_CAPACITY,
     RSS_GROWTH_LIMIT_BYTES,
+    candidate_revision,
     validate_report,
 )
 
@@ -73,6 +74,16 @@ def passing_report() -> dict[str, Any]:
 
 def test_passing_performance_report_satisfies_every_acceptance_rule() -> None:
     assert validate_report(passing_report()) == []
+
+
+def test_candidate_revision_uses_qualified_head_not_pull_request_merge_sha(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    candidate = "a" * 40
+    monkeypatch.setenv("CANDIDATE_SHA", candidate)
+    monkeypatch.setenv("GITHUB_SHA", "b" * 40)
+
+    assert candidate_revision() == candidate
 
 
 @pytest.mark.parametrize(
