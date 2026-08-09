@@ -27,6 +27,7 @@ from pathlib import Path
 from typing import Any
 
 from ml4t.backtest.types import Order, OrderSide, OrderStatus, OrderType, Position
+from ml4t.specs import ExecutionCapability
 
 from ml4t.live import CanonicalOrderRequest, LiveRiskConfig, RiskLimitError, SafeBroker
 
@@ -40,6 +41,11 @@ class DemoBroker:
 
     def assert_paper_trading(self) -> None:
         """Identify this deterministic demo adapter as a paper venue."""
+
+    @property
+    def execution_capabilities(self) -> frozenset[ExecutionCapability]:
+        """Declare the market-order behavior used by this demo."""
+        return frozenset()
 
     async def connect(self) -> None:
         self._connected = True

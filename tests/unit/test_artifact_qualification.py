@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import email
 import io
+import runpy
 import tarfile
 import tomllib
 import zipfile
@@ -180,3 +181,10 @@ def test_installed_example_runner_requires_each_expected_output(
         "shadow_mode_demo.py",
         "startup_reconciliation_demo.py",
     ]
+
+
+def test_risk_guard_demo_adapter_declares_execution_capabilities() -> None:
+    namespace = runpy.run_path(str(REPOSITORY_ROOT / "examples/risk_guard_demo.py"))
+    broker = namespace["DemoBroker"]()
+
+    assert broker.execution_capabilities == frozenset()
