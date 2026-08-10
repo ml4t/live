@@ -8,6 +8,7 @@ from scripts.qualification.check_workflows import (
     WORKFLOW_ROOT,
     action_pin_failures,
     load_workflow,
+    paper_soak_failures,
     promotion_failures,
     validate_workflows,
 )
@@ -19,6 +20,19 @@ def test_repository_workflows_satisfy_release_policy() -> None:
 
 def test_every_external_action_is_immutable_and_updateable() -> None:
     assert action_pin_failures(WORKFLOW_ROOT.glob("*.yml")) == []
+
+
+def test_paper_soak_requires_every_short_provider_check() -> None:
+    paper = load_workflow(WORKFLOW_ROOT / "paper.yml")
+    paper_job = paper["jobs"]["paper"]
+
+    assert paper_soak_failures(paper_job) == []
+
+    seeded_job = deepcopy(paper_job)
+    soak = next(step for step in seeded_job["steps"] if step.get("id") == "provider-soaks")
+    soak["if"] = str(soak["if"]).replace("steps.ib-exercise.outcome", "")
+
+    assert any("ib-exercise" in failure for failure in paper_soak_failures(seeded_job))
 
 
 @pytest.mark.parametrize(

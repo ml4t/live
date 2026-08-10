@@ -23,6 +23,13 @@ MANDATORY_JOBS = {
     "documentation",
 }
 POST_BUILD_JOBS = {"artifact-qualification", "security"}
+PAPER_QUICK_STEP_IDS = (
+    "alpaca-exercise",
+    "alpaca-restart",
+    "ib-exercise",
+    "ib-restart",
+    "okx-external",
+)
 ACTION_PATTERN = re.compile(
     r"^\s*-?\s*uses:\s*([^\s#]+)(?:\s+#\s+(v[0-9][A-Za-z0-9_.-]*))?\s*$",
     re.MULTILINE,
@@ -173,6 +180,20 @@ def promotion_failures(qualification: dict[str, Any], release: dict[str, Any]) -
     return failures
 
 
+def paper_soak_failures(paper_job: dict[str, Any]) -> list[str]:
+    """Reject a long soak that can start after a short provider check fails."""
+    soak_steps = [step for step in _steps(paper_job) if step.get("id") == "provider-soaks"]
+    if len(soak_steps) != 1:
+        return ["paper qualification must define one provider-soaks step"]
+    condition = str(soak_steps[0].get("if", ""))
+    failures = []
+    for step_id in PAPER_QUICK_STEP_IDS:
+        required = f"steps.{step_id}.outcome == 'success'"
+        if required not in condition:
+            failures.append(f"paper soak does not require successful {step_id}")
+    return failures
+
+
 def validate_workflows(root: Path = WORKFLOW_ROOT) -> list[str]:
     paths = sorted(root.glob("*.yml"))
     workflows = {path.name: load_workflow(path) for path in paths}
@@ -316,6 +337,7 @@ def validate_workflows(root: Path = WORKFLOW_ROOT) -> list[str]:
     if _triggers(paper) != {"workflow_dispatch"}:
         failures.append("paper qualification is not manual-only")
     paper_job = paper.get("jobs", {}).get("paper", {})
+    failures.extend(paper_soak_failures(paper_job))
     if paper_job.get("environment") != "paper":
         failures.append("paper qualification does not use the protected paper environment")
     if "secrets." not in json.dumps(paper_job, sort_keys=True):

@@ -145,6 +145,14 @@ jobs:
           --output "${{ github.workspace }}/feed-evidence/okx.json"
       - name: Run six-hour Alpaca, IB, and OKX soaks concurrently
         id: provider-soaks
+        if: >-
+          ${{
+            steps.alpaca-exercise.outcome == 'success' &&
+            steps.alpaca-restart.outcome == 'success' &&
+            steps.ib-exercise.outcome == 'success' &&
+            steps.ib-restart.outcome == 'success' &&
+            steps.okx-external.outcome == 'success'
+          }}
         continue-on-error: true
         env:
           ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}

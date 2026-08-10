@@ -5,7 +5,7 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from ml4t.backtest.types import OrderSide, OrderType
+from ml4t.backtest.types import OrderSide, OrderStatus, OrderType
 from ml4t.specs import ExecutionCapability
 
 from ml4t.live import CanonicalOrderRequest
@@ -23,6 +23,7 @@ from scripts.qualification.qualify_paper import (
     _tag_keyword,
     assemble_bundle,
     build_candidate_manifest,
+    run_provider_phase,
     run_provider_soak,
     validate_bundle,
     validate_provider_soak_report,
@@ -174,6 +175,47 @@ def test_qualification_order_is_eligible_during_ib_overnight_session() -> None:
         "outsideRth": True,
     }
     assert _tag_keyword("alpaca", "ml4tq-12345678-a") == {"client_order_id": "ml4tq-12345678-a"}
+
+
+@pytest.mark.asyncio
+async def test_failed_provider_report_excludes_incomplete_stage(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    broker = MagicMock(unsafe=True)
+    broker.is_connected = True
+    broker.connect = AsyncMock()
+    broker.disconnect = AsyncMock()
+    broker.submit_order_async = AsyncMock(return_value=MagicMock(status=OrderStatus.PENDING))
+
+    monkeypatch.setattr(paper_qualification, "_verify_installed_candidate", lambda *_args: None)
+    monkeypatch.setattr(paper_qualification, "_build_broker", lambda _provider: broker)
+    monkeypatch.setattr(paper_qualification, "_snapshot", AsyncMock(return_value={}))
+    monkeypatch.setattr(paper_qualification, "_vendor_snapshot", lambda *_args: ({}, {}))
+    monkeypatch.setattr(paper_qualification, "_assert_atomic_rejections", AsyncMock())
+    monkeypatch.setattr(
+        paper_qualification,
+        "_wait_for_tag_count",
+        AsyncMock(
+            side_effect=PaperQualificationError(
+                "provider did not reach the expected tagged-order state"
+            )
+        ),
+    )
+    monkeypatch.setattr(paper_qualification, "_cleanup_tags", AsyncMock(return_value=True))
+
+    report = await run_provider_phase(
+        provider="ib",
+        phase="exercise",
+        candidate=_candidate(),
+        checkout_root=tmp_path,
+        state_directory=tmp_path,
+        tag_seed="12345678",
+    )
+
+    assert report["passed"] is False
+    assert report["failed_stage"] == "working_acknowledgement"
+    assert report["steps_passed"][-1] == "submit"
+    assert "working_acknowledgement" not in report["steps_passed"]
 
 
 def test_candidate_manifest_binds_successful_run_and_artifact_hashes(tmp_path: Path) -> None:

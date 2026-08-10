@@ -34,6 +34,35 @@ SOAK_DURATION_SECONDS = 6 * 60 * 60
 SOAK_SNAPSHOT_INTERVAL_SECONDS = 5 * 60
 SOAK_RSS_GROWTH_LIMIT_BYTES = 25 * 1024 * 1024
 SOAK_SHUTDOWN_LIMIT_SECONDS = 5.0
+EXERCISE_STEP_SEQUENCE = (
+    "installed_candidate",
+    "connect",
+    "paper_identity",
+    "positions",
+    "filtered_pending_orders",
+    "cash",
+    "account_value",
+    "capability_rejection",
+    "policy_rejection",
+    "submit",
+    "working_acknowledgement",
+    "reconnect",
+    "reconnect_reconciliation",
+    "replace",
+    "cancel",
+    "cleanup",
+)
+RESTART_STEP_SEQUENCE = (
+    "installed_candidate",
+    "connect",
+    "paper_identity",
+    "positions",
+    "filtered_pending_orders",
+    "cash",
+    "account_value",
+    "restart_reconciliation",
+    "cleanup",
+)
 
 
 class PaperQualificationError(RuntimeError):
@@ -520,8 +549,9 @@ async def _exercise_provider(
     from ml4t.backtest.types import OrderSide, OrderStatus, OrderType
 
     await broker.connect()
+    steps.append("connect")
     broker.assert_paper_trading()
-    steps.extend(["connect", "paper_identity"])
+    steps.append("paper_identity")
     initial = await _snapshot(provider, broker)
     initial_position_state = _vendor_snapshot(provider, broker)[0]
     steps.extend(["positions", "filtered_pending_orders", "cash", "account_value"])
@@ -538,8 +568,9 @@ async def _exercise_provider(
     )
     if order.status is not OrderStatus.PENDING:
         raise PaperQualificationError("minimal qualification order was not acknowledged as working")
+    steps.append("submit")
     await _wait_for_tag_count(provider, broker, {tags[0]}, 1)
-    steps.extend(["submit", "working_acknowledgement"])
+    steps.append("working_acknowledgement")
 
     await broker.disconnect()
     await broker.connect()
@@ -576,8 +607,9 @@ async def _restart_provider(
     provider: str, broker: Any, tags: tuple[str, str], steps: list[str]
 ) -> dict[str, Any]:
     await broker.connect()
+    steps.append("connect")
     broker.assert_paper_trading()
-    steps.extend(["connect", "paper_identity"])
+    steps.append("paper_identity")
     snapshot = await _snapshot(provider, broker)
     steps.extend(
         [
@@ -629,7 +661,8 @@ async def run_provider_phase(
             snapshots = {"restart": await _restart_provider(provider, broker, tags, steps)}
         passed = True
     except Exception as error:
-        failed_stage = steps[-1] if steps else "initialization"
+        sequence = EXERCISE_STEP_SEQUENCE if phase == "exercise" else RESTART_STEP_SEQUENCE
+        failed_stage = next((stage for stage in sequence if stage not in steps), "finalization")
         from ml4t.live.persistence import redact_sensitive
 
         detail = redact_sensitive(str(error))
@@ -644,10 +677,14 @@ async def run_provider_phase(
                 cleanup_passed = await _cleanup_tags(provider, broker, set(tags))
             except Exception:
                 cleanup_passed = False
+            if not cleanup_passed and failed_stage is None:
+                failed_stage = "cleanup"
             try:
                 await broker.disconnect()
             except Exception:
                 passed = False
+                if failed_stage is None:
+                    failed_stage = "disconnect"
         passed = passed and cleanup_passed
     return {
         "schema_version": 1,
@@ -829,35 +866,8 @@ async def run_provider_soak(
     }
 
 
-EXERCISE_STEPS = {
-    "installed_candidate",
-    "connect",
-    "paper_identity",
-    "positions",
-    "filtered_pending_orders",
-    "cash",
-    "account_value",
-    "capability_rejection",
-    "policy_rejection",
-    "submit",
-    "working_acknowledgement",
-    "reconnect",
-    "reconnect_reconciliation",
-    "replace",
-    "cancel",
-    "cleanup",
-}
-RESTART_STEPS = {
-    "installed_candidate",
-    "connect",
-    "paper_identity",
-    "positions",
-    "filtered_pending_orders",
-    "cash",
-    "account_value",
-    "restart_reconciliation",
-    "cleanup",
-}
+EXERCISE_STEPS = frozenset(EXERCISE_STEP_SEQUENCE)
+RESTART_STEPS = frozenset(RESTART_STEP_SEQUENCE)
 
 
 def validate_provider_report(
