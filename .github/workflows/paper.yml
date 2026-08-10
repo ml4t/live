@@ -46,7 +46,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: >-
-          python scripts/qualification/qualify_paper.py candidate
+          "$(uv python find 3.12)" scripts/qualification/qualify_paper.py candidate
           --artifacts-dir dist
           --candidate-sha "${{ inputs.candidate-sha }}"
           --qualification-run-id "${{ inputs.qualification-run-id }}"

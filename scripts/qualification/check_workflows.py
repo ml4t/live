@@ -323,6 +323,10 @@ def validate_workflows(root: Path = WORKFLOW_ROOT) -> list[str]:
     paper_run_text = _run_text(paper_job)
     if "qualify_paper.py candidate" not in paper_run_text:
         failures.append("paper qualification does not bind the downloaded candidate artifact")
+    if '"$(uv python find 3.12)" scripts/qualification/qualify_paper.py candidate' not in (
+        paper_run_text
+    ):
+        failures.append("paper artifact binding does not use the uv-managed Python interpreter")
     for provider in ("alpaca", "ib"):
         for phase in ("exercise", "restart"):
             if (
