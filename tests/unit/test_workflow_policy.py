@@ -10,6 +10,7 @@ from scripts.qualification.check_workflows import (
     load_workflow,
     paper_soak_failures,
     promotion_failures,
+    release_recovery_failures,
     validate_workflows,
 )
 
@@ -82,3 +83,39 @@ def test_seeded_mandatory_failure_cannot_reach_publish(mutation: str, expected: 
     assert any(
         expected in failure for failure in promotion_failures(seeded_qualification, seeded_release)
     )
+
+
+@pytest.mark.parametrize(
+    ("mutation", "expected"),
+    [
+        ("missing-paper", "fresh paper evidence"),
+        ("wrong-source-run", "exact source-run artifact"),
+        ("missing-attestation", "trusted provenance attestations"),
+        ("early-release", "successful publication"),
+    ],
+)
+def test_seeded_recovery_failure_is_rejected(mutation: str, expected: str) -> None:
+    release = load_workflow(WORKFLOW_ROOT / "release.yml")
+    seeded_release = deepcopy(release)
+    recovery_publish = seeded_release["jobs"]["recovery-publish"]
+
+    if mutation == "missing-paper":
+        recovery_publish["needs"] = []
+    elif mutation == "wrong-source-run":
+        download = next(
+            step
+            for step in recovery_publish["steps"]
+            if str(step.get("uses", "")).startswith("actions/download-artifact@")
+        )
+        download["with"]["run-id"] = "123"
+    elif mutation == "missing-attestation":
+        publisher = next(
+            step
+            for step in recovery_publish["steps"]
+            if str(step.get("uses", "")).startswith("pypa/gh-action-pypi-publish@")
+        )
+        publisher["with"]["attestations"] = "false"
+    else:
+        seeded_release["jobs"]["recovery-github-release"]["needs"] = "paper-evidence"
+
+    assert any(expected in failure for failure in release_recovery_failures(seeded_release))
