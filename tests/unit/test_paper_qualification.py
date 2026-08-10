@@ -376,8 +376,8 @@ async def test_provider_soak_runs_continuously_and_reconnects_once(
         assert captured_broker is broker
         return _snapshot()
 
-    monkeypatch.setattr(paper_qualification, "SOAK_DURATION_SECONDS", 0.04)
-    monkeypatch.setattr(paper_qualification, "SOAK_SNAPSHOT_INTERVAL_SECONDS", 0.01)
+    monkeypatch.setattr(paper_qualification, "SOAK_DURATION_SECONDS", 0.4)
+    monkeypatch.setattr(paper_qualification, "SOAK_SNAPSHOT_INTERVAL_SECONDS", 0.1)
     monkeypatch.setattr(paper_qualification, "_verify_installed_candidate", lambda *_args: None)
     monkeypatch.setattr(paper_qualification, "_build_broker", lambda _provider: broker)
     monkeypatch.setattr(paper_qualification, "_snapshot", fake_snapshot)
@@ -387,7 +387,9 @@ async def test_provider_soak_runs_continuously_and_reconnects_once(
         provider="alpaca", candidate=_candidate(), checkout_root=tmp_path
     )
 
-    assert report["passed"] is True
+    assert report["passed"] is True, {
+        key: value for key, value in report.items() if key not in {"candidate", "snapshots"}
+    }
     assert report["reconnect_count"] == 1
     assert len(report["snapshots"]) >= 5
     assert broker.connect_count == 2

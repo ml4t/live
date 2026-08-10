@@ -725,16 +725,19 @@ async def run_provider_soak(
         initial_checksum = _provider_state_checksum(provider, broker)
 
         deadline = started_monotonic + SOAK_DURATION_SECONDS
-        next_snapshot = started_monotonic + SOAK_SNAPSHOT_INTERVAL_SECONDS
         reconnect_at = started_monotonic + SOAK_DURATION_SECONDS / 2
         reconnected = False
-        while next_snapshot <= deadline:
-            event_at = min(next_snapshot, reconnect_at if not reconnected else deadline)
-            await asyncio.sleep(max(0.0, event_at - time.monotonic()))
-            if not broker.is_connected:
-                unexpected_disconnect_count += 1
-                raise PaperQualificationError("paper provider disconnected during the soak")
-            if not reconnected and event_at == reconnect_at:
+        snapshot_total = math.ceil(SOAK_DURATION_SECONDS / SOAK_SNAPSHOT_INTERVAL_SECONDS - 1e-12)
+        for snapshot_index in range(1, snapshot_total + 1):
+            snapshot_at = min(
+                started_monotonic + snapshot_index * SOAK_SNAPSHOT_INTERVAL_SECONDS,
+                deadline,
+            )
+            if not reconnected and reconnect_at <= snapshot_at:
+                await asyncio.sleep(max(0.0, reconnect_at - time.monotonic()))
+                if not broker.is_connected:
+                    unexpected_disconnect_count += 1
+                    raise PaperQualificationError("paper provider disconnected during the soak")
                 stage = "controlled_reconnect"
                 shutdown_started = time.monotonic()
                 await broker.disconnect()
@@ -745,18 +748,18 @@ async def run_provider_soak(
                 broker.assert_paper_trading()
                 reconnect_count += 1
                 reconnected = True
-            if event_at == next_snapshot:
-                stage = "scheduled_snapshot"
-                snapshot = await _soak_snapshot(
-                    provider, broker, started_monotonic=started_monotonic
-                )
-                if snapshot["elapsed_seconds"] > (
-                    next_snapshot - started_monotonic + SOAK_SNAPSHOT_INTERVAL_SECONDS
-                ):
-                    continuity_gap_count += 1
-                    raise PaperQualificationError("paper soak snapshot continuity was lost")
-                snapshots.append(snapshot)
-                next_snapshot += SOAK_SNAPSHOT_INTERVAL_SECONDS
+            await asyncio.sleep(max(0.0, snapshot_at - time.monotonic()))
+            if not broker.is_connected:
+                unexpected_disconnect_count += 1
+                raise PaperQualificationError("paper provider disconnected during the soak")
+            stage = "scheduled_snapshot"
+            snapshot = await _soak_snapshot(provider, broker, started_monotonic=started_monotonic)
+            if snapshot["elapsed_seconds"] > (
+                snapshot_at - started_monotonic + SOAK_SNAPSHOT_INTERVAL_SECONDS
+            ):
+                continuity_gap_count += 1
+                raise PaperQualificationError("paper soak snapshot continuity was lost")
+            snapshots.append(snapshot)
 
         stage = "final_reconciliation"
         final_checksum = _provider_state_checksum(provider, broker)
