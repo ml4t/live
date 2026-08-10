@@ -227,6 +227,8 @@ def release_recovery_failures(release: dict[str, Any]) -> list[str]:
         recovery_release_text
     ):
         failures.append("recovered GitHub release does not retain security evidence")
+    if '--repo "${{ github.repository }}"' not in recovery_release_text:
+        failures.append("recovered GitHub release does not address its repository explicitly")
     return failures
 
 
@@ -384,6 +386,8 @@ def validate_workflows(root: Path = WORKFLOW_ROOT) -> list[str]:
     release_text = _run_text(release.get("jobs", {}).get("github-release", {}))
     if "sbom.cdx.json" not in release_text or "dependency-snapshot.json" not in release_text:
         failures.append("GitHub release does not retain the SBOM and dependency snapshot")
+    if '--repo "${{ github.repository }}"' not in release_text:
+        failures.append("GitHub release does not address its repository explicitly")
 
     failures.extend(release_recovery_failures(release))
 

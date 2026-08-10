@@ -126,6 +126,7 @@ jobs:
           security-evidence/sbom.cdx.json
           security-evidence/dependency-snapshot.json
           --generate-notes
+          --repo "${{ github.repository }}"
           --verify-tag
 
   recovery-publish:
@@ -213,4 +214,5 @@ jobs:
           security-evidence/sbom.cdx.json
           security-evidence/dependency-snapshot.json
           --generate-notes
+          --repo "${{ github.repository }}"
           --verify-tag

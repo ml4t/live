@@ -92,6 +92,7 @@ def test_seeded_mandatory_failure_cannot_reach_publish(mutation: str, expected: 
         ("wrong-source-run", "exact source-run artifact"),
         ("missing-attestation", "trusted provenance attestations"),
         ("early-release", "successful publication"),
+        ("missing-repository", "repository explicitly"),
     ],
 )
 def test_seeded_recovery_failure_is_rejected(mutation: str, expected: str) -> None:
@@ -115,7 +116,12 @@ def test_seeded_recovery_failure_is_rejected(mutation: str, expected: str) -> No
             if str(step.get("uses", "")).startswith("pypa/gh-action-pypi-publish@")
         )
         publisher["with"]["attestations"] = "false"
-    else:
+    elif mutation == "early-release":
         seeded_release["jobs"]["recovery-github-release"]["needs"] = "paper-evidence"
+    else:
+        release_step = seeded_release["jobs"]["recovery-github-release"]["steps"][-1]
+        release_step["run"] = str(release_step["run"]).replace(
+            '--repo "${{ github.repository }}"', ""
+        )
 
     assert any(expected in failure for failure in release_recovery_failures(seeded_release))
