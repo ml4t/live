@@ -10,6 +10,7 @@ import json
 import math
 import os
 import re
+import resource
 import subprocess
 import sys
 import time
@@ -29,6 +30,10 @@ ASSET = "AAPL"
 QUANTITY = 1.0
 INITIAL_LIMIT = 1.00
 REPLACEMENT_LIMIT = 1.01
+SOAK_DURATION_SECONDS = 6 * 60 * 60
+SOAK_SNAPSHOT_INTERVAL_SECONDS = 5 * 60
+SOAK_RSS_GROWTH_LIMIT_BYTES = 25 * 1024 * 1024
+SOAK_SHUTDOWN_LIMIT_SECONDS = 5.0
 
 
 class PaperQualificationError(RuntimeError):
@@ -658,6 +663,167 @@ async def run_provider_phase(
     }
 
 
+def _provider_state_checksum(provider: str, broker: Any) -> str:
+    positions, orders = _vendor_snapshot(provider, broker)
+    state = {
+        "positions": sorted(positions.items()),
+        "orders": sorted([list(order) + [count] for order, count in orders.items()]),
+    }
+    encoded = json.dumps(state, separators=(",", ":"), sort_keys=True).encode()
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _rss_bytes() -> int:
+    return int(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss) * 1024
+
+
+async def _soak_snapshot(provider: str, broker: Any, *, started_monotonic: float) -> dict[str, Any]:
+    if not broker.is_connected:
+        raise PaperQualificationError("paper provider disconnected during the soak")
+    snapshot = await _snapshot(provider, broker)
+    return {
+        "elapsed_seconds": time.monotonic() - started_monotonic,
+        "rss_bytes": _rss_bytes(),
+        **snapshot,
+        "connected": True,
+    }
+
+
+async def run_provider_soak(
+    *, provider: str, candidate: dict[str, Any], checkout_root: Path
+) -> dict[str, Any]:
+    """Run a continuous paper session with one controlled reconnect."""
+    if provider not in PROVIDERS:
+        raise PaperQualificationError("unsupported paper soak provider")
+    identity = _candidate_identity(candidate)
+    _verify_installed_candidate(identity, checkout_root)
+    started_at = datetime.now(UTC).isoformat()
+    started_monotonic = time.monotonic()
+    stage = "initialization"
+    snapshots: list[dict[str, Any]] = []
+    initial_checksum: str | None = None
+    final_checksum: str | None = None
+    paper_identity_verified = False
+    reconnect_count = 0
+    unexpected_disconnect_count = 0
+    continuity_gap_count = 0
+    maximum_shutdown_seconds = 0.0
+    error_count = 0
+    failure_type: str | None = None
+    broker: Any | None = None
+    passed = False
+    try:
+        broker = _build_broker(provider)
+        stage = "connect"
+        await broker.connect()
+        broker.assert_paper_trading()
+        paper_identity_verified = True
+        stage = "initial_snapshot"
+        snapshots.append(
+            await _soak_snapshot(provider, broker, started_monotonic=started_monotonic)
+        )
+        initial_checksum = _provider_state_checksum(provider, broker)
+
+        deadline = started_monotonic + SOAK_DURATION_SECONDS
+        next_snapshot = started_monotonic + SOAK_SNAPSHOT_INTERVAL_SECONDS
+        reconnect_at = started_monotonic + SOAK_DURATION_SECONDS / 2
+        reconnected = False
+        while next_snapshot <= deadline:
+            event_at = min(next_snapshot, reconnect_at if not reconnected else deadline)
+            await asyncio.sleep(max(0.0, event_at - time.monotonic()))
+            if not broker.is_connected:
+                unexpected_disconnect_count += 1
+                raise PaperQualificationError("paper provider disconnected during the soak")
+            if not reconnected and event_at == reconnect_at:
+                stage = "controlled_reconnect"
+                shutdown_started = time.monotonic()
+                await broker.disconnect()
+                maximum_shutdown_seconds = max(
+                    maximum_shutdown_seconds, time.monotonic() - shutdown_started
+                )
+                await broker.connect()
+                broker.assert_paper_trading()
+                reconnect_count += 1
+                reconnected = True
+            if event_at == next_snapshot:
+                stage = "scheduled_snapshot"
+                snapshot = await _soak_snapshot(
+                    provider, broker, started_monotonic=started_monotonic
+                )
+                if snapshot["elapsed_seconds"] > (
+                    next_snapshot - started_monotonic + SOAK_SNAPSHOT_INTERVAL_SECONDS
+                ):
+                    continuity_gap_count += 1
+                    raise PaperQualificationError("paper soak snapshot continuity was lost")
+                snapshots.append(snapshot)
+                next_snapshot += SOAK_SNAPSHOT_INTERVAL_SECONDS
+
+        stage = "final_reconciliation"
+        final_checksum = _provider_state_checksum(provider, broker)
+        passed = True
+    except Exception as error:
+        error_count += 1
+        failure_type = type(error).__name__
+        print(
+            f"paper {provider} soak failed during {stage}: {failure_type}",
+            file=sys.stderr,
+        )
+    finally:
+        if broker is not None and broker.is_connected:
+            try:
+                stage = "disconnect"
+                shutdown_started = time.monotonic()
+                await broker.disconnect()
+                maximum_shutdown_seconds = max(
+                    maximum_shutdown_seconds, time.monotonic() - shutdown_started
+                )
+            except Exception as error:
+                error_count += 1
+                failure_type = type(error).__name__
+                passed = False
+        duration_seconds = time.monotonic() - started_monotonic
+
+    state_unchanged = initial_checksum is not None and initial_checksum == final_checksum
+    rss_values = [snapshot["rss_bytes"] for snapshot in snapshots]
+    rss_growth_bytes = max(rss_values, default=0) - (rss_values[0] if rss_values else 0)
+    passed = (
+        passed
+        and duration_seconds >= SOAK_DURATION_SECONDS
+        and paper_identity_verified
+        and reconnect_count == 1
+        and unexpected_disconnect_count == 0
+        and continuity_gap_count == 0
+        and state_unchanged
+        and rss_growth_bytes < SOAK_RSS_GROWTH_LIMIT_BYTES
+        and maximum_shutdown_seconds < SOAK_SHUTDOWN_LIMIT_SECONDS
+        and error_count == 0
+    )
+    return {
+        "schema_version": 1,
+        "provider": provider,
+        "candidate": identity,
+        "started_at": started_at,
+        "completed_at": datetime.now(UTC).isoformat(),
+        "duration_seconds": duration_seconds,
+        "snapshot_interval_seconds": SOAK_SNAPSHOT_INTERVAL_SECONDS,
+        "snapshots": snapshots,
+        "paper_identity_verified": paper_identity_verified,
+        "reconnect_count": reconnect_count,
+        "unexpected_disconnect_count": unexpected_disconnect_count,
+        "continuity_gap_count": continuity_gap_count,
+        "initial_state_checksum": initial_checksum,
+        "final_state_checksum": final_checksum,
+        "final_reconciliation_exact": state_unchanged,
+        "state_unchanged": state_unchanged,
+        "rss_growth_bytes": rss_growth_bytes,
+        "maximum_shutdown_seconds": maximum_shutdown_seconds,
+        "error_count": error_count,
+        "failed_stage": None if passed else stage,
+        "failure_type": None if passed else failure_type,
+        "passed": passed,
+    }
+
+
 EXERCISE_STEPS = {
     "installed_candidate",
     "connect",
@@ -766,16 +932,175 @@ def validate_provider_report(
             raise PaperQualificationError("provider report contains an invalid snapshot")
 
 
+def validate_provider_soak_report(
+    report: dict[str, Any], candidate_identity: dict[str, Any], provider: str
+) -> None:
+    required = {
+        "schema_version",
+        "provider",
+        "candidate",
+        "started_at",
+        "completed_at",
+        "duration_seconds",
+        "snapshot_interval_seconds",
+        "snapshots",
+        "paper_identity_verified",
+        "reconnect_count",
+        "unexpected_disconnect_count",
+        "continuity_gap_count",
+        "initial_state_checksum",
+        "final_state_checksum",
+        "final_reconciliation_exact",
+        "state_unchanged",
+        "rss_growth_bytes",
+        "maximum_shutdown_seconds",
+        "error_count",
+        "failed_stage",
+        "failure_type",
+        "passed",
+    }
+    if set(report) != required or report.get("schema_version") != 1:
+        raise PaperQualificationError("provider soak report schema is invalid")
+    if report.get("provider") != provider or report.get("candidate") != candidate_identity:
+        raise PaperQualificationError("provider soak report targets a different candidate")
+    started_at = _evidence_time(report["started_at"])
+    completed_at = _evidence_time(report["completed_at"])
+    duration = report.get("duration_seconds")
+    if completed_at < started_at:
+        raise PaperQualificationError("provider soak report timestamps are reversed")
+    if (
+        isinstance(duration, bool)
+        or not isinstance(duration, (int, float))
+        or not math.isfinite(duration)
+        or duration < SOAK_DURATION_SECONDS
+        or (completed_at - started_at).total_seconds() < SOAK_DURATION_SECONDS
+    ):
+        raise PaperQualificationError("provider soak did not run for six hours")
+    if report.get("snapshot_interval_seconds") != SOAK_SNAPSHOT_INTERVAL_SECONDS:
+        raise PaperQualificationError("provider soak snapshot interval is invalid")
+    snapshots = report.get("snapshots")
+    expected_count = SOAK_DURATION_SECONDS // SOAK_SNAPSHOT_INTERVAL_SECONDS + 1
+    snapshot_keys = {
+        "elapsed_seconds",
+        "rss_bytes",
+        "positions_count",
+        "pending_orders_count",
+        "filtered_pending_orders_count",
+        "position_snapshot_exact",
+        "pending_order_snapshot_exact",
+        "account_value_valid",
+        "cash_valid",
+        "connected",
+    }
+    if not isinstance(snapshots, list) or len(snapshots) < expected_count:
+        raise PaperQualificationError("provider soak has incomplete snapshots")
+    elapsed_values: list[float] = []
+    for snapshot in snapshots:
+        if not isinstance(snapshot, dict) or set(snapshot) != snapshot_keys:
+            raise PaperQualificationError("provider soak snapshot schema is invalid")
+        elapsed = snapshot.get("elapsed_seconds")
+        rss_bytes = snapshot.get("rss_bytes")
+        counts = (
+            snapshot.get("positions_count"),
+            snapshot.get("pending_orders_count"),
+            snapshot.get("filtered_pending_orders_count"),
+        )
+        if (
+            isinstance(elapsed, bool)
+            or not isinstance(elapsed, (int, float))
+            or not math.isfinite(elapsed)
+            or isinstance(rss_bytes, bool)
+            or not isinstance(rss_bytes, int)
+            or rss_bytes < 0
+            or any(
+                isinstance(count, bool) or not isinstance(count, int) or count < 0
+                for count in counts
+            )
+        ):
+            raise PaperQualificationError("provider soak snapshot values are invalid")
+        elapsed_values.append(float(elapsed))
+        if any(
+            snapshot.get(name) is not True
+            for name in (
+                "position_snapshot_exact",
+                "pending_order_snapshot_exact",
+                "account_value_valid",
+                "cash_valid",
+                "connected",
+            )
+        ):
+            raise PaperQualificationError("provider soak contains an invalid snapshot")
+    if (
+        elapsed_values != sorted(elapsed_values)
+        or elapsed_values[0] > SOAK_SNAPSHOT_INTERVAL_SECONDS
+        or elapsed_values[-1] < SOAK_DURATION_SECONDS
+        or any(
+            current - previous > 2 * SOAK_SNAPSHOT_INTERVAL_SECONDS
+            for previous, current in zip(elapsed_values, elapsed_values[1:])
+        )
+    ):
+        raise PaperQualificationError("provider soak snapshot continuity is invalid")
+    initial_checksum = report.get("initial_state_checksum")
+    if (
+        not isinstance(initial_checksum, str)
+        or not HASH_PATTERN.fullmatch(initial_checksum)
+        or report.get("final_state_checksum") != initial_checksum
+    ):
+        raise PaperQualificationError("provider soak state reconciliation is invalid")
+    numeric_contract = {
+        "reconnect_count": 1,
+        "unexpected_disconnect_count": 0,
+        "continuity_gap_count": 0,
+        "error_count": 0,
+    }
+    if any(report.get(field) != value for field, value in numeric_contract.items()):
+        raise PaperQualificationError("provider soak continuity contract did not pass")
+    rss_growth = report.get("rss_growth_bytes")
+    shutdown = report.get("maximum_shutdown_seconds")
+    if (
+        isinstance(rss_growth, bool)
+        or not isinstance(rss_growth, int)
+        or rss_growth < 0
+        or rss_growth >= SOAK_RSS_GROWTH_LIMIT_BYTES
+        or isinstance(shutdown, bool)
+        or not isinstance(shutdown, (int, float))
+        or not math.isfinite(shutdown)
+        or shutdown < 0
+        or shutdown >= SOAK_SHUTDOWN_LIMIT_SECONDS
+    ):
+        raise PaperQualificationError("provider soak resource or shutdown limit failed")
+    if (
+        report.get("paper_identity_verified") is not True
+        or report.get("final_reconciliation_exact") is not True
+        or report.get("state_unchanged") is not True
+        or report.get("failed_stage") is not None
+        or report.get("failure_type") is not None
+        or report.get("passed") is not True
+    ):
+        raise PaperQualificationError("provider soak did not pass fail-closed qualification")
+
+
 def assemble_bundle(
-    candidate: dict[str, Any], reports: list[dict[str, Any]], *, generated_at: str | None = None
+    candidate: dict[str, Any],
+    reports: list[dict[str, Any]],
+    soak_reports: list[dict[str, Any]],
+    *,
+    generated_at: str | None = None,
 ) -> dict[str, Any]:
     identity = _candidate_identity(candidate)
     indexed = {(report.get("provider"), report.get("phase")): report for report in reports}
-    if set(indexed) != {(provider, phase) for provider in PROVIDERS for phase in PHASES}:
+    if len(indexed) != len(reports) or set(indexed) != {
+        (provider, phase) for provider in PROVIDERS for phase in PHASES
+    }:
         raise PaperQualificationError("paper evidence requires both phases for both providers")
     for provider in PROVIDERS:
         for phase in PHASES:
             validate_provider_report(indexed[(provider, phase)], identity, provider, phase)
+    indexed_soaks = {report.get("provider"): report for report in soak_reports}
+    if len(indexed_soaks) != len(soak_reports) or set(indexed_soaks) != set(PROVIDERS):
+        raise PaperQualificationError("paper evidence requires a six-hour soak for both providers")
+    for provider in PROVIDERS:
+        validate_provider_soak_report(indexed_soaks[provider], identity, provider)
     return {
         "schema_version": 1,
         "generated_at": generated_at or datetime.now(UTC).isoformat(),
@@ -784,6 +1109,7 @@ def assemble_bundle(
             provider: {phase: indexed[(provider, phase)] for phase in PHASES}
             for provider in PROVIDERS
         },
+        "soaks": indexed_soaks,
         "redacted": True,
         "passed": True,
     }
@@ -797,6 +1123,7 @@ def validate_bundle(bundle: dict[str, Any], *, expected_commit: str | None = Non
             "generated_at",
             "candidate",
             "providers",
+            "soaks",
             "redacted",
             "passed",
         }
@@ -831,6 +1158,12 @@ def validate_bundle(bundle: dict[str, Any], *, expected_commit: str | None = Non
         for phase in PHASES:
             validate_provider_report(phases[phase], candidate, provider, phase)
             completed_at.append(_evidence_time(phases[phase]["completed_at"]))
+    soaks = bundle.get("soaks")
+    if not isinstance(soaks, dict) or set(soaks) != set(PROVIDERS):
+        raise PaperQualificationError("paper evidence has incomplete provider soaks")
+    for provider in PROVIDERS:
+        validate_provider_soak_report(soaks[provider], candidate, provider)
+        completed_at.append(_evidence_time(soaks[provider]["completed_at"]))
     if _evidence_time(bundle["generated_at"]) < max(completed_at):
         raise PaperQualificationError("paper evidence bundle predates a provider report")
     if bundle.get("redacted") is not True or bundle.get("passed") is not True:
@@ -887,10 +1220,25 @@ def _provider_command(args: argparse.Namespace) -> int:
     return int(not report["passed"])
 
 
+def _soak_command(args: argparse.Namespace) -> int:
+    candidate = _load_json(args.candidate)
+    report = asyncio.run(
+        run_provider_soak(
+            provider=args.provider,
+            candidate=candidate,
+            checkout_root=args.checkout_root,
+        )
+    )
+    _write_json(args.output, report)
+    print(f"paper {args.provider} soak: {'PASS' if report['passed'] else 'FAIL'}")
+    return int(not report["passed"])
+
+
 def _assemble_command(args: argparse.Namespace) -> int:
     candidate = _load_json(args.candidate)
     reports = [_load_json(path) for path in args.report]
-    bundle = assemble_bundle(candidate, reports)
+    soak_reports = [_load_json(path) for path in args.soak_report]
+    bundle = assemble_bundle(candidate, reports, soak_reports)
     _write_json(args.output, bundle)
     print(
         f"paper qualification: PASS commit={bundle['candidate']['commit']} "
@@ -928,9 +1276,17 @@ def main() -> int:
     provider.add_argument("--output", type=Path, required=True)
     provider.set_defaults(handler=_provider_command)
 
+    soak = subparsers.add_parser("soak")
+    soak.add_argument("--candidate", type=Path, required=True)
+    soak.add_argument("--provider", choices=PROVIDERS, required=True)
+    soak.add_argument("--checkout-root", type=Path, required=True)
+    soak.add_argument("--output", type=Path, required=True)
+    soak.set_defaults(handler=_soak_command)
+
     assemble = subparsers.add_parser("assemble")
     assemble.add_argument("--candidate", type=Path, required=True)
     assemble.add_argument("--report", action="append", type=Path, required=True)
+    assemble.add_argument("--soak-report", action="append", type=Path, required=True)
     assemble.add_argument("--output", type=Path, required=True)
     assemble.set_defaults(handler=_assemble_command)
 

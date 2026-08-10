@@ -11,7 +11,12 @@ from scripts.qualification.check_paper_evidence import (
     fetch_bytes,
     find_fresh_paper_run,
 )
-from scripts.qualification.qualify_paper import EXERCISE_STEPS, RESTART_STEPS
+from scripts.qualification.qualify_paper import (
+    EXERCISE_STEPS,
+    RESTART_STEPS,
+    SOAK_DURATION_SECONDS,
+    SOAK_SNAPSHOT_INTERVAL_SECONDS,
+)
 
 NOW = datetime(2026, 8, 8, 20, tzinfo=UTC)
 COMMIT = "a" * 40
@@ -85,10 +90,58 @@ def _report(provider: str, phase: str, commit: str) -> dict:
     }
 
 
+def _soak_report(provider: str, commit: str) -> dict:
+    snapshots = [
+        {
+            "elapsed_seconds": index * SOAK_SNAPSHOT_INTERVAL_SECONDS,
+            "rss_bytes": 100_000_000,
+            "positions_count": 0,
+            "pending_orders_count": 0,
+            "filtered_pending_orders_count": 0,
+            "position_snapshot_exact": True,
+            "pending_order_snapshot_exact": True,
+            "account_value_valid": True,
+            "cash_valid": True,
+            "connected": True,
+        }
+        for index in range(SOAK_DURATION_SECONDS // SOAK_SNAPSHOT_INTERVAL_SECONDS + 1)
+    ]
+    return {
+        "schema_version": 1,
+        "provider": provider,
+        "candidate": {
+            "commit": commit,
+            "qualification_run_id": 41,
+            "version": "0.1.0",
+            "wheel_sha256": "b" * 64,
+            "sdist_sha256": "c" * 64,
+        },
+        "started_at": "2026-08-07T20:00:00+00:00",
+        "completed_at": "2026-08-08T02:00:01+00:00",
+        "duration_seconds": SOAK_DURATION_SECONDS + 0.1,
+        "snapshot_interval_seconds": SOAK_SNAPSHOT_INTERVAL_SECONDS,
+        "snapshots": snapshots,
+        "paper_identity_verified": True,
+        "reconnect_count": 1,
+        "unexpected_disconnect_count": 0,
+        "continuity_gap_count": 0,
+        "initial_state_checksum": "d" * 64,
+        "final_state_checksum": "d" * 64,
+        "final_reconciliation_exact": True,
+        "state_unchanged": True,
+        "rss_growth_bytes": 0,
+        "maximum_shutdown_seconds": 0.1,
+        "error_count": 0,
+        "failed_stage": None,
+        "failure_type": None,
+        "passed": True,
+    }
+
+
 def _archive(commit: str = COMMIT) -> bytes:
     bundle = {
         "schema_version": 1,
-        "generated_at": "2026-08-07T20:02:00+00:00",
+        "generated_at": "2026-08-08T02:01:00+00:00",
         "candidate": {
             "commit": commit,
             "qualification_run_id": 41,
@@ -100,6 +153,7 @@ def _archive(commit: str = COMMIT) -> bytes:
             provider: {phase: _report(provider, phase, commit) for phase in ("exercise", "restart")}
             for provider in ("alpaca", "ib")
         },
+        "soaks": {provider: _soak_report(provider, commit) for provider in ("alpaca", "ib")},
         "redacted": True,
         "passed": True,
     }

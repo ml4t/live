@@ -20,7 +20,7 @@ env:
 
 jobs:
   paper:
-    name: IB and Alpaca paper evidence
+    name: Supported provider paper evidence
     runs-on: [self-hosted, linux, x64, ib-paper]
     timeout-minutes: 390
     environment: paper
@@ -133,9 +133,39 @@ jobs:
           --state-directory "${{ runner.temp }}/paper-state"
           --tag-seed "${{ github.run_id }}"
           --output "${{ github.workspace }}/paper-evidence/ib-restart.json"
-      - name: Require complete redacted evidence for both providers
+      - name: Qualify the supported OKX feed against the public service
+        id: okx-external
+        continue-on-error: true
+        run: >-
+          cd "${{ runner.temp }}/paper-run" &&
+          "${{ runner.temp }}/paper-venv/bin/python"
+          "${{ github.workspace }}/scripts/qualification/qualify_feeds.py" okx
+          --candidate "${{ github.workspace }}/paper-evidence/candidate.json"
+          --checkout-root "${{ github.workspace }}"
+          --output "${{ github.workspace }}/feed-evidence/okx.json"
+      - name: Run six-hour Alpaca, IB, and OKX soaks concurrently
+        id: provider-soaks
+        continue-on-error: true
+        env:
+          ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
+          ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
+          IB_ACCOUNT: ${{ secrets.IB_ACCOUNT }}
+          IB_CLIENT_ID: ${{ secrets.IB_CLIENT_ID }}
+          IB_HOST: ${{ secrets.IB_HOST }}
+          IB_PORT: ${{ secrets.IB_PORT }}
+        run: >-
+          cd "${{ github.workspace }}" &&
+          "${{ runner.temp }}/paper-venv/bin/python"
+          -m scripts.qualification.qualify_provider_soaks
+          --candidate "${{ github.workspace }}/paper-evidence/candidate.json"
+          --checkout-root "${{ github.workspace }}"
+          --alpaca-output "${{ github.workspace }}/paper-evidence/alpaca-soak.json"
+          --ib-output "${{ github.workspace }}/paper-evidence/ib-soak.json"
+          --okx-output "${{ github.workspace }}/feed-evidence/okx-soak.json"
+      - name: Require complete redacted evidence for both paper providers
         id: evidence
         if: ${{ always() }}
+        continue-on-error: true
         run: >-
           "${{ runner.temp }}/paper-venv/bin/python"
           scripts/qualification/qualify_paper.py assemble
@@ -144,24 +174,13 @@ jobs:
           --report paper-evidence/alpaca-restart.json
           --report paper-evidence/ib-exercise.json
           --report paper-evidence/ib-restart.json
+          --soak-report paper-evidence/alpaca-soak.json
+          --soak-report paper-evidence/ib-soak.json
           --output paper-evidence/paper-qualification.json
-      - name: Qualify the supported OKX feed against the public service
-        run: >-
-          cd "${{ runner.temp }}/paper-run" &&
-          "${{ runner.temp }}/paper-venv/bin/python"
-          "${{ github.workspace }}/scripts/qualification/qualify_feeds.py" okx
-          --candidate "${{ github.workspace }}/paper-evidence/candidate.json"
-          --checkout-root "${{ github.workspace }}"
-          --output "${{ github.workspace }}/feed-evidence/okx.json"
-      - name: Run the six-hour supported-provider soak
-        run: >-
-          cd "${{ runner.temp }}/paper-run" &&
-          "${{ runner.temp }}/paper-venv/bin/python"
-          "${{ github.workspace }}/scripts/qualification/qualify_feeds.py" soak
-          --candidate "${{ github.workspace }}/paper-evidence/candidate.json"
-          --checkout-root "${{ github.workspace }}"
-          --output "${{ github.workspace }}/feed-evidence/okx-soak.json"
       - name: Require the installed feed support contract and external evidence
+        id: feed-evidence
+        if: ${{ always() }}
+        continue-on-error: true
         run: >-
           cd "${{ runner.temp }}/paper-run" &&
           "${{ runner.temp }}/paper-venv/bin/python"
@@ -195,3 +214,16 @@ jobs:
             feed-evidence/
           if-no-files-found: error
           retention-days: 30
+      - name: Require every provider qualification stage to pass
+        if: ${{ always() }}
+        run: >-
+          test "${{ steps.alpaca-exercise.outcome }}" = success &&
+          test "${{ steps.alpaca-restart.outcome }}" = success &&
+          test "${{ steps.ib-exercise.outcome }}" = success &&
+          test "${{ steps.ib-restart.outcome }}" = success &&
+          test "${{ steps.okx-external.outcome }}" = success &&
+          test "${{ steps.provider-soaks.outcome }}" = success &&
+          test "${{ steps.evidence.outcome }}" = success &&
+          test "${{ steps.feed-evidence.outcome }}" = success &&
+          test "${{ steps.evidence-scan.outcome }}" = success &&
+          test "${{ steps.feed-evidence-scan.outcome }}" = success

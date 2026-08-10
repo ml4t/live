@@ -334,8 +334,11 @@ def validate_workflows(root: Path = WORKFLOW_ROOT) -> list[str]:
         failures.append("paper qualification does not require a complete redacted evidence bundle")
     if 'qualify_feeds.py" okx' not in paper_run_text:
         failures.append("paper qualification does not run external OKX feed evidence")
-    if 'qualify_feeds.py" soak' not in paper_run_text:
-        failures.append("paper qualification does not run the six-hour provider soak")
+    if "scripts.qualification.qualify_provider_soaks" not in paper_run_text:
+        failures.append("paper qualification does not run concurrent supported-provider soaks")
+    for provider in ("alpaca", "ib"):
+        if f"{provider}-soak.json" not in paper_run_text:
+            failures.append(f"paper qualification does not retain the {provider} soak")
     if 'qualify_feeds.py" assemble' not in paper_run_text:
         failures.append("paper qualification does not require the installed feed support contract")
     if paper_job.get("timeout-minutes") != "390":

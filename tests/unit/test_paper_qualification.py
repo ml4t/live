@@ -9,16 +9,22 @@ from ml4t.backtest.types import OrderSide, OrderType
 from ml4t.specs import ExecutionCapability
 
 from ml4t.live import CanonicalOrderRequest
+from scripts.qualification import qualify_paper as paper_qualification
 from scripts.qualification.qualify_paper import (
     EXERCISE_STEPS,
     RESTART_STEPS,
+    SOAK_DURATION_SECONDS,
+    SOAK_RSS_GROWTH_LIMIT_BYTES,
+    SOAK_SNAPSHOT_INTERVAL_SECONDS,
     PaperQualificationError,
     _assert_atomic_rejections,
     _cleanup_tags,
     _raw_tagged_orders,
     assemble_bundle,
     build_candidate_manifest,
+    run_provider_soak,
     validate_bundle,
+    validate_provider_soak_report,
 )
 from scripts.qualification.qualify_paper import _snapshot as capture_snapshot
 
@@ -86,6 +92,59 @@ def _reports() -> list[dict]:
         for provider in ("alpaca", "ib")
         for phase in ("exercise", "restart")
     ]
+
+
+def _soak_report(provider: str) -> dict:
+    identity = {
+        "commit": COMMIT,
+        "qualification_run_id": 42,
+        "version": "0.1.0",
+        "wheel_sha256": WHEEL_HASH,
+        "sdist_sha256": "c" * 64,
+    }
+    snapshots = [
+        {
+            "elapsed_seconds": index * SOAK_SNAPSHOT_INTERVAL_SECONDS,
+            "rss_bytes": 100_000_000,
+            "positions_count": 2,
+            "pending_orders_count": 0,
+            "filtered_pending_orders_count": 0,
+            "position_snapshot_exact": True,
+            "pending_order_snapshot_exact": True,
+            "account_value_valid": True,
+            "cash_valid": True,
+            "connected": True,
+        }
+        for index in range(SOAK_DURATION_SECONDS // SOAK_SNAPSHOT_INTERVAL_SECONDS + 1)
+    ]
+    return {
+        "schema_version": 1,
+        "provider": provider,
+        "candidate": identity,
+        "started_at": "2026-08-08T12:00:00+00:00",
+        "completed_at": "2026-08-08T18:00:01+00:00",
+        "duration_seconds": SOAK_DURATION_SECONDS + 0.1,
+        "snapshot_interval_seconds": SOAK_SNAPSHOT_INTERVAL_SECONDS,
+        "snapshots": snapshots,
+        "paper_identity_verified": True,
+        "reconnect_count": 1,
+        "unexpected_disconnect_count": 0,
+        "continuity_gap_count": 0,
+        "initial_state_checksum": "d" * 64,
+        "final_state_checksum": "d" * 64,
+        "final_reconciliation_exact": True,
+        "state_unchanged": True,
+        "rss_growth_bytes": 0,
+        "maximum_shutdown_seconds": 0.1,
+        "error_count": 0,
+        "failed_stage": None,
+        "failure_type": None,
+        "passed": True,
+    }
+
+
+def _soak_reports() -> list[dict]:
+    return [_soak_report(provider) for provider in ("alpaca", "ib")]
 
 
 def _write_wheel(path: Path, version: str = "0.1.0") -> None:
@@ -184,10 +243,16 @@ def test_candidate_manifest_rejects_wrong_or_incomplete_run(
 
 
 def test_complete_bundle_requires_both_phases_for_both_providers() -> None:
-    bundle = assemble_bundle(_candidate(), _reports(), generated_at="2026-08-08T12:02:00+00:00")
+    bundle = assemble_bundle(
+        _candidate(),
+        _reports(),
+        _soak_reports(),
+        generated_at="2026-08-08T18:00:02+00:00",
+    )
 
     validate_bundle(bundle, expected_commit=COMMIT)
     assert bundle["candidate"]["wheel_sha256"] == WHEEL_HASH
+    assert set(bundle["soaks"]) == {"alpaca", "ib"}
     assert bundle["passed"] is True
 
 
@@ -196,7 +261,7 @@ def test_bundle_rejects_report_for_different_wheel() -> None:
     reports[0]["candidate"]["wheel_sha256"] = "d" * 64
 
     with pytest.raises(PaperQualificationError, match="different candidate"):
-        assemble_bundle(_candidate(), reports)
+        assemble_bundle(_candidate(), reports, _soak_reports())
 
 
 def test_bundle_rejects_missing_operation_or_cleanup() -> None:
@@ -205,7 +270,7 @@ def test_bundle_rejects_missing_operation_or_cleanup() -> None:
     reports[0]["cleanup_passed"] = False
 
     with pytest.raises(PaperQualificationError):
-        assemble_bundle(_candidate(), reports)
+        assemble_bundle(_candidate(), reports, _soak_reports())
 
 
 def test_bundle_rejects_invalid_snapshot_instead_of_reporting_clean() -> None:
@@ -213,11 +278,11 @@ def test_bundle_rejects_invalid_snapshot_instead_of_reporting_clean() -> None:
     reports[-1]["snapshots"]["restart"]["pending_order_snapshot_exact"] = False
 
     with pytest.raises(PaperQualificationError, match="invalid snapshot"):
-        assemble_bundle(_candidate(), reports)
+        assemble_bundle(_candidate(), reports, _soak_reports())
 
 
 def test_retained_bundle_schema_has_no_account_or_order_identifiers() -> None:
-    bundle = assemble_bundle(_candidate(), deepcopy(_reports()))
+    bundle = assemble_bundle(_candidate(), deepcopy(_reports()), deepcopy(_soak_reports()))
     encoded = json.dumps(bundle, sort_keys=True).lower()
 
     assert "account_id" not in encoded
@@ -232,7 +297,101 @@ def test_bundle_rejects_identifier_field_hidden_in_snapshot() -> None:
     reports[0]["snapshots"]["initial"]["account_id"] = "redacted-looking-value"
 
     with pytest.raises(PaperQualificationError, match="snapshot schema"):
-        assemble_bundle(_candidate(), reports)
+        assemble_bundle(_candidate(), reports, _soak_reports())
+
+
+def test_bundle_rejects_missing_provider_soak() -> None:
+    with pytest.raises(PaperQualificationError, match="six-hour soak"):
+        assemble_bundle(_candidate(), _reports(), [_soak_report("alpaca")])
+
+
+def test_bundle_rejects_duplicate_provider_soak() -> None:
+    soaks = _soak_reports()
+    soaks.append(deepcopy(soaks[0]))
+
+    with pytest.raises(PaperQualificationError, match="six-hour soak"):
+        assemble_bundle(_candidate(), _reports(), soaks)
+
+
+def test_provider_soak_rejects_fabricated_snapshot_timeline() -> None:
+    report = _soak_report("alpaca")
+    for snapshot in report["snapshots"]:
+        snapshot["elapsed_seconds"] = 0
+
+    with pytest.raises(PaperQualificationError, match="snapshot continuity"):
+        validate_provider_soak_report(report, _report("alpaca", "exercise")["candidate"], "alpaca")
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("duration_seconds", SOAK_DURATION_SECONDS - 0.1),
+        ("paper_identity_verified", False),
+        ("reconnect_count", 0),
+        ("unexpected_disconnect_count", 1),
+        ("continuity_gap_count", 1),
+        ("final_reconciliation_exact", False),
+        ("state_unchanged", False),
+        ("rss_growth_bytes", SOAK_RSS_GROWTH_LIMIT_BYTES),
+        ("maximum_shutdown_seconds", 5.0),
+        ("error_count", 1),
+        ("failed_stage", "snapshot"),
+        ("failure_type", "RuntimeError"),
+        ("passed", False),
+    ],
+)
+def test_provider_soak_rejects_incomplete_or_failed_evidence(field: str, value: object) -> None:
+    report = _soak_report("alpaca")
+    report[field] = value
+
+    with pytest.raises(PaperQualificationError):
+        validate_provider_soak_report(report, _report("alpaca", "exercise")["candidate"], "alpaca")
+
+
+@pytest.mark.asyncio
+async def test_provider_soak_runs_continuously_and_reconnects_once(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    class FakeBroker:
+        def __init__(self) -> None:
+            self.is_connected = False
+            self.connect_count = 0
+            self.disconnect_count = 0
+
+        async def connect(self) -> None:
+            self.is_connected = True
+            self.connect_count += 1
+
+        async def disconnect(self) -> None:
+            self.is_connected = False
+            self.disconnect_count += 1
+
+        def assert_paper_trading(self) -> None:
+            return None
+
+    broker = FakeBroker()
+
+    async def fake_snapshot(provider: str, captured_broker: object) -> dict:
+        assert provider == "alpaca"
+        assert captured_broker is broker
+        return _snapshot()
+
+    monkeypatch.setattr(paper_qualification, "SOAK_DURATION_SECONDS", 0.04)
+    monkeypatch.setattr(paper_qualification, "SOAK_SNAPSHOT_INTERVAL_SECONDS", 0.01)
+    monkeypatch.setattr(paper_qualification, "_verify_installed_candidate", lambda *_args: None)
+    monkeypatch.setattr(paper_qualification, "_build_broker", lambda _provider: broker)
+    monkeypatch.setattr(paper_qualification, "_snapshot", fake_snapshot)
+    monkeypatch.setattr(paper_qualification, "_provider_state_checksum", lambda *_args: "d" * 64)
+
+    report = await run_provider_soak(
+        provider="alpaca", candidate=_candidate(), checkout_root=tmp_path
+    )
+
+    assert report["passed"] is True
+    assert report["reconnect_count"] == 1
+    assert len(report["snapshots"]) >= 5
+    assert broker.connect_count == 2
+    assert broker.disconnect_count == 2
 
 
 @pytest.mark.asyncio
