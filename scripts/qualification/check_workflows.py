@@ -180,6 +180,56 @@ def promotion_failures(qualification: dict[str, Any], release: dict[str, Any]) -
     return failures
 
 
+def release_recovery_failures(release: dict[str, Any]) -> list[str]:
+    """Reject recovery paths that can publish without the original evidence."""
+    failures = []
+    recovery_publish = release.get("jobs", {}).get("recovery-publish", {})
+    if _needs(recovery_publish) != {"paper-evidence"}:
+        failures.append("recovery publish does not require fresh paper evidence")
+    if recovery_publish.get("if") != "github.event_name == 'workflow_dispatch'":
+        failures.append("recovery publish is not restricted to manual dispatch")
+    recovery_downloads = _action_steps(recovery_publish, "actions/download-artifact")
+    expected_recovery_downloads = {
+        "dist-${{ inputs.candidate-sha }}",
+        "qualification-${{ inputs.candidate-sha }}",
+        "security-${{ inputs.candidate-sha }}",
+    }
+    if {step.get("with", {}).get("name") for step in recovery_downloads} != (
+        expected_recovery_downloads
+    ) or any(
+        step.get("with", {}).get("run-id") != "${{ inputs.qualification-run-id }}"
+        for step in recovery_downloads
+    ):
+        failures.append("recovery publish does not use every exact source-run artifact")
+    recovery_text = json.dumps(recovery_publish, sort_keys=True)
+    for required in (
+        "needs.paper-evidence.outputs.wheel_sha256",
+        "needs.paper-evidence.outputs.sdist_sha256",
+        "verify_release_identity.py",
+        "inputs.candidate-sha",
+        "inputs.tag",
+    ):
+        if required not in recovery_text:
+            failures.append(f"recovery identity check omits: {required}")
+    recovery_publishers = _action_steps(recovery_publish, "pypa/gh-action-pypi-publish")
+    if (
+        len(recovery_publishers) != 1
+        or recovery_publishers[0].get("with", {}).get("attestations") != "true"
+    ):
+        failures.append("recovery publish does not preserve trusted provenance attestations")
+    recovery_release = release.get("jobs", {}).get("recovery-github-release", {})
+    if _needs(recovery_release) != {"recovery-publish"}:
+        failures.append("recovered GitHub release does not require successful publication")
+    if recovery_release.get("if") != "github.event_name == 'workflow_dispatch'":
+        failures.append("recovered GitHub release is not restricted to manual dispatch")
+    recovery_release_text = _run_text(recovery_release)
+    if "sbom.cdx.json" not in recovery_release_text or "dependency-snapshot.json" not in (
+        recovery_release_text
+    ):
+        failures.append("recovered GitHub release does not retain security evidence")
+    return failures
+
+
 def paper_soak_failures(paper_job: dict[str, Any]) -> list[str]:
     """Reject a long soak that can start after a short provider check fails."""
     soak_steps = [step for step in _steps(paper_job) if step.get("id") == "provider-soaks"]
@@ -305,11 +355,16 @@ def validate_workflows(root: Path = WORKFLOW_ROOT) -> list[str]:
     ):
         failures.append("CI does not call the reusable qualification workflow")
 
-    if _triggers(release) != {"push"}:
-        failures.append("release has a non-tag trigger")
+    if _triggers(release) != {"push", "workflow_dispatch"}:
+        failures.append("release triggers differ from tag publication and manual recovery")
     release_push = release.get("on", {}).get("push", {})
     if not isinstance(release_push, dict) or _list(release_push.get("tags")) != ["v*"]:
         failures.append("release is not restricted to version tags")
+    recovery_inputs = release.get("on", {}).get("workflow_dispatch", {}).get("inputs", {})
+    if set(recovery_inputs) != {"candidate-sha", "qualification-run-id", "tag"} or any(
+        value.get("required") != "true" for value in recovery_inputs.values()
+    ):
+        failures.append("release recovery does not require the candidate, source run, and tag")
     failures.extend(promotion_failures(qualification, release))
     publish_job = release.get("jobs", {}).get("publish", {})
     publish_download_names = {
@@ -329,6 +384,8 @@ def validate_workflows(root: Path = WORKFLOW_ROOT) -> list[str]:
     release_text = _run_text(release.get("jobs", {}).get("github-release", {}))
     if "sbom.cdx.json" not in release_text or "dependency-snapshot.json" not in release_text:
         failures.append("GitHub release does not retain the SBOM and dependency snapshot")
+
+    failures.extend(release_recovery_failures(release))
 
     stable_workflow_text = json.dumps(qualification, sort_keys=True).casefold()
     if "0.1.0b" in stable_workflow_text or "beta" in stable_workflow_text:
@@ -397,6 +454,8 @@ def validate_workflows(root: Path = WORKFLOW_ROOT) -> list[str]:
     allowed_job_writes = {
         ("release.yml", "publish"): {"id-token"},
         ("release.yml", "github-release"): {"contents"},
+        ("release.yml", "recovery-publish"): {"id-token"},
+        ("release.yml", "recovery-github-release"): {"contents"},
     }
     for workflow_name, workflow in workflows.items():
         for job_name, job in workflow.get("jobs", {}).items():
