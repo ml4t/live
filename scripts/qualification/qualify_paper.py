@@ -409,8 +409,10 @@ async def _wait_for_tag_count(
     raise PaperQualificationError("provider did not reach the expected tagged-order state")
 
 
-def _tag_keyword(provider: str, tag: str) -> dict[str, str]:
-    return {"client_order_id": tag} if provider == "alpaca" else {"order_ref": tag}
+def _tag_keyword(provider: str, tag: str) -> dict[str, Any]:
+    if provider == "alpaca":
+        return {"client_order_id": tag}
+    return {"order_ref": tag, "outsideRth": True}
 
 
 async def _assert_atomic_rejections(provider: str, broker: Any, state_directory: Path) -> None:

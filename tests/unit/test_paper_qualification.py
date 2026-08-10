@@ -20,6 +20,7 @@ from scripts.qualification.qualify_paper import (
     _assert_atomic_rejections,
     _cleanup_tags,
     _raw_tagged_orders,
+    _tag_keyword,
     assemble_bundle,
     build_candidate_manifest,
     run_provider_soak,
@@ -165,6 +166,14 @@ def test_ib_validation_warning_remains_a_tagged_working_order() -> None:
     matches = _raw_tagged_orders("ib", broker, {"ml4tq-12345678-a"})
 
     assert matches == [trade]
+
+
+def test_qualification_order_is_eligible_during_ib_overnight_session() -> None:
+    assert _tag_keyword("ib", "ml4tq-12345678-a") == {
+        "order_ref": "ml4tq-12345678-a",
+        "outsideRth": True,
+    }
+    assert _tag_keyword("alpaca", "ml4tq-12345678-a") == {"client_order_id": "ml4tq-12345678-a"}
 
 
 def test_candidate_manifest_binds_successful_run_and_artifact_hashes(tmp_path: Path) -> None:
