@@ -22,7 +22,7 @@ allowed_license_identifiers = [
 requirement = "ml4t-backtest>=0.1.0,<0.2"
 minimum = "ml4t-backtest==0.1.0"
 locked = "ml4t-backtest==0.1.0"
-maximum = "ml4t-backtest==0.1.0"
+maximum = "ml4t-backtest>=0.1.0,<0.2"
 license = "MIT"
 support = "first stable release; lifecycle version 1 contract qualified across the matrix"
 
@@ -30,7 +30,7 @@ support = "first stable release; lifecycle version 1 contract qualified across t
 requirement = "ml4t-specs>=0.1.1,<0.2"
 minimum = "ml4t-specs==0.1.1"
 locked = "ml4t-specs==0.1.1"
-maximum = "ml4t-specs==0.1.1"
+maximum = "ml4t-specs>=0.1.1,<0.2"
 license = "MIT"
 support = "stable schema and lifecycle contract release"
 

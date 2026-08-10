@@ -31,6 +31,9 @@ EXPECTED_DISTRIBUTIONS = {
     "ml4t-live": "0.1.0",
     "ml4t-specs": "0.1.1",
 }
+BASELINE_REQUIREMENTS = tuple(
+    f"{name}=={version}" for name, version in EXPECTED_DISTRIBUTIONS.items() if name != "ml4t-live"
+)
 VERSION_PROBE = """\
 import importlib.metadata
 import json
@@ -106,7 +109,16 @@ def qualify(output: Path | None = None) -> dict[str, object]:
             run(["uv", "venv", "--python", version, str(venv)], cwd=root)
             python = venv / "bin" / "python"
             run(
-                ["uv", "pip", "install", "--python", str(python), str(wheel), *TEST_DEPENDENCIES],
+                [
+                    "uv",
+                    "pip",
+                    "install",
+                    "--python",
+                    str(python),
+                    str(wheel),
+                    *BASELINE_REQUIREMENTS,
+                    *TEST_DEPENDENCIES,
+                ],
                 cwd=root,
             )
             installed = json.loads(

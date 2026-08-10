@@ -12,6 +12,7 @@ ROOT = Path(__file__).parents[2]
 QUALIFICATION = ROOT / "scripts" / "qualification"
 AUDIT = runpy.run_path(str(QUALIFICATION / "audit_dependencies.py"))
 MATRIX = runpy.run_path(str(QUALIFICATION / "check_dependency_matrix.py"))
+SNAPSHOT = runpy.run_path(str(QUALIFICATION / "dependency_snapshot.py"))
 
 
 def test_dependency_closure_is_transitive() -> None:
@@ -177,3 +178,20 @@ def test_profile_requirements_exclude_non_matrix_optional_dependency() -> None:
     }
 
     assert profile_requirements(policy, {}, "minimum") == ["core==1"]
+
+
+def test_maximum_profile_resolves_the_full_supported_ml4t_ranges() -> None:
+    policy = tomllib.loads((ROOT / "dependency-policy.toml").read_text())
+
+    for name in ("ml4t-backtest", "ml4t-specs"):
+        record = policy["dependencies"][name]
+        assert record["maximum"] == record["requirement"]
+
+
+def test_portable_snapshot_excludes_unrelated_upstream_exports() -> None:
+    snapshot = cast(Callable[[], dict[str, Any]], SNAPSHOT["snapshot"])()
+    portable_api = cast(dict[str, Any], snapshot["portable_api"])
+
+    assert "live_public" in portable_api
+    assert "backtest_public" not in portable_api
+    assert "specs_public" not in portable_api

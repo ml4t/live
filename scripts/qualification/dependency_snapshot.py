@@ -33,9 +33,7 @@ def callable_signatures(owner: type, names: tuple[str, ...]) -> dict[str, str]:
 
 def snapshot() -> dict[str, object]:
     portable_api = {
-        "backtest_public": public_names(backtest),
         "live_public": public_names(live),
-        "specs_public": public_names(specs),
         "strategy_callbacks": callable_signatures(
             backtest.Strategy, ("on_start", "on_prepare", "on_data", "on_end")
         ),
