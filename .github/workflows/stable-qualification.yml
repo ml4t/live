@@ -8,7 +8,7 @@ permissions: {}
 
 env:
   CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-  SETUPTOOLS_SCM_PRETEND_VERSION: "0.1.0"
+  SETUPTOOLS_SCM_PRETEND_VERSION: "0.1.1"
   UV_NO_SOURCES: "1"
   UV_VERSION: "0.10.9"
 

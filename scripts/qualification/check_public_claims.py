@@ -142,7 +142,7 @@ def unsupported_claims(paths: tuple[Path, ...], *, prefix: str = "") -> list[str
     for path in paths:
         if not path.is_file():
             continue
-        text = path.read_text().casefold()
+        text = path.read_text(encoding="utf-8").casefold()
         for claim in PROHIBITED_CLAIMS:
             if claim.casefold() in text:
                 failures.append(f"{prefix}unsupported absolute claim in {path}: {claim}")
@@ -155,7 +155,7 @@ def obsolete_adoption_arguments(paths: tuple[Path, ...], *, prefix: str = "") ->
     for path in paths:
         if not path.is_file():
             continue
-        text = path.read_text()
+        text = path.read_text(encoding="utf-8")
         for argument in OBSOLETE_ADOPTION_ARGUMENTS:
             if argument in text:
                 failures.append(f"{prefix}obsolete adoption argument in {path}: {argument}")
@@ -169,7 +169,7 @@ def ambiguous_execution_configurations(paths: tuple[Path, ...], *, prefix: str =
         if not path.is_file() or path.suffix != ".py":
             continue
         try:
-            tree = ast.parse(path.read_text(), filename=str(path))
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         except SyntaxError as error:
             failures.append(f"{prefix}unparseable adoption source {path}:{error.lineno}")
             continue
@@ -197,7 +197,7 @@ def check_public_claims(root: Path = REPOSITORY_ROOT) -> list[str]:
         if not path.is_file():
             failures.append(f"missing public document: {relative}")
             continue
-        texts[relative] = path.read_text()
+        texts[relative] = path.read_text(encoding="utf-8")
 
     failures.extend(unsupported_claims(public_surface_paths(root)))
     adoption_paths = (
@@ -226,7 +226,7 @@ def check_public_claims(root: Path = REPOSITORY_ROOT) -> list[str]:
         )
     for name in sorted(EXTERNAL_EXAMPLES):
         path = root / "examples" / name
-        text = path.read_text() if path.is_file() else ""
+        text = path.read_text(encoding="utf-8") if path.is_file() else ""
         for heading in ("Prerequisites:", "Expected Output:", "Expected Failure:", "Cleanup:"):
             if heading not in text:
                 failures.append(f"external example {name} does not state: {heading}")
@@ -254,8 +254,8 @@ def check_chapter_claims(book_root: Path, code_root: Path) -> list[str]:
         if not path.is_file():
             failures.append(f"missing chapter file: {path}")
 
-    book_text = "\n".join(path.read_text() for path in book_paths if path.is_file())
-    code_text = "\n".join(path.read_text() for path in code_paths if path.is_file())
+    book_text = "\n".join(path.read_text(encoding="utf-8") for path in book_paths if path.is_file())
+    code_text = "\n".join(path.read_text(encoding="utf-8") for path in code_paths if path.is_file())
     combined = f"{book_text}\n{code_text}".casefold()
     failures.extend(unsupported_claims((*book_paths, *code_paths), prefix="chapter "))
     failures.extend(obsolete_adoption_arguments(code_paths, prefix="chapter "))
@@ -264,7 +264,7 @@ def check_chapter_claims(book_root: Path, code_root: Path) -> list[str]:
         if phrase.casefold() not in combined:
             failures.append(f"chapter does not state: {phrase}")
     demo_path = code_chapter / "01_unified_framework_demo.py"
-    demo = demo_path.read_text() if demo_path.is_file() else ""
+    demo = demo_path.read_text(encoding="utf-8") if demo_path.is_file() else ""
     for phrase in ("Engine(", "LiveEngine(", "callback_trace", "CanonicalTargetIntent"):
         if phrase not in demo:
             failures.append(f"chapter parity demo does not exercise: {phrase}")
@@ -297,7 +297,9 @@ def main() -> int:
     }
     if args.output:
         args.output.parent.mkdir(parents=True, exist_ok=True)
-        args.output.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
+        args.output.write_text(
+            json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
     if failures:
         for failure in failures:
             print(f"public claim failure: {failure}")

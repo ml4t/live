@@ -73,8 +73,8 @@ def test_metadata_contract_accepts_declared_stable_candidate() -> None:
         project = tomllib.load(stream)["project"]
     message = email.message.Message()
     message["Name"] = "ml4t-live"
-    message["Version"] = "0.1.0"
-    message["Requires-Python"] = ">=3.12,<3.15"
+    message["Version"] = "0.1.1"
+    message["Requires-Python"] = ">=3.12"
     message["License-Expression"] = "MIT"
     for classifier in EXPECTED_CLASSIFIERS:
         message["Classifier"] = classifier
@@ -83,7 +83,7 @@ def test_metadata_contract_accepts_declared_stable_candidate() -> None:
     for dependency in project["dependencies"]:
         message["Requires-Dist"] = dependency
 
-    assert validate_metadata(message, project) == "0.1.0"
+    assert validate_metadata(message, project) == "0.1.1"
 
 
 def test_metadata_contract_rejects_development_build_of_stable_candidate() -> None:
@@ -91,8 +91,8 @@ def test_metadata_contract_rejects_development_build_of_stable_candidate() -> No
         project = tomllib.load(stream)["project"]
     message = email.message.Message()
     message["Name"] = "ml4t-live"
-    message["Version"] = "0.1.0.dev1"
-    message["Requires-Python"] = ">=3.12,<3.15"
+    message["Version"] = "0.1.1.dev1"
+    message["Requires-Python"] = ">=3.12"
     message["License-Expression"] = "MIT"
     for classifier in EXPECTED_CLASSIFIERS:
         message["Classifier"] = classifier
@@ -105,11 +105,11 @@ def test_metadata_contract_rejects_development_build_of_stable_candidate() -> No
         validate_metadata(message, project)
 
 
-def test_metadata_contract_rejects_unbounded_python() -> None:
+def test_metadata_contract_rejects_python_315_upper_bound() -> None:
     message = email.message.Message()
     message["Name"] = "ml4t-live"
-    message["Version"] = "0.1.0"
-    message["Requires-Python"] = ">=3.12"
+    message["Version"] = "0.1.1"
+    message["Requires-Python"] = ">=3.12,<3.15"
     message["License-Expression"] = "MIT"
 
     with pytest.raises(QualificationError, match="Requires-Python"):

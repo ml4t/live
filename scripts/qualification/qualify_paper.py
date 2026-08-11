@@ -10,7 +10,6 @@ import json
 import math
 import os
 import re
-import resource
 import subprocess
 import sys
 import time
@@ -20,6 +19,8 @@ from collections import Counter
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+
+import psutil
 
 GITHUB_API = "https://api.github.com"
 COMMIT_PATTERN = re.compile(r"^[0-9a-f]{40}$")
@@ -713,7 +714,7 @@ def _provider_state_checksum(provider: str, broker: Any) -> str:
 
 
 def _rss_bytes() -> int:
-    return int(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss) * 1024
+    return psutil.Process().memory_info().rss
 
 
 async def _soak_snapshot(provider: str, broker: Any, *, started_monotonic: float) -> dict[str, Any]:

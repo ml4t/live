@@ -234,7 +234,10 @@ Risk state survives process crashes through a versioned, checksummed atomic file
 - `high_water_mark` - Session high equity
 - `kill_switch_activated` - Persists until manually reset
 
-State and audit files use mode `0600`, reject unsafe ownership or symlinks, and permit one writer.
+On POSIX systems, state and audit files require current-user ownership and mode `0600`. All
+platforms reject file links and linked parent paths and permit one writer. On Windows, place the
+files in a directory whose ACL grants access only to the service account and required
+administrators; POSIX mode bits do not define a Windows ACL.
 `SafeBroker` also writes a hash-chained JSONL execution journal with reconciliation, order,
 kill-switch, and runtime health events. Audit failure blocks broker calls by default.
 
@@ -318,11 +321,13 @@ See the [portability contract](docs/user-guide/backtest-to-live.md) and
 
 ## Stable Support Boundary
 
-The stable candidate supports Linux with Python 3.12, 3.13, and 3.14. CI, wheel, and source
-distribution qualification cover those interpreter versions. Windows, macOS, and Python 3.15 are
-not part of this stable contract. IB and Alpaca broker adapters and the OKX feed are supported only
-within the documented capabilities, reconciliation, causal-event, overload, and paper-account
-boundaries. Alpaca, IB, DataBento, and generic CCXT feeds require explicit experimental opt-in.
+The stable candidate supports Python 3.12, 3.13, and 3.14 on Linux, macOS, and Windows. CI, wheel,
+and source-distribution qualification cover every version and operating-system combination. Python
+3.15 prereleases run blocking core installation and non-hardware-dependent tests on all three
+operating systems but are not advertised as stable. IB and Alpaca broker adapters and the OKX feed
+are supported only within the documented capabilities, reconciliation, causal-event, overload, and
+paper-account boundaries. Alpaca, IB, DataBento, and generic CCXT feeds require explicit
+experimental opt-in.
 
 ## Technical Characteristics
 

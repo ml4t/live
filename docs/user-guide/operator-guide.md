@@ -150,8 +150,9 @@ Use `status` when you want a short journal tail, and inspect the JSONL file dire
 `status` validates state permissions, schema, integrity, and the journal hash chain before showing
 the tail. A persistence error returns a nonzero status and leaves the failing file unchanged. Treat
 `AcceptedOrderPersistenceError` as an order that may not be retried: reconcile venue orders and
-positions first. State and audit files, including `.lock` and `.head` sidecars, must remain owned by
-the service user with mode `0600`.
+positions first. On POSIX systems, state and audit files, including `.lock` and `.head` sidecars,
+must remain owned by the service user with mode `0600`. On Windows, use a directory whose ACL grants
+access only to the service account and required administrators.
 
 ## Optional Watchdog Recovery
 

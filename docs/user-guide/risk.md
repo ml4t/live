@@ -103,11 +103,13 @@ The risk state file persists more than just the kill switch. It now captures:
 That persisted snapshot is used again on the next `SafeBroker.connect()` to generate the startup reconciliation report.
 If `fail_on_reconciliation_mismatch=True`, a non-clean reconciliation raises `ReconciliationMismatchError` and blocks startup outside shadow mode.
 
-State is stored in a versioned envelope with a generation number and SHA-256 integrity check.
-State, journal, integrity-head, and lock files are created and replaced with mode `0600`. A state
-path that is a symlink, is not owned by the current user, has another mode, contains invalid field
-types, fails its integrity check, or uses an unsupported schema blocks `SafeBroker` construction.
-One `SafeBroker` owns an exclusive writer lease until disconnect or `close_persistence()`.
+State is stored in a versioned envelope with a generation number and SHA-256 integrity check. On
+POSIX systems, state, journal, integrity-head, and lock files are created and replaced with mode
+`0600`; current-user ownership and exact mode are validated when files are opened. All platforms
+reject file links and linked parent paths, invalid field types, integrity failures, and unsupported
+schemas. One `SafeBroker` owns an exclusive writer lease until disconnect or
+`close_persistence()`. On Windows, configure the persistence directory with an ACL that grants
+access only to the service account and required administrators.
 
 ## Execution Journal
 
@@ -130,8 +132,9 @@ state path or state lock.
 ## Migration And Recovery
 
 A structurally valid legacy state file is converted to the versioned envelope when `SafeBroker` is
-first constructed. Before migration, the legacy file must already be a regular file owned by the
-current user with mode `0600`.
+first constructed. Before migration, the legacy file must already be a regular file. On POSIX
+systems it must also be owned by the current user with mode `0600`; on Windows its directory must
+have the restricted ACL described above.
 
 Corrupt, truncated, tampered, unsafe, and unsupported files are never replaced during startup.
 Keep the original file as diagnostic evidence and restore a known-good backup to a new path. An

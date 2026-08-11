@@ -34,6 +34,10 @@ COMMIT = "a" * 40
 WHEEL_HASH = "b" * 64
 
 
+def test_paper_qualification_reads_process_rss_portably() -> None:
+    assert paper_qualification._rss_bytes() > 0
+
+
 def _candidate() -> dict:
     return {
         "schema_version": 1,

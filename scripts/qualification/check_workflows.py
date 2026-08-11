@@ -34,7 +34,7 @@ ACTION_PATTERN = re.compile(
     r"^\s*-?\s*uses:\s*([^\s#]+)(?:\s+#\s+(v[0-9][A-Za-z0-9_.-]*))?\s*$",
     re.MULTILINE,
 )
-IMMUTABLE_ACTION = re.compile(r"^[^/\s]+/[^/@\s]+@[0-9a-f]{40}$")
+IMMUTABLE_ACTION = re.compile(r"^[^/\s]+/[^/@\s]+(?:/[^@\s]+)*@[0-9a-f]{40}$")
 
 
 def load_workflow(path: Path) -> dict[str, Any]:
@@ -145,7 +145,11 @@ def promotion_failures(qualification: dict[str, Any], release: dict[str, Any]) -
         "./.github/workflows/stable-qualification.yml"
     ):
         failures.append("release does not call the reusable stable qualification workflow")
-    if _needs(release_jobs.get("publish", {})) != {"qualification", "paper-evidence"}:
+    if _needs(release_jobs.get("publish", {})) != {
+        "ecosystem-qualification",
+        "qualification",
+        "paper-evidence",
+    }:
         failures.append(
             "publish does not require the complete stable qualification and fresh paper evidence"
         )
@@ -272,8 +276,8 @@ def validate_workflows(root: Path = WORKFLOW_ROOT) -> list[str]:
             failures.append(f"{name} executes pull_request_target code")
 
     qualification_jobs = qualification["jobs"]
-    if qualification.get("env", {}).get("SETUPTOOLS_SCM_PRETEND_VERSION") != "0.1.0":
-        failures.append("stable qualification does not build the exact 0.1.0 candidate version")
+    if qualification.get("env", {}).get("SETUPTOOLS_SCM_PRETEND_VERSION") != "0.1.1":
+        failures.append("stable qualification does not build the exact 0.1.1 candidate version")
     if qualification.get("env", {}).get("CANDIDATE_SHA") != (
         "${{ github.event.pull_request.head.sha || github.sha }}"
     ):

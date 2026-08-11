@@ -2,13 +2,13 @@
 
 ## Requirements
 
-- Linux
+- Linux, macOS, or Windows
 - Python 3.12, 3.13, or 3.14
 - A supported broker or data source for live use
 - `ml4t-backtest` is installed automatically as a package dependency
 
-Windows, macOS, and Python 3.15 are not qualified for this stable release. Package metadata rejects Python
-3.15 before dependency resolution.
+Python 3.15 prereleases run blocking core installation and non-hardware-dependent tests on Linux,
+macOS, and Windows. Prerelease support is not advertised as stable before Python 3.15 is final.
 
 ## Install From PyPI
 

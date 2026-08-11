@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import signal
 import threading
 import time
@@ -497,7 +498,8 @@ async def test_shutdown_signal_uses_transactional_stop_without_task_leaks() -> N
     assert feed.stop_calls == 1
     assert broker.disconnect_calls == 1
     assert engine.runtime_state is RuntimeState.STOPPED
-    assert engine.stats["last_cleanup_result"]["signals"] == "released"
+    expected_signal_cleanup = "not_installed" if os.name == "nt" else "released"
+    assert engine.stats["last_cleanup_result"]["signals"] == expected_signal_cleanup
     assert not [
         task
         for task in asyncio.all_tasks()

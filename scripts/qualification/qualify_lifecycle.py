@@ -28,7 +28,7 @@ QUALIFICATION_TESTS = (
 )
 EXPECTED_DISTRIBUTIONS = {
     "ml4t-backtest": "0.1.0",
-    "ml4t-live": "0.1.0",
+    "ml4t-live": "0.1.1",
     "ml4t-specs": "0.1.1",
 }
 BASELINE_REQUIREMENTS = tuple(

@@ -20,10 +20,13 @@ from ml4t.live import (
     PersistenceSafetyError,
     SafeBroker,
     UnsafePersistencePathError,
+    persistence,
 )
 from ml4t.live.brokers.alpaca import AlpacaBroker
 from ml4t.live.brokers.ib import IBBroker
 from ml4t.live.persistence import SecureAuditJournal, SecureStateStore
+
+POSIX_ONLY = pytest.mark.skipif(os.name != "posix", reason="requires POSIX ownership and modes")
 
 
 class PersistenceBroker:
@@ -99,7 +102,18 @@ def write_owner_only(path: Path, content: bytes) -> None:
     path.chmod(0o600)
 
 
+def test_non_posix_persistence_does_not_require_fchmod() -> None:
+    with (
+        patch.object(persistence.os, "name", "nt"),
+        patch.object(persistence.os, "fchmod", create=True) as fchmod,
+    ):
+        persistence._restrict_file_mode(1)
+
+    fchmod.assert_not_called()
+
+
 @pytest.mark.parametrize("mask", [0o0000, 0o0002])
+@POSIX_ONLY
 def test_state_journal_and_locks_remain_owner_only_after_replacement(tmp_path, mask):
     previous = os.umask(mask)
     safe = None
@@ -253,6 +267,7 @@ def test_legacy_state_is_validated_and_migrated_immediately(tmp_path):
     safe.close_persistence()
 
 
+@POSIX_ONLY
 def test_wrong_mode_state_fails_closed(tmp_path):
     path = tmp_path / "state.json"
     path.write_text("{}")
@@ -284,6 +299,7 @@ def test_symlinked_parent_fails_closed(tmp_path):
         SafeBroker(PersistenceBroker(), config(linked))
 
 
+@POSIX_ONLY
 def test_wrong_owner_state_fails_closed(tmp_path):
     path = tmp_path / "state.json"
     path.write_text("{}")
@@ -515,7 +531,7 @@ def test_journal_write_faults_are_reported_as_audit_failures(tmp_path, boundary)
         journal.append({"event": "fault"})
 
 
-def test_journal_symlink_and_wrong_mode_fail_closed(tmp_path):
+def test_journal_symlink_fails_closed(tmp_path):
     target = tmp_path / "journal-target.jsonl"
     target.write_text("")
     target.chmod(0o600)
@@ -526,6 +542,7 @@ def test_journal_symlink_and_wrong_mode_fail_closed(tmp_path):
         SafeBroker(PersistenceBroker(), config(tmp_path))
 
 
+@POSIX_ONLY
 def test_direct_journal_append_rejects_wrong_mode_without_repairing_it(tmp_path):
     journal = tmp_path / "journal.jsonl"
     journal.write_text("")
@@ -548,6 +565,7 @@ def test_direct_journal_append_rejects_wrong_mode_without_repairing_it(tmp_path)
     "name",
     ["state.json.lock", "journal.jsonl.lock", "journal.jsonl.head"],
 )
+@POSIX_ONLY
 def test_wrong_mode_persistence_sidecar_fails_closed(tmp_path, name):
     safe = SafeBroker(PersistenceBroker(), config(tmp_path))
     safe._save_state()

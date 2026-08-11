@@ -331,7 +331,7 @@ async def test_check_position_limits_max_position_value(mock_broker, config):
             current_price=160.0,
         )
     }
-    safe._broker.get_position = lambda a: safe._broker.positions.get(a)
+    mock_broker.get_position = lambda a: mock_broker.positions.get(a)
 
     # Try to add $5,000 more (would exceed $10k limit)
     with pytest.raises(RiskLimitError, match="Position value.*would exceed"):
@@ -350,7 +350,7 @@ async def test_check_position_limits_max_position_shares(mock_broker, config):
     safe._broker.positions = {
         "AAPL": Position(asset="AAPL", quantity=80, entry_price=150.0, entry_time=datetime.now())
     }
-    safe._broker.get_position = lambda a: safe._broker.positions.get(a)
+    mock_broker.get_position = lambda a: mock_broker.positions.get(a)
 
     # Try to add 30 more shares (would exceed 100 limit)
     with pytest.raises(RiskLimitError, match="Position quantity.*would exceed"):
@@ -381,7 +381,7 @@ async def test_check_position_limits_max_total_exposure(mock_broker, config):
             current_price=300.0,
         ),
     }
-    safe._broker.get_position = lambda a: safe._broker.positions.get(a)
+    mock_broker.get_position = lambda a: mock_broker.positions.get(a)
 
     # Try to add $5,000 more (would exceed $15k total)
     with pytest.raises(RiskLimitError, match="Total exposure.*would exceed"):
@@ -405,7 +405,7 @@ async def test_check_position_limits_allows_reducing_exposure(mock_broker, confi
             current_price=150.0,
         )
     }
-    safe._broker.get_position = lambda a: safe._broker.positions.get(a)
+    mock_broker.get_position = lambda a: mock_broker.positions.get(a)
 
     await safe._check_position_limits(
         asset="AAPL", quantity=40, order_value=6_000.0, side=OrderSide.SELL
@@ -422,7 +422,7 @@ async def test_check_position_limits_max_positions(mock_broker, config):
         "AAPL": Position(asset="AAPL", quantity=10, entry_price=150.0, entry_time=datetime.now()),
         "MSFT": Position(asset="MSFT", quantity=10, entry_price=300.0, entry_time=datetime.now()),
     }
-    safe._broker.get_position = lambda a: safe._broker.positions.get(a)
+    mock_broker.get_position = lambda a: mock_broker.positions.get(a)
 
     # Try to open 3rd position
     with pytest.raises(RiskLimitError, match="Max positions.*reached"):
@@ -446,7 +446,7 @@ async def test_check_price_deviation_rejects_far_limit(mock_broker, config):
             current_price=100.0,
         )
     }
-    safe._broker.get_position = lambda a: safe._broker.positions.get(a)
+    mock_broker.get_position = lambda a: mock_broker.positions.get(a)
 
     # Try limit order at $120 (20% deviation)
     with pytest.raises(RiskLimitError, match="Price deviation"):
@@ -468,7 +468,7 @@ async def test_check_price_deviation_allows_close_limit(mock_broker, config):
             current_price=100.0,
         )
     }
-    safe._broker.get_position = lambda a: safe._broker.positions.get(a)
+    mock_broker.get_position = lambda a: mock_broker.positions.get(a)
 
     # Try limit order at $103 (3% deviation - within 5% limit)
     await safe._check_price_deviation(asset="AAPL", limit_price=103.0)
@@ -526,7 +526,7 @@ async def test_estimate_price_uses_current_price(mock_broker, config):
             current_price=155.0,
         )
     }
-    safe._broker.get_position = lambda a: safe._broker.positions.get(a)
+    mock_broker.get_position = lambda a: mock_broker.positions.get(a)
 
     price = await safe._estimate_price(asset="AAPL", limit_price=None)
     assert price == 155.0
@@ -653,7 +653,7 @@ async def test_close_all_positions(mock_broker, config):
         "AAPL": Position(asset="AAPL", quantity=10, entry_price=150.0, entry_time=datetime.now()),
         "MSFT": Position(asset="MSFT", quantity=5, entry_price=300.0, entry_time=datetime.now()),
     }
-    safe._broker.get_position = lambda a: safe._broker.positions.get(a)
+    mock_broker.get_position = lambda a: mock_broker.positions.get(a)
 
     # Mock close_position_async to return orders
     mock_broker.close_position_async = AsyncMock(

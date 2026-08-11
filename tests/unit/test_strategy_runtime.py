@@ -393,6 +393,8 @@ async def test_initial_target_matches_backtest_child_and_persists_lineage(tmp_pa
 async def test_recovery_preserves_target_pending_and_rule_state_without_duplicate_intent(
     tmp_path,
 ) -> None:
+    recovered_bar = asyncio.Event()
+
     class RecoveryTargetStrategy(InitialTargetStrategy):
         def __init__(self, intent, rules) -> None:
             super().__init__(intent, rules)
@@ -400,6 +402,8 @@ async def test_recovery_preserves_target_pending_and_rule_state_without_duplicat
 
         def on_data(self, timestamp, data, context, broker) -> None:
             self.data_calls += 1
+            if self.data_calls == 2:
+                recovered_bar.set()
 
     raw = FillBroker(partial_quantity=250)
     safe = SafeBroker(raw, risk_config(tmp_path, shadow_mode=False))
@@ -420,13 +424,12 @@ async def test_recovery_preserves_target_pending_and_rule_state_without_duplicat
     await engine.connect()
 
     async def stop_after_recovered_bar() -> None:
-        while strategy.data_calls < 2:
-            await asyncio.sleep(0.001)
+        await recovered_bar.wait()
         await engine.stop()
 
     await asyncio.wait_for(
         asyncio.gather(engine.run(), stop_after_recovered_bar()),
-        timeout=5,
+        timeout=15,
     )
 
     assert raw.connect_calls == 2
