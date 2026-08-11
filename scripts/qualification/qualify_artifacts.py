@@ -35,7 +35,6 @@ MANIFEST_PATH = REPOSITORY_ROOT / "artifact-manifest.toml"
 BUILD_CONSTRAINTS = REPOSITORY_ROOT / "build-constraints.txt"
 INSTALLED_SMOKE = Path(__file__).with_name("installed_smoke.py")
 SUPPORTED_PYTHONS = ("3.12", "3.13", "3.14")
-REJECTED_PYTHON = "3.15"
 CANDIDATE_VERSION = "0.1.0"
 EXPECTED_URLS = {
     "Homepage": "https://www.ml4trading.io/docs/live/",
@@ -216,7 +215,7 @@ def validate_metadata(message: Message, project: dict[str, object]) -> str:
     failures: list[str] = []
     if message["Name"] != "ml4t-live":
         failures.append("Name")
-    if SpecifierSet(message["Requires-Python"] or "") != SpecifierSet(">=3.12,<3.15"):
+    if SpecifierSet(message["Requires-Python"] or "") != SpecifierSet(">=3.12"):
         failures.append("Requires-Python")
     if message["License-Expression"] != "MIT":
         failures.append("License-Expression")
@@ -400,55 +399,6 @@ def qualify_install_profiles(
     return results
 
 
-def assert_rejected_python(artifacts: Sequence[Path], root: Path) -> None:
-    rejection_markers = ("requires-python", "requires python", ">=3.12,<3.15", "3.15")
-    for artifact in artifacts:
-        artifact_type = "wheel" if artifact.suffix == ".whl" else "sdist"
-        profile_root = root / f"reject-{artifact_type}-py315"
-        profile_root.mkdir(parents=True)
-        venv = profile_root / "venv"
-        _run(
-            ("uv", "venv", "--seed", "--python", REJECTED_PYTHON, str(venv)),
-            cwd=profile_root,
-        )
-        python = _profile_python(venv)
-        result = subprocess.run(
-            (
-                str(python),
-                "-m",
-                "pip",
-                "install",
-                "--no-deps",
-                "--build-constraint",
-                str(BUILD_CONSTRAINTS),
-                str(artifact),
-            ),
-            cwd=profile_root,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        diagnostic = (result.stdout + result.stderr).lower()
-        if result.returncode == 0 or not any(marker in diagnostic for marker in rejection_markers):
-            raise QualificationError(f"{artifact_type} did not reject Python {REJECTED_PYTHON}")
-        if "building pydantic-core" in diagnostic or "building orjson" in diagnostic:
-            raise QualificationError(
-                f"{artifact_type} resolved runtime dependencies before rejection"
-            )
-        _run(
-            (
-                str(python),
-                "-I",
-                "-c",
-                (
-                    "import importlib.util as i; "
-                    "assert i.find_spec('ml4t') is None or i.find_spec('ml4t.live') is None"
-                ),
-            ),
-            cwd=profile_root,
-        )
-
-
 def _default_evidence_root() -> Path | None:
     candidate = (
         REPOSITORY_ROOT.parent
@@ -488,7 +438,6 @@ def main() -> int:
         version = validate_artifact_metadata(wheel, sdist)
 
         profiles = qualify_install_profiles((wheel, sdist), version, root / "profiles")
-        assert_rejected_python((wheel, sdist), root / "profiles")
         evidence_root = args.evidence_root or _default_evidence_root()
         secret_result = scan_release(REPOSITORY_ROOT, (wheel, sdist), evidence_root)
 
@@ -513,7 +462,7 @@ def main() -> int:
             },
             "manifests_exact": True,
             "supported_python": list(SUPPORTED_PYTHONS),
-            "rejected_python": REJECTED_PYTHON,
+            "prerelease_python": "3.15",
             "profiles": [asdict(profile) for profile in profiles],
             "installed_wheel_examples": sorted(DETERMINISTIC_EXAMPLES),
             "secret_scan": {
@@ -530,7 +479,7 @@ def main() -> int:
             args.output.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
         print(
             f"artifact qualification: {'PASS' if report['passed'] else 'FAIL'} "
-            f"({len(profiles)} installed profiles, Python 3.15 rejected, "
+            f"({len(profiles)} stable installed profiles, "
             f"{secret_result.sources} secret-scan sources)"
         )
         return int(not report["passed"])

@@ -21,7 +21,9 @@ uv run python scripts/qualification/run_stable_gate.py
 The gate must leave the worktree unchanged. It checks source quality, Python 3.12-3.14 behavior,
 dependency policy, deterministic integration, bounded stress and controlled faults, sustained
 performance, public claims, strict documentation, reproducible artifacts, installed wheel and
-source-distribution profiles, Python 3.15 rejection, external typing, secret scanning, and metadata.
+source-distribution profiles, external typing, secret scanning, and metadata. The ecosystem
+qualification workflow separately requires Python 3.15 prerelease installation and the
+non-hardware-dependent suite on Linux, macOS, and Windows.
 
 The performance stage runs three 360,000-event dispatcher repetitions representing one hour at 100
 events per second across 32 symbols. Each run must preserve event and canonical-intent checksums,

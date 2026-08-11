@@ -74,7 +74,7 @@ def test_metadata_contract_accepts_declared_stable_candidate() -> None:
     message = email.message.Message()
     message["Name"] = "ml4t-live"
     message["Version"] = "0.1.0"
-    message["Requires-Python"] = ">=3.12,<3.15"
+    message["Requires-Python"] = ">=3.12"
     message["License-Expression"] = "MIT"
     for classifier in EXPECTED_CLASSIFIERS:
         message["Classifier"] = classifier
@@ -92,7 +92,7 @@ def test_metadata_contract_rejects_development_build_of_stable_candidate() -> No
     message = email.message.Message()
     message["Name"] = "ml4t-live"
     message["Version"] = "0.1.0.dev1"
-    message["Requires-Python"] = ">=3.12,<3.15"
+    message["Requires-Python"] = ">=3.12"
     message["License-Expression"] = "MIT"
     for classifier in EXPECTED_CLASSIFIERS:
         message["Classifier"] = classifier
@@ -105,11 +105,11 @@ def test_metadata_contract_rejects_development_build_of_stable_candidate() -> No
         validate_metadata(message, project)
 
 
-def test_metadata_contract_rejects_unbounded_python() -> None:
+def test_metadata_contract_rejects_python_315_upper_bound() -> None:
     message = email.message.Message()
     message["Name"] = "ml4t-live"
     message["Version"] = "0.1.0"
-    message["Requires-Python"] = ">=3.12"
+    message["Requires-Python"] = ">=3.12,<3.15"
     message["License-Expression"] = "MIT"
 
     with pytest.raises(QualificationError, match="Requires-Python"):
