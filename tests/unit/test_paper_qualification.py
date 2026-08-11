@@ -407,6 +407,17 @@ def test_provider_soak_rejects_incomplete_or_failed_evidence(field: str, value: 
 async def test_provider_soak_runs_continuously_and_reconnects_once(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
+    monotonic_time = 0.0
+    woke_early = False
+
+    async def fake_sleep(delay: float) -> None:
+        nonlocal monotonic_time, woke_early
+        if not woke_early and monotonic_time >= 0.3 and delay > 0.01:
+            monotonic_time += delay - 0.01
+            woke_early = True
+        else:
+            monotonic_time += delay
+
     class FakeBroker:
         def __init__(self) -> None:
             self.is_connected = False
@@ -433,6 +444,8 @@ async def test_provider_soak_runs_continuously_and_reconnects_once(
 
     monkeypatch.setattr(paper_qualification, "SOAK_DURATION_SECONDS", 0.4)
     monkeypatch.setattr(paper_qualification, "SOAK_SNAPSHOT_INTERVAL_SECONDS", 0.1)
+    monkeypatch.setattr(paper_qualification.time, "monotonic", lambda: monotonic_time)
+    monkeypatch.setattr(paper_qualification.asyncio, "sleep", fake_sleep)
     monkeypatch.setattr(paper_qualification, "_verify_installed_candidate", lambda *_args: None)
     monkeypatch.setattr(paper_qualification, "_build_broker", lambda _provider: broker)
     monkeypatch.setattr(paper_qualification, "_snapshot", fake_snapshot)
@@ -445,6 +458,8 @@ async def test_provider_soak_runs_continuously_and_reconnects_once(
     assert report["passed"] is True, {
         key: value for key, value in report.items() if key not in {"candidate", "snapshots"}
     }
+    assert woke_early is True
+    assert report["duration_seconds"] >= 0.4
     assert report["reconnect_count"] == 1
     assert len(report["snapshots"]) >= 5
     assert broker.connect_count == 2
