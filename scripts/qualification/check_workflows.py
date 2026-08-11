@@ -34,7 +34,7 @@ ACTION_PATTERN = re.compile(
     r"^\s*-?\s*uses:\s*([^\s#]+)(?:\s+#\s+(v[0-9][A-Za-z0-9_.-]*))?\s*$",
     re.MULTILINE,
 )
-IMMUTABLE_ACTION = re.compile(r"^[^/\s]+/[^/@\s]+@[0-9a-f]{40}$")
+IMMUTABLE_ACTION = re.compile(r"^[^/\s]+/[^/@\s]+(?:/[^@\s]+)*@[0-9a-f]{40}$")
 
 
 def load_workflow(path: Path) -> dict[str, Any]:
@@ -145,7 +145,11 @@ def promotion_failures(qualification: dict[str, Any], release: dict[str, Any]) -
         "./.github/workflows/stable-qualification.yml"
     ):
         failures.append("release does not call the reusable stable qualification workflow")
-    if _needs(release_jobs.get("publish", {})) != {"qualification", "paper-evidence"}:
+    if _needs(release_jobs.get("publish", {})) != {
+        "ecosystem-qualification",
+        "qualification",
+        "paper-evidence",
+    }:
         failures.append(
             "publish does not require the complete stable qualification and fresh paper evidence"
         )
