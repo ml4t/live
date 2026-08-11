@@ -148,24 +148,24 @@ def test_locked_profile_ignores_foreign_platform_dependencies() -> None:
                 "version": "1.0",
                 "source": {"registry": "https://pypi.org/simple"},
                 "dependencies": [
-                    {"name": "linux-only", "marker": "sys_platform == 'linux'"},
-                    {"name": "windows-only", "marker": "sys_platform == 'win32'"},
+                    {"name": "active", "marker": "python_version >= '3.0'"},
+                    {"name": "foreign", "marker": "python_version < '2.0'"},
                 ],
             },
             {
-                "name": "linux-only",
+                "name": "active",
                 "version": "2.0",
                 "source": {"registry": "https://pypi.org/simple"},
             },
             {
-                "name": "windows-only",
+                "name": "foreign",
                 "version": "3.0",
                 "source": {"registry": "https://pypi.org/simple"},
             },
         ]
     }
 
-    assert runtime_lock_overrides(lock) == {"root": "root==1.0", "linux-only": "linux-only==2.0"}
+    assert runtime_lock_overrides(lock) == {"root": "root==1.0", "active": "active==2.0"}
 
 
 def test_profile_requirements_exclude_non_matrix_optional_dependency() -> None:

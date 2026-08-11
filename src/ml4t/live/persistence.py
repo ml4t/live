@@ -106,20 +106,25 @@ def _validate_fd(path: Path, descriptor: int) -> None:
     _validate_stat(path, os.fstat(descriptor))
 
 
+def _is_link(path: Path) -> bool:
+    return path.is_symlink() or (os.name == "nt" and path.is_junction())
+
+
 def _ensure_parent(path: Path) -> None:
     path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     absolute_parent = path.absolute().parent
-    if (
-        path.parent.is_symlink()
-        or not path.parent.is_dir()
-        or absolute_parent.resolve() != absolute_parent
-    ):
+    parent_chain = (absolute_parent, *absolute_parent.parents)
+    has_link = any(_is_link(parent) for parent in parent_chain)
+    resolves_elsewhere = os.name == "posix" and absolute_parent.resolve() != absolute_parent
+    if not absolute_parent.is_dir() or has_link or resolves_elsewhere:
         raise UnsafePersistencePathError(
             f"persistence parent is not a real directory: {path.parent}"
         )
 
 
 def _open_existing(path: Path, flags: int = os.O_RDONLY) -> int:
+    if _is_link(path):
+        raise UnsafePersistencePathError(f"persistence path is a link: {path}")
     try:
         descriptor = os.open(path, _path_flags(flags))
     except OSError as error:
@@ -147,7 +152,9 @@ def _read_existing(path: Path) -> bytes:
 
 def _create_or_open_lock(path: Path) -> int:
     _ensure_parent(path)
-    existed = path.exists() or path.is_symlink()
+    if _is_link(path):
+        raise UnsafePersistencePathError(f"persistence lock is a link: {path}")
+    existed = path.exists()
     try:
         descriptor = os.open(path, _path_flags(os.O_RDWR | os.O_CREAT), STATE_FILE_MODE)
     except OSError as error:
@@ -491,7 +498,9 @@ class SecureAuditJournal:
                 entry = {**unsigned, "entry_hash": _journal_hash(unsigned)}
                 encoded = _canonical_json(entry) + b"\n"
                 _ensure_parent(self.path)
-                existed = self.path.exists() or self.path.is_symlink()
+                if _is_link(self.path):
+                    raise UnsafePersistencePathError(f"persistence path is a link: {self.path}")
+                existed = self.path.exists()
                 descriptor = os.open(
                     self.path,
                     _path_flags(os.O_WRONLY | os.O_APPEND | os.O_CREAT),
