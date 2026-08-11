@@ -1285,6 +1285,7 @@ build = [
     { name = "hatchling" },
 ]
 dev = [
+    { name = "databento", marker = "python_full_version < '3.15'" },
     { name = "packaging" },
     { name = "pre-commit" },
     { name = "psutil" },
@@ -1296,6 +1297,15 @@ dev = [
     { name = "ruff" },
     { name = "twine" },
     { name = "ty" },
+]
+test = [
+    { name = "packaging" },
+    { name = "psutil" },
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "pytest-cov" },
+    { name = "pytest-timeout" },
+    { name = "pyyaml" },
 ]
 
 [package.metadata]
@@ -1327,6 +1337,7 @@ build = [
     { name = "hatchling", specifier = "==1.31.0" },
 ]
 dev = [
+    { name = "databento", marker = "python_full_version < '3.15'", specifier = ">=0.38.0" },
     { name = "packaging", specifier = "==26.3" },
     { name = "pre-commit", specifier = ">=3.0" },
     { name = "psutil", specifier = ">=7.1.3" },
@@ -1338,6 +1349,15 @@ dev = [
     { name = "ruff", specifier = ">=0.8.0" },
     { name = "twine", specifier = ">=6.0.0" },
     { name = "ty" },
+]
+test = [
+    { name = "packaging", specifier = "==26.3" },
+    { name = "psutil", specifier = ">=7.1.3" },
+    { name = "pytest", specifier = ">=8.0" },
+    { name = "pytest-asyncio", specifier = ">=0.23" },
+    { name = "pytest-cov", specifier = ">=4.1" },
+    { name = "pytest-timeout", specifier = ">=2.1.0" },
+    { name = "pyyaml", specifier = "==6.0.3" },
 ]
 
 [[package]]
@@ -1768,7 +1788,7 @@ name = "pip-system-certs"
 version = "5.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "pip" },
+    { name = "pip", marker = "sys_platform == 'win32'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/7d/6a/563b05a4f6c9ddc205c98bb413e74221368efb98b8fb9cca96b578b8930c/pip_system_certs-5.3.tar.gz", hash = "sha256:19c8bf9957bcce7d69c4dbc2d0b2ef13de1984d53f50a59012e6dbbad0af67c6", size = 6395, upload-time = "2025-10-16T06:14:55.217Z" }
 wheels = [
