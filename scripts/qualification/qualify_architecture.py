@@ -274,7 +274,7 @@ def qualify(output: Path | None = None) -> dict[str, object]:
         dist = root / "dist"
         environment = os.environ.copy()
         environment.pop("PYTHONPATH", None)
-        environment["SETUPTOOLS_SCM_PRETEND_VERSION"] = "0.1.0"
+        environment["SETUPTOOLS_SCM_PRETEND_VERSION"] = "0.1.1"
         run(
             [
                 "uv",

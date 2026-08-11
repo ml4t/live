@@ -35,7 +35,7 @@ MANIFEST_PATH = REPOSITORY_ROOT / "artifact-manifest.toml"
 BUILD_CONSTRAINTS = REPOSITORY_ROOT / "build-constraints.txt"
 INSTALLED_SMOKE = Path(__file__).with_name("installed_smoke.py")
 SUPPORTED_PYTHONS = ("3.12", "3.13", "3.14")
-CANDIDATE_VERSION = "0.1.0"
+CANDIDATE_VERSION = "0.1.1"
 EXPECTED_URLS = {
     "Homepage": "https://www.ml4trading.io/docs/live/",
     "Documentation": "https://www.ml4trading.io/docs/live/",

@@ -276,8 +276,8 @@ def validate_workflows(root: Path = WORKFLOW_ROOT) -> list[str]:
             failures.append(f"{name} executes pull_request_target code")
 
     qualification_jobs = qualification["jobs"]
-    if qualification.get("env", {}).get("SETUPTOOLS_SCM_PRETEND_VERSION") != "0.1.0":
-        failures.append("stable qualification does not build the exact 0.1.0 candidate version")
+    if qualification.get("env", {}).get("SETUPTOOLS_SCM_PRETEND_VERSION") != "0.1.1":
+        failures.append("stable qualification does not build the exact 0.1.1 candidate version")
     if qualification.get("env", {}).get("CANDIDATE_SHA") != (
         "${{ github.event.pull_request.head.sha || github.sha }}"
     ):
