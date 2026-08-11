@@ -798,7 +798,7 @@ async def test_slow_callback_times_out_after_worker_becomes_quiescent() -> None:
     with pytest.raises(StrategyCallbackTimeoutError, match="on_data exceeded") as raised:
         await engine.run()
 
-    assert raised.value.elapsed_seconds >= 0.08
+    assert raised.value.elapsed_seconds >= raised.value.timeout_seconds
     assert strategy.on_data_calls
     assert strategy.on_end_called is True
     assert not any(thread.name.startswith("ml4t-live-strategy") for thread in threading.enumerate())

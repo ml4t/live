@@ -105,7 +105,7 @@ def write_owner_only(path: Path, content: bytes) -> None:
 def test_non_posix_persistence_does_not_require_fchmod() -> None:
     with (
         patch.object(persistence.os, "name", "nt"),
-        patch.object(persistence.os, "fchmod") as fchmod,
+        patch.object(persistence.os, "fchmod", create=True) as fchmod,
     ):
         persistence._restrict_file_mode(1)
 
