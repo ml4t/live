@@ -20,6 +20,7 @@ from ml4t.live import (
     PersistenceSafetyError,
     SafeBroker,
     UnsafePersistencePathError,
+    persistence,
 )
 from ml4t.live.brokers.alpaca import AlpacaBroker
 from ml4t.live.brokers.ib import IBBroker
@@ -99,6 +100,16 @@ def mode(path: Path) -> int:
 def write_owner_only(path: Path, content: bytes) -> None:
     path.write_bytes(content)
     path.chmod(0o600)
+
+
+def test_non_posix_persistence_does_not_require_fchmod() -> None:
+    with (
+        patch.object(persistence.os, "name", "nt"),
+        patch.object(persistence.os, "fchmod") as fchmod,
+    ):
+        persistence._restrict_file_mode(1)
+
+    fchmod.assert_not_called()
 
 
 @pytest.mark.parametrize("mask", [0o0000, 0o0002])

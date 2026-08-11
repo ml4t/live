@@ -110,13 +110,28 @@ def _is_link(path: Path) -> bool:
     return path.is_symlink() or (os.name == "nt" and path.is_junction())
 
 
+def _is_trusted_posix_root_alias(path: Path) -> bool:
+    if os.name != "posix" or path.parent != Path("/") or not path.is_symlink():
+        return False
+    metadata = path.lstat()
+    root_metadata = path.parent.stat()
+    root_mode = stat.S_IMODE(root_metadata.st_mode)
+    return metadata.st_uid == 0 and root_metadata.st_uid == 0 and not root_mode & 0o022
+
+
+def _restrict_file_mode(descriptor: int) -> None:
+    if os.name == "posix":
+        os.fchmod(descriptor, STATE_FILE_MODE)
+
+
 def _ensure_parent(path: Path) -> None:
     path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     absolute_parent = path.absolute().parent
     parent_chain = (absolute_parent, *absolute_parent.parents)
-    has_link = any(_is_link(parent) for parent in parent_chain)
-    resolves_elsewhere = os.name == "posix" and absolute_parent.resolve() != absolute_parent
-    if not absolute_parent.is_dir() or has_link or resolves_elsewhere:
+    has_untrusted_link = any(
+        _is_link(parent) and not _is_trusted_posix_root_alias(parent) for parent in parent_chain
+    )
+    if not absolute_parent.is_dir() or has_untrusted_link:
         raise UnsafePersistencePathError(
             f"persistence parent is not a real directory: {path.parent}"
         )
@@ -161,7 +176,7 @@ def _create_or_open_lock(path: Path) -> int:
         raise UnsafePersistencePathError(f"cannot safely open persistence lock: {path}") from error
     try:
         if not existed:
-            os.fchmod(descriptor, STATE_FILE_MODE)
+            _restrict_file_mode(descriptor)
         _validate_fd(path, descriptor)
         if os.fstat(descriptor).st_size == 0:
             os.write(descriptor, b"0")
@@ -245,7 +260,7 @@ def _atomic_write(
     temporary_path = Path(temporary_name)
     try:
         with os.fdopen(temporary_descriptor, "wb") as handle:
-            os.fchmod(handle.fileno(), STATE_FILE_MODE)
+            _restrict_file_mode(handle.fileno())
             handle.write(content)
             handle.flush()
             os.fsync(handle.fileno())
@@ -508,7 +523,7 @@ class SecureAuditJournal:
                 )
                 try:
                     if not existed:
-                        os.fchmod(descriptor, STATE_FILE_MODE)
+                        _restrict_file_mode(descriptor)
                     _validate_fd(self.path, descriptor)
                     if self._fault_injector is not None:
                         self._fault_injector("before_append")
