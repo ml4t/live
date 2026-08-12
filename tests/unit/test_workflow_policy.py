@@ -8,6 +8,7 @@ from scripts.qualification.check_workflows import (
     WORKFLOW_ROOT,
     action_pin_failures,
     load_workflow,
+    paper_runtime_failures,
     paper_soak_failures,
     promotion_failures,
     release_recovery_failures,
@@ -34,6 +35,23 @@ def test_paper_soak_requires_every_short_provider_check() -> None:
     soak["if"] = str(soak["if"]).replace("steps.ib-exercise.outcome", "")
 
     assert any("ib-exercise" in failure for failure in paper_soak_failures(seeded_job))
+
+
+def test_paper_qualification_uses_a_clean_explicit_runtime() -> None:
+    paper = load_workflow(WORKFLOW_ROOT / "paper.yml")
+    paper_job = paper["jobs"]["paper"]
+
+    assert paper_runtime_failures(paper_job) == []
+
+    seeded_job = deepcopy(paper_job)
+    runtime = next(
+        step for step in seeded_job["steps"] if step.get("id") == "qualification-runtime"
+    )
+    runtime["run"] = str(runtime["run"]).replace('"psutil==7.2.2"', "")
+
+    assert any(
+        "pinned runtime dependency" in failure for failure in paper_runtime_failures(seeded_job)
+    )
 
 
 @pytest.mark.parametrize(

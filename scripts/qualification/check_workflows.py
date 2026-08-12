@@ -250,6 +250,39 @@ def paper_soak_failures(paper_job: dict[str, Any]) -> list[str]:
     return failures
 
 
+def paper_runtime_failures(paper_job: dict[str, Any]) -> list[str]:
+    """Reject paper qualification that depends on ambient runner packages."""
+    steps = _steps(paper_job)
+    indexed = {step.get("id"): (index, step) for index, step in enumerate(steps) if step.get("id")}
+    required = ("qualification-runtime", "candidate-binding", "candidate-install")
+    if any(step_id not in indexed for step_id in required):
+        return ["paper qualification does not define its clean runtime and candidate steps"]
+
+    runtime_index, runtime = indexed["qualification-runtime"]
+    binding_index, binding = indexed["candidate-binding"]
+    install_index, install = indexed["candidate-install"]
+    failures = []
+    if not runtime_index < binding_index < install_index:
+        failures.append("paper qualification does not prepare its runtime before candidate use")
+
+    runtime_text = str(runtime.get("run", ""))
+    paper_python = '"${{ runner.temp }}/paper-venv/bin/python"'
+    if "uv venv --clear --python 3.12" not in runtime_text:
+        failures.append("paper qualification does not create a clean Python 3.12 environment")
+    if paper_python not in runtime_text or '"psutil==7.2.2"' not in runtime_text:
+        failures.append("paper qualification does not install its pinned runtime dependency")
+    if not str(binding.get("run", "")).startswith(
+        f"{paper_python} scripts/qualification/qualify_paper.py candidate"
+    ):
+        failures.append("paper artifact binding does not use the clean qualification environment")
+    install_text = str(install.get("run", ""))
+    if paper_python not in install_text or "dist/*.whl" not in install_text:
+        failures.append(
+            "paper qualification does not install the candidate in its clean environment"
+        )
+    return failures
+
+
 def validate_workflows(root: Path = WORKFLOW_ROOT) -> list[str]:
     paths = sorted(root.glob("*.yml"))
     workflows = {path.name: load_workflow(path) for path in paths}
@@ -403,6 +436,7 @@ def validate_workflows(root: Path = WORKFLOW_ROOT) -> list[str]:
         failures.append("paper qualification is not manual-only")
     paper_job = paper.get("jobs", {}).get("paper", {})
     failures.extend(paper_soak_failures(paper_job))
+    failures.extend(paper_runtime_failures(paper_job))
     if paper_job.get("environment") != "paper":
         failures.append("paper qualification does not use the protected paper environment")
     if "secrets." not in json.dumps(paper_job, sort_keys=True):
@@ -410,10 +444,6 @@ def validate_workflows(root: Path = WORKFLOW_ROOT) -> list[str]:
     paper_run_text = _run_text(paper_job)
     if "qualify_paper.py candidate" not in paper_run_text:
         failures.append("paper qualification does not bind the downloaded candidate artifact")
-    if '"$(uv python find 3.12)" scripts/qualification/qualify_paper.py candidate' not in (
-        paper_run_text
-    ):
-        failures.append("paper artifact binding does not use the uv-managed Python interpreter")
     for provider in ("alpaca", "ib"):
         for phase in ("exercise", "restart"):
             if (
