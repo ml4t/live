@@ -42,20 +42,29 @@ jobs:
           path: dist/
           github-token: ${{ github.token }}
           run-id: ${{ inputs.qualification-run-id }}
+      - name: Create a clean paper qualification environment
+        id: qualification-runtime
+        run: |
+          uv venv --clear --python 3.12 "${{ runner.temp }}/paper-venv"
+          uv pip install \
+            --python "${{ runner.temp }}/paper-venv/bin/python" \
+            "psutil==7.2.2"
       - name: Bind the downloaded artifact to its successful qualification run
+        id: candidate-binding
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: >-
-          "$(uv python find 3.12)" scripts/qualification/qualify_paper.py candidate
+          "${{ runner.temp }}/paper-venv/bin/python"
+          scripts/qualification/qualify_paper.py candidate
           --artifacts-dir dist
           --candidate-sha "${{ inputs.candidate-sha }}"
           --qualification-run-id "${{ inputs.qualification-run-id }}"
           --repository "${{ github.repository }}"
           --checkout-root "${{ github.workspace }}"
           --output paper-evidence/candidate.json
-      - name: Install only the candidate wheel outside the checkout
+      - name: Install only the candidate ML4T wheel outside the checkout
+        id: candidate-install
         run: |
-          uv venv --python 3.12 "${{ runner.temp }}/paper-venv"
           uv pip install --python "${{ runner.temp }}/paper-venv/bin/python" dist/*.whl
           mkdir -p "${{ runner.temp }}/paper-run" "${{ runner.temp }}/paper-state"
       - name: Exercise Alpaca paper order lifecycle
