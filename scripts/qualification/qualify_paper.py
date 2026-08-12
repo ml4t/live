@@ -729,6 +729,11 @@ async def _soak_snapshot(provider: str, broker: Any, *, started_monotonic: float
     }
 
 
+async def _sleep_until(deadline: float) -> None:
+    while (remaining := deadline - time.monotonic()) > 0:
+        await asyncio.sleep(remaining)
+
+
 async def run_provider_soak(
     *, provider: str, candidate: dict[str, Any], checkout_root: Path
 ) -> dict[str, Any]:
@@ -774,7 +779,7 @@ async def run_provider_soak(
                 deadline,
             )
             if not reconnected and reconnect_at <= snapshot_at:
-                await asyncio.sleep(max(0.0, reconnect_at - time.monotonic()))
+                await _sleep_until(reconnect_at)
                 if not broker.is_connected:
                     unexpected_disconnect_count += 1
                     raise PaperQualificationError("paper provider disconnected during the soak")
@@ -788,7 +793,7 @@ async def run_provider_soak(
                 broker.assert_paper_trading()
                 reconnect_count += 1
                 reconnected = True
-            await asyncio.sleep(max(0.0, snapshot_at - time.monotonic()))
+            await _sleep_until(snapshot_at)
             if not broker.is_connected:
                 unexpected_disconnect_count += 1
                 raise PaperQualificationError("paper provider disconnected during the soak")
