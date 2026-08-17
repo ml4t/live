@@ -18,9 +18,9 @@ dependencies = [
     "ml4t-backtest>=0.1.0,<0.2",
     "ml4t-specs>=0.1.1,<0.2",
     "ib-async==2.1.0",
-    "alpaca-py==0.43.5",
+    "alpaca-py==0.44.0",
     "httpx==0.28.1",
-    "ccxt>=4.5.31,<=4.5.71",
+    "ccxt>=4.5.31,<=4.5.73",
 ]
 
 [project.scripts]
@@ -54,7 +54,7 @@ experimental = [
 ]
 
 [build-system]
-requires = ["hatchling==1.31.0", "hatch-vcs==0.5.0"]
+requires = ["hatchling==1.32.0", "hatch-vcs==0.5.0"]
 build-backend = "hatchling.build"
 
 [tool.hatch.version]
@@ -78,7 +78,7 @@ exclude = ["**/AGENTS.md"]
 
 [dependency-groups]
 build = [
-    "hatchling==1.31.0",
+    "hatchling==1.32.0",
     "hatch-vcs==0.5.0",
 ]
 test = [
