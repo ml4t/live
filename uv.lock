@@ -161,7 +161,7 @@ wheels = [
 
 [[package]]
 name = "alpaca-py"
-version = "0.43.5"
+version = "0.44.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "msgpack" },
@@ -172,9 +172,9 @@ dependencies = [
     { name = "sseclient-py" },
     { name = "websockets" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/b8/9c/0d5b0565f31a6a439876cb343282c1b7353f20ff90fefb57d33f94b4e215/alpaca_py-0.43.5.tar.gz", hash = "sha256:7b09ba442cb0c6f957c2c57a30c6035456e2e670e63e383d439c639ffdbf98ba", size = 98289, upload-time = "2026-07-02T07:22:07.016Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/2d/b7/99f09835590f2a3fbdb82abf72d81a199a7aca6d0335a6bc6ec057fc2792/alpaca_py-0.44.0.tar.gz", hash = "sha256:5388715b67b51ad30fa07308e89299d48b19bed65b81013b8a1158fa5837337b", size = 103559, upload-time = "2026-08-11T10:15:05.96Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/02/40/83c7ef8bc3e74e73cda6308f7107fe57815dcfc808dc9cd03bd09aa22dd3/alpaca_py-0.43.5-py3-none-any.whl", hash = "sha256:0b4cac9b743851310f19f6a9aa84f57ddf95ae75b601350395746a893f54a2da", size = 122677, upload-time = "2026-07-02T07:22:08.06Z" },
+    { url = "https://files.pythonhosted.org/packages/8e/9e/69a2d867988578d6f9e52e35d435d8a43296257cf590fb881a3752de7651/alpaca_py-0.44.0-py3-none-any.whl", hash = "sha256:b54673f967c0c814a5e0223cbb0211a5d9d75a8d107e792872b14e5bae957c03", size = 128904, upload-time = "2026-08-11T10:15:07.141Z" },
 ]
 
 [[package]]
@@ -232,7 +232,7 @@ wheels = [
 
 [[package]]
 name = "ccxt"
-version = "4.5.71"
+version = "4.5.74"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiohappyeyeballs" },
@@ -259,9 +259,9 @@ dependencies = [
     { name = "yarl" },
     { name = "zlib-ng" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/c2/99/7ff0cd5ec0ec97a558b7396f0885e976ec3b5094315bdbc05540c6306c22/ccxt-4.5.71.tar.gz", hash = "sha256:171f9dd4c9c915b5e8dadf2730ebd9c675b590c7f03b0e420841f03a5a2195f8", size = 5956203, upload-time = "2026-08-04T10:38:15.911Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/63/49/77f03eb95c1f375d4eeb09fad37126c91360843400d2be0b11eec0f2c652/ccxt-4.5.74.tar.gz", hash = "sha256:3e4e4e878fce4457ffb37ed6e41942391e454d36bdf2b74edb40a7620a400d78", size = 6106169, upload-time = "2026-08-17T17:37:26.181Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/9e/9b/c47bb2d78314ac3480d3505e872cb8cf157a5c888d0338d9b3f4ea9daa54/ccxt-4.5.71-py3-none-any.whl", hash = "sha256:936d01e84c47f4a6ce711962881cef5b094a1d39d4574fd08e186bd10160cf8c", size = 6395681, upload-time = "2026-08-04T10:38:13.372Z" },
+    { url = "https://files.pythonhosted.org/packages/4f/ae/25f9ed7559775853427d4200b94778d219f61808afaaf0d1ed89141a9c08/ccxt-4.5.74-py3-none-any.whl", hash = "sha256:5de0f1abeaefa452200813124cf4ccd5b65b4b8d818f6921857a1ff6b373eeb8", size = 6551458, upload-time = "2026-08-17T17:37:22.839Z" },
 ]
 
 [[package]]
@@ -612,7 +612,7 @@ wheels = [
 
 [[package]]
 name = "databento"
-version = "0.83.0"
+version = "0.84.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiohttp" },
@@ -624,37 +624,37 @@ dependencies = [
     { name = "requests" },
     { name = "zstandard" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/7a/a1/150a8914538174b04d6f33ee9c55b6d5a80a9142d3c9659bba72e3eaff4f/databento-0.83.0.tar.gz", hash = "sha256:e38168b8f99f7f5bcd8e4f2d6f3d5984bf0c832c207e85896a4d765040899507", size = 75070, upload-time = "2026-08-05T19:51:02.722Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/a7/f2/4e9501f5fd2ee66464a074165ccba9a27acc4a42fdaec9bcddc70eb35194/databento-0.84.0.tar.gz", hash = "sha256:73e2227e2ec52e4c90b1eb386ef8ef07ed3cbdb3ed2889b6c87b1bceba9cba19", size = 75220, upload-time = "2026-08-19T15:00:09.284Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/e2/61/6e930ef07bf3865d0fb010cbdbece49351258c6a79e6be50df28fdbcdaa7/databento-0.83.0-py3-none-any.whl", hash = "sha256:dbf3902af4909ccf35712b54e61fa16e88c6331aaf773e9e7977fdd9f75f4a70", size = 93076, upload-time = "2026-08-05T19:51:03.895Z" },
+    { url = "https://files.pythonhosted.org/packages/9f/a8/6e3964e3c1e01b7e52417c4bf2fdb8ce0cbb2b077eaf18e8fdc892898aa9/databento-0.84.0-py3-none-any.whl", hash = "sha256:3f5c6742b6092f1feef00fdf18f5a5e5faab99cf3a6c1c811ebe44c43b6975d2", size = 93213, upload-time = "2026-08-19T15:00:10.493Z" },
 ]
 
 [[package]]
 name = "databento-dbn"
-version = "0.65.0"
+version = "0.67.0"
 source = { registry = "https://pypi.org/simple" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/c1/7f/aa077c9b50a2198f6afaa434c2d3f10c8d23b3e94abce4031aa067ec2380/databento_dbn-0.65.0-cp312-cp312-macosx_10_12_x86_64.macosx_11_0_arm64.macosx_10_12_universal2.whl", hash = "sha256:70aa76b30d35062a2602acb4324a225937ffcb33f6e740fd7021b666b998e361", size = 2672172, upload-time = "2026-08-04T20:17:40.678Z" },
-    { url = "https://files.pythonhosted.org/packages/31/4e/35a834a9a963a42262449965a0a6878006cecb7bfce5a303121749ddafd8/databento_dbn-0.65.0-cp312-cp312-macosx_10_12_x86_64.whl", hash = "sha256:474994eff509dfe3ea9f4ea86fbd2c750a5f004b72f438f8b6d5d6c82c9ba124", size = 1395962, upload-time = "2026-08-04T20:17:42.048Z" },
-    { url = "https://files.pythonhosted.org/packages/37/ae/9e1f9dc5b52b9ae1574f95aabe8a6f1d3fa8272b628630c0b405f14c4f49/databento_dbn-0.65.0-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:4b57f2211d7d4c80c4b0b59e6e08ccf30906be7d388e270e9fed17b1e681d891", size = 1518452, upload-time = "2026-08-04T20:17:43.556Z" },
-    { url = "https://files.pythonhosted.org/packages/e1/99/5581128e4cfc9cc005fdd912f6c93cdad4437a7e4c6bb22775350e72e60f/databento_dbn-0.65.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:1734c1fe5dd6185a9b4a1ffdaedd83057b74db19d1077f6c1a5058dee5a9bc77", size = 1518617, upload-time = "2026-08-04T20:17:45.071Z" },
-    { url = "https://files.pythonhosted.org/packages/66/1b/f92163a27c01ee1d575245d142bd89b372d682643a9d8d53881ed8b9ea6d/databento_dbn-0.65.0-cp312-cp312-musllinux_1_2_aarch64.whl", hash = "sha256:8d37d482cab6867a4593a960e2994084af476effc7d2b94819d82416348f93d6", size = 1729621, upload-time = "2026-08-04T20:17:46.407Z" },
-    { url = "https://files.pythonhosted.org/packages/7a/78/1deb8f0358e93a2ced3f67ae9844a3245c56e27d37f3643fc8f676cb7399/databento_dbn-0.65.0-cp312-cp312-musllinux_1_2_x86_64.whl", hash = "sha256:cd438cd28827c8a66d036a5c3474acaebab78bf093b188102b4291882b28ef07", size = 1791586, upload-time = "2026-08-04T20:17:47.637Z" },
-    { url = "https://files.pythonhosted.org/packages/f9/39/3e80fc1448c09af48f610fb20d6f6c5b5e2e15c81be9235c67a3528993a3/databento_dbn-0.65.0-cp312-cp312-win_amd64.whl", hash = "sha256:3023b0412d9799f8995329febadeed59978ed971695dcc8d2957499274f313ee", size = 1118485, upload-time = "2026-08-04T20:17:48.852Z" },
-    { url = "https://files.pythonhosted.org/packages/e9/f7/f9972c8e62556430c845df6cdbb05bb43a5aaa0906d0790e850790a996ac/databento_dbn-0.65.0-cp313-cp313-macosx_10_12_x86_64.macosx_11_0_arm64.macosx_10_12_universal2.whl", hash = "sha256:358e81259d610f7881cb7c623d19fbb8597f1390b135ce9e7d2a378054fb5630", size = 2671202, upload-time = "2026-08-04T20:17:49.987Z" },
-    { url = "https://files.pythonhosted.org/packages/fe/5f/7f0315d21dc7a0c4064739a55cfd2be6641b53e6f04efe91f28d6ebe7708/databento_dbn-0.65.0-cp313-cp313-macosx_10_12_x86_64.whl", hash = "sha256:d6abc265765c1a4bfb569013d17f289d594e93b16db0f84c78740b27e0e56c0b", size = 1395635, upload-time = "2026-08-04T20:17:51.219Z" },
-    { url = "https://files.pythonhosted.org/packages/f2/55/883da5d6392dcac06b80a7ec0a2ce8b3b1d160426aa0879aec4b8e48e80f/databento_dbn-0.65.0-cp313-cp313-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:e286a16279bb585d604878b5c0fd5b473c5f8b43208e3b2c7148bdc4cb7d73d7", size = 1516574, upload-time = "2026-08-04T20:17:52.277Z" },
-    { url = "https://files.pythonhosted.org/packages/b0/63/24422c4716761bdf40d8a76d63245110cdfdf4d123adfe01e58e5553fd82/databento_dbn-0.65.0-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:5408d77c6831a682632113deadba60bed6697e930d76494e4e9d2a5e6acebfba", size = 1517964, upload-time = "2026-08-04T20:17:53.331Z" },
-    { url = "https://files.pythonhosted.org/packages/36/54/e3ff04418730e4fa10ade937e714b803197368c608a75274a61a7e4255fd/databento_dbn-0.65.0-cp313-cp313-musllinux_1_2_aarch64.whl", hash = "sha256:52e5d378a3da3c93353a3d08f17e7f2092ffb81894f56e29eb3ae4346ed279da", size = 1727230, upload-time = "2026-08-04T20:17:54.485Z" },
-    { url = "https://files.pythonhosted.org/packages/29/41/0eed7283936943829f80a81d2632ff5ad8b8ac7cc5b618069d3ad753077f/databento_dbn-0.65.0-cp313-cp313-musllinux_1_2_x86_64.whl", hash = "sha256:e05613589a3993644d8e5641523eae81c264192ac19673a627ba6f9c46c742dc", size = 1792487, upload-time = "2026-08-04T20:17:55.511Z" },
-    { url = "https://files.pythonhosted.org/packages/dc/bb/fd12e11b9a90d5a1b38601f46411dd1f4024ac3027d7872f2a4112437913/databento_dbn-0.65.0-cp313-cp313-win_amd64.whl", hash = "sha256:4a5d832b9a9f1d1b3003b2db0dc01908b87904464ab5fda111e1b34d96caac75", size = 1116722, upload-time = "2026-08-04T20:17:56.778Z" },
-    { url = "https://files.pythonhosted.org/packages/19/d5/d20686b6b24b3268a1c02d396fded3f175a35878f3bf69b188a2c2498be1/databento_dbn-0.65.0-cp314-cp314-macosx_10_12_x86_64.macosx_11_0_arm64.macosx_10_12_universal2.whl", hash = "sha256:c95d0954784e268dd9af1f23d0e71ed53e18c97990fa38bd499ee81f4070c1b6", size = 2673178, upload-time = "2026-08-04T20:17:57.889Z" },
-    { url = "https://files.pythonhosted.org/packages/bb/89/7844f8929f0eb24853a5cd155e60906586361f571f852029ce52121baf19/databento_dbn-0.65.0-cp314-cp314-macosx_10_12_x86_64.whl", hash = "sha256:2f963c88e7a58ed3130e645e5ccdbe7fe6de8c6230269b7a8edd1e27c596af04", size = 1396330, upload-time = "2026-08-04T20:17:59.106Z" },
-    { url = "https://files.pythonhosted.org/packages/ad/20/573236f425dabd7b93a339ee2f2a3ecfb2ec6fc73695760859e4bd9dfd1d/databento_dbn-0.65.0-cp314-cp314-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:afe694f3efa6ba3be95297f3414dc5baf1081b4c389604d17a72e90de77298d7", size = 1517425, upload-time = "2026-08-04T20:18:00.287Z" },
-    { url = "https://files.pythonhosted.org/packages/d3/e9/1087718e474cb994fe95aeb301300bda6e568a36082942f558fde8d7c411/databento_dbn-0.65.0-cp314-cp314-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:69da366489f3fd7e428df1187dbc435689433c44f8c6ab2bda393de3c0e23549", size = 1520166, upload-time = "2026-08-04T20:18:01.482Z" },
-    { url = "https://files.pythonhosted.org/packages/1d/83/b9f05f3c4512f5c7d252a2bc34f25563263b458f17ee778460b126bb8585/databento_dbn-0.65.0-cp314-cp314-musllinux_1_2_aarch64.whl", hash = "sha256:7bfa8061de2f7959336a193db51ecef1ce1f600bf4238d57b570d6caa0d8fe66", size = 1728281, upload-time = "2026-08-04T20:18:02.654Z" },
-    { url = "https://files.pythonhosted.org/packages/79/c3/aa7d4db51a982544b2928b2bba19332f1262249c776308e65b64e954b955/databento_dbn-0.65.0-cp314-cp314-musllinux_1_2_x86_64.whl", hash = "sha256:a7870f79ef0694941c39b3985758744d1654677cb2cfd7fd9e0a884c75c84b9b", size = 1793442, upload-time = "2026-08-04T20:18:03.921Z" },
-    { url = "https://files.pythonhosted.org/packages/dd/7b/73a92f87c8dabd7f0b70635391781af99343c366b0187a1b9ec07fbca416/databento_dbn-0.65.0-cp314-cp314-win_amd64.whl", hash = "sha256:b99623421b538ee6704ca7aea9d08f8f00e3b72d7b45b9f64379e0a08cfe3335", size = 1117219, upload-time = "2026-08-04T20:18:05.005Z" },
+    { url = "https://files.pythonhosted.org/packages/0c/2e/59b73005cc91d7f099034cd2d6dc0795a4b5575b34a71123f6f4dd85e169/databento_dbn-0.67.0-cp312-cp312-macosx_10_12_x86_64.macosx_11_0_arm64.macosx_10_12_universal2.whl", hash = "sha256:fa7603efe8d0da9562404a55944be45a70a172ca382fd223e6c9c52111093521", size = 2666596, upload-time = "2026-08-18T15:39:33.82Z" },
+    { url = "https://files.pythonhosted.org/packages/cf/c9/317a946e8b436c0f499af25a75243af3fa0bd19f50329afaa09648e625c6/databento_dbn-0.67.0-cp312-cp312-macosx_10_12_x86_64.whl", hash = "sha256:ed9a061ac0e957cb6500450e2de10d53b0e06424a12d18fcb0d4b0e98b9e49e9", size = 1393440, upload-time = "2026-08-18T15:39:35.197Z" },
+    { url = "https://files.pythonhosted.org/packages/50/90/d8f43088ab6bb55fdc7c84d29563c67dbee79d9708b09adf3525fc88c885/databento_dbn-0.67.0-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:d58f372307a1ab409ef5bd5d254bc3b10119fed6fd6cdbf2c793801f948affed", size = 1514467, upload-time = "2026-08-18T15:39:36.532Z" },
+    { url = "https://files.pythonhosted.org/packages/4a/35/24b88d5812437154891f279387ca9e78914fe822bd78a9c4bee2bd6547bc/databento_dbn-0.67.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:7c5dbd92943c3417cb07bea5f87d3a1f5b84ef95d2fe1c8cda6665a77d64dc64", size = 1517485, upload-time = "2026-08-18T15:39:37.818Z" },
+    { url = "https://files.pythonhosted.org/packages/7e/02/83509d9d645fb556e22c6dee6c8109bdc863d0d30bef97dde0e6fece8b84/databento_dbn-0.67.0-cp312-cp312-musllinux_1_2_aarch64.whl", hash = "sha256:208fec518a7829d8e5a7c65421908a2b1516d3626d8a94b89208a7d91220a629", size = 1726102, upload-time = "2026-08-18T15:39:39.24Z" },
+    { url = "https://files.pythonhosted.org/packages/04/87/057a0356a2ab26f240e17897200bef8bbfdb0582f8d6f99e5eb2a7ef3b65/databento_dbn-0.67.0-cp312-cp312-musllinux_1_2_x86_64.whl", hash = "sha256:5559b30ce91305d927c2c74264b2f1875052927e7f47ce88b264f2f7f27bf155", size = 1790689, upload-time = "2026-08-18T15:39:41.046Z" },
+    { url = "https://files.pythonhosted.org/packages/d6/f1/7794af988c8f6279de0f4fd43d59fc19284706a5fd3070be49d5cd325bb7/databento_dbn-0.67.0-cp312-cp312-win_amd64.whl", hash = "sha256:c107b93a58f843ab7c0a3a7d844188ee7b664e3bd7015b5680da33ec79dcbc32", size = 1115992, upload-time = "2026-08-18T15:39:43.187Z" },
+    { url = "https://files.pythonhosted.org/packages/2a/be/520a22fe29d44309217ea9a539fcc9442aef6fac25a9595510eec4fd5c8e/databento_dbn-0.67.0-cp313-cp313-macosx_10_12_x86_64.macosx_11_0_arm64.macosx_10_12_universal2.whl", hash = "sha256:7a9bf406754d266d8243c001ae14c5bd17616a62297413fe0355ca850a4dd23f", size = 2665267, upload-time = "2026-08-18T15:39:44.497Z" },
+    { url = "https://files.pythonhosted.org/packages/e1/af/3dceeb4548f5b9176a777e53833cf2a5237a4ba8facc7b6cc77794b976da/databento_dbn-0.67.0-cp313-cp313-macosx_10_12_x86_64.whl", hash = "sha256:ca75b1719fe5adcfb22ce378b1bf8cdbc2b83d4d2297fc3e5c9cd68218dd596d", size = 1393583, upload-time = "2026-08-18T15:39:45.884Z" },
+    { url = "https://files.pythonhosted.org/packages/5c/78/24e888693a0ba74852bcfa26815e9c308004f4d51c8e997a09a1d6c00c68/databento_dbn-0.67.0-cp313-cp313-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:a75b052e2aebe233005d234dbbe775faa4d0a93bc6aa72aa072c79af2176ca7c", size = 1514087, upload-time = "2026-08-18T15:39:47.733Z" },
+    { url = "https://files.pythonhosted.org/packages/33/13/0354f69ed580f83f5fff948026167f1b6d1f2ed7830d678b06741506ca15/databento_dbn-0.67.0-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:ca9da1c92e6197d88ca0aad172a95d5d9a8bd88348ed4e11e05f70957a546f8d", size = 1517461, upload-time = "2026-08-18T15:39:49.185Z" },
+    { url = "https://files.pythonhosted.org/packages/1d/e0/4b65e730ab35cd6541833a1c5b15edaeb2fe3621ea8f9db7681525755103/databento_dbn-0.67.0-cp313-cp313-musllinux_1_2_aarch64.whl", hash = "sha256:19f796d84495aaa846defac14074a60f8a5aab6c6a3ab62ab0a256f5a6c1b365", size = 1726184, upload-time = "2026-08-18T15:39:50.506Z" },
+    { url = "https://files.pythonhosted.org/packages/14/a5/2b380e8a58ffb4f6c7121fc36c906af48591cb4cc66b287b86587c71a73e/databento_dbn-0.67.0-cp313-cp313-musllinux_1_2_x86_64.whl", hash = "sha256:274fd6e1069a4b3b1e1caec3b508d9d838ac3b535d0a903b59acb546ab4e402e", size = 1790731, upload-time = "2026-08-18T15:39:52.233Z" },
+    { url = "https://files.pythonhosted.org/packages/dc/e8/77f7c299b646d100df2548e26ef3b3b6dd4a699d098415ec37976d70b9c9/databento_dbn-0.67.0-cp313-cp313-win_amd64.whl", hash = "sha256:defbf2673eae93c4f4e96ef83d93a89f300ec84124eb3ccedeeb84cdbcbafcb2", size = 1115586, upload-time = "2026-08-18T15:39:53.947Z" },
+    { url = "https://files.pythonhosted.org/packages/4c/be/ddacc24625b6b76ef41c73b2f411427e8fe5069f9c3dd4a1b251d84c812c/databento_dbn-0.67.0-cp314-cp314-macosx_10_12_x86_64.macosx_11_0_arm64.macosx_10_12_universal2.whl", hash = "sha256:52ddf0ca81c6a87876e01ee3402753761d46b726d1b1e351ed8d4249b6030c88", size = 2670181, upload-time = "2026-08-18T15:39:55.588Z" },
+    { url = "https://files.pythonhosted.org/packages/a7/0c/6966a10005d7cb658d10824cad7390c981e6fe192a0cebd8b114dfbaddf4/databento_dbn-0.67.0-cp314-cp314-macosx_10_12_x86_64.whl", hash = "sha256:3b1d3f9443d9a3017f31d6d6cc6542d6146351d833f66bed1aeb91382c4d381b", size = 1395221, upload-time = "2026-08-18T15:39:57.146Z" },
+    { url = "https://files.pythonhosted.org/packages/07/f3/758553621e1ee74f0d747d4ef0e46636115cce22b822be09d84ba4a21bce/databento_dbn-0.67.0-cp314-cp314-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:4f73283c6739c2a42a59f15891c9743b730278ea3355bcc2de6b30275e55cf91", size = 1514563, upload-time = "2026-08-18T15:39:58.504Z" },
+    { url = "https://files.pythonhosted.org/packages/bc/92/4f2f5213ab1b1061b1e133b27657223801834ba267a07f251e4012c0ffb3/databento_dbn-0.67.0-cp314-cp314-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:0f9a90ad2a146a9af0a9daad9b41c3d8233561767416ca9510b4bb1075e40183", size = 1518882, upload-time = "2026-08-18T15:39:59.933Z" },
+    { url = "https://files.pythonhosted.org/packages/ce/c5/e386c4a1de51d19ee255cc882d69f238b784b770e9af4b8f821523f0b978/databento_dbn-0.67.0-cp314-cp314-musllinux_1_2_aarch64.whl", hash = "sha256:dfaf27781171eb33bfe836406d302e02fbfc2fdbb1fdceb97b503b46782eca8d", size = 1725912, upload-time = "2026-08-18T15:40:01.994Z" },
+    { url = "https://files.pythonhosted.org/packages/23/3e/4b8e3b407316bfee5fb912569e683441837a7549e142b069e80ec80bc40f/databento_dbn-0.67.0-cp314-cp314-musllinux_1_2_x86_64.whl", hash = "sha256:907822b9e64d3a2af00e7c323fe1f075185469c46cfe3ae2c87e234d25851af6", size = 1792657, upload-time = "2026-08-18T15:40:04.076Z" },
+    { url = "https://files.pythonhosted.org/packages/a5/61/0020953a88a079107b4b468e8e4f9140c72d10fb74698cfd22189121c3df/databento_dbn-0.67.0-cp314-cp314-win_amd64.whl", hash = "sha256:a81e39e538c5cf26de98eba3f4a45e2df0efc6eaa741cbd1e161782b05f92b2e", size = 1116315, upload-time = "2026-08-18T15:40:05.372Z" },
 ]
 
 [[package]]
@@ -835,17 +835,18 @@ wheels = [
 
 [[package]]
 name = "hatchling"
-version = "1.31.0"
+version = "1.32.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "packaging" },
     { name = "pathspec" },
     { name = "pluggy" },
+    { name = "tomlkit" },
     { name = "trove-classifiers" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/25/e2/dfa73fe78f773018dcaebc6d09b819bc10d328ff5a6b4a66efa1e3d71f52/hatchling-1.31.0.tar.gz", hash = "sha256:6b48ad4068a482ed7239b3a8215bc55b47aad3345d58dfc94e553c5d2d46211b", size = 57208, upload-time = "2026-07-08T01:48:32.237Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/69/08/33331757185504aae48b8d9bd78cec03a76e3aecfb52e549d05a2347c0dd/hatchling-1.32.0.tar.gz", hash = "sha256:0bdbde4a52b06c37e3eca395f85a762bf0ef06fe374fd8ae429dc6be10230f5f", size = 57783, upload-time = "2026-08-11T05:03:44.114Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/64/e2/2c0af0a52d16be74a4f194564fcdc417521ed863e9b65e4bc9052dacba6f/hatchling-1.31.0-py3-none-any.whl", hash = "sha256:aac80bec8b6fe35e8480f1c335be8910fa210a0e6f735a139be205dadcacb544", size = 77747, upload-time = "2026-07-08T01:48:31.024Z" },
+    { url = "https://files.pythonhosted.org/packages/a9/84/1798b6d85ecde0e31546004efd25c5de1b1f49250644a60cce460e12593a/hatchling-1.32.0-py3-none-any.whl", hash = "sha256:0e17c9c3b9aa7c625acc8d0f5b622f107d5049af9ecf5ada4de1aada5be7cdbc", size = 78435, upload-time = "2026-08-11T05:03:42.644Z" },
 ]
 
 [[package]]
@@ -1310,9 +1311,9 @@ test = [
 
 [package.metadata]
 requires-dist = [
-    { name = "alpaca-py", specifier = "==0.43.5" },
-    { name = "ccxt", specifier = ">=4.5.31,<=4.5.71" },
-    { name = "databento", marker = "extra == 'experimental'", specifier = "==0.83.0" },
+    { name = "alpaca-py", specifier = "==0.44.0" },
+    { name = "ccxt", specifier = ">=4.5.31,<=4.5.74" },
+    { name = "databento", marker = "extra == 'experimental'", specifier = "==0.84.0" },
     { name = "httpx", specifier = "==0.28.1" },
     { name = "ib-async", specifier = "==2.1.0" },
     { name = "mkdocs", marker = "extra == 'docs'", specifier = ">=1.6,<2" },
@@ -1334,7 +1335,7 @@ provides-extras = ["dev", "docs", "experimental"]
 [package.metadata.requires-dev]
 build = [
     { name = "hatch-vcs", specifier = "==0.5.0" },
-    { name = "hatchling", specifier = "==1.31.0" },
+    { name = "hatchling", specifier = "==1.32.0" },
 ]
 dev = [
     { name = "databento", marker = "python_full_version < '3.15'", specifier = ">=0.38.0" },
@@ -2464,6 +2465,15 @@ wheels = [
 ]
 
 [[package]]
+name = "tomlkit"
+version = "0.15.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/94/96/e07752635b98536177fa1f37671c8f3cdde2e724c6bcf6034b2cfb571565/tomlkit-0.15.1.tar.gz", hash = "sha256:e25bbf38843005246210a12982776f27f99cb9be67160e14434d0c0d21ee1e97", size = 180129, upload-time = "2026-07-17T01:48:04.562Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/13/bc/8c13eb66537dce1d2bd3a57132902f38d0e7f5bb46fa9f4daed9fe9d76ee/tomlkit-0.15.1-py3-none-any.whl", hash = "sha256:177a05aece5a8ca5266fd3c448abb47b8d352f09d477d3ca8332db4d89b24304", size = 49449, upload-time = "2026-07-17T01:48:05.728Z" },
+]
+
+[[package]]
 name = "toolz"
 version = "1.1.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2599,14 +2609,14 @@ wheels = [
 
 [[package]]
 name = "vcs-versioning"
-version = "2.2.4"
+version = "2.3.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "packaging" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/3c/92/14277e46f415b6a01b6e94960cd6bc3acdc366e990d43ad71d63fef83d1b/vcs_versioning-2.2.4.tar.gz", hash = "sha256:ed718fdee42170e128a8add6f23f53aa64dc7d9ab2de87d3083a691df881a809", size = 145243, upload-time = "2026-08-07T20:20:42.517Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/a6/cb/6f5c4ed4da249ef5eea34ddfbb38174c5533ff3da8703b8252bf44b80396/vcs_versioning-2.3.1.tar.gz", hash = "sha256:806635bd0ea653c96af98a70624be758d408a989f2cd0b390e63474d99f96b63", size = 156292, upload-time = "2026-08-19T07:37:21.034Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/7a/26/7d2b738d2b7e177e729932dbdf1ebfa57c98846777a87a864130cc1e196b/vcs_versioning-2.2.4-py3-none-any.whl", hash = "sha256:48ffea8a6a175c37a718c7ee2e5f508d0e500c2cf3371791f7948bccb2b44628", size = 109066, upload-time = "2026-08-07T20:20:40.963Z" },
+    { url = "https://files.pythonhosted.org/packages/8e/1e/94c0a4b8c8c639e91ff6bce375a2c92460a711b9e040b28674ed492d004d/vcs_versioning-2.3.1-py3-none-any.whl", hash = "sha256:a11299394e101569a62ab061375260d08bc56cd33d685b7067d85312368f4457", size = 114617, upload-time = "2026-08-19T07:37:19.553Z" },
 ]
 
 [[package]]
