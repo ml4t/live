@@ -43,10 +43,10 @@ license = "BSD"
 support = "active upstream; exact SDK version because broker behavior is release-sensitive"
 
 [dependencies.alpaca-py]
-requirement = "alpaca-py==0.43.5"
-minimum = "alpaca-py==0.43.5"
-locked = "alpaca-py==0.43.5"
-maximum = "alpaca-py==0.43.5"
+requirement = "alpaca-py==0.44.0"
+minimum = "alpaca-py==0.44.0"
+locked = "alpaca-py==0.44.0"
+maximum = "alpaca-py==0.44.0"
 license = "Apache-2.0"
 support = "active upstream; exact version because 0.43.2 omits a required runtime dependency"
 
@@ -59,18 +59,18 @@ license = "BSD-3-Clause"
 support = "active upstream; exact pre-1.0 transport API"
 
 [dependencies.ccxt]
-requirement = "ccxt>=4.5.31,<=4.5.71"
+requirement = "ccxt>=4.5.31,<=4.5.74"
 minimum = "ccxt==4.5.31"
-locked = "ccxt==4.5.71"
-maximum = "ccxt==4.5.71"
+locked = "ccxt==4.5.74"
+maximum = "ccxt==4.5.74"
 license = "MIT"
 support = "active upstream; accepted patch interval is exercised at both endpoints"
 
 [dependencies.databento]
-requirement = "databento==0.83.0"
-minimum = "databento==0.83.0"
-locked = "databento==0.83.0"
-maximum = "databento==0.83.0"
+requirement = "databento==0.84.0"
+minimum = "databento==0.84.0"
+locked = "databento==0.84.0"
+maximum = "databento==0.84.0"
 license = "Apache-2.0"
 support = "experimental optional adapter; exact SDK version"
 matrix = false
@@ -85,7 +85,7 @@ ib_async = "ib-async"
 "ml4t.specs" = "ml4t-specs"
 
 [build-dependencies.hatchling]
-requirement = "hatchling==1.31.0"
+requirement = "hatchling==1.32.0"
 license = "MIT"
 support = "active upstream; exact isolated-build backend"
 
