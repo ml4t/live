@@ -2290,6 +2290,12 @@ class SafeBroker:
             self._set_state_snapshot(self._virtual_portfolio.positions, [])
             return
 
+        if getattr(self._broker, "is_connected", None) is False:
+            logger.warning(
+                "Retaining the last persisted broker snapshot because the broker is unhealthy"
+            )
+            return
+
         positions = getattr(self._broker, "positions", {})
         pending_orders = getattr(self._broker, "pending_orders", [])
         if isinstance(positions, dict) and isinstance(pending_orders, list):

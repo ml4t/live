@@ -489,6 +489,12 @@ class LiveEngine:
                     if self._shutdown_event.is_set():
                         logger.info("LiveEngine: Shutdown requested")
                         break
+                    if self._current_broker_connected() is False:
+                        self._terminal_failure_reason = "broker_disconnected"
+                        self._shutdown_event.set()
+                        raise RuntimeError(
+                            "Broker disconnected before the next strategy event dispatch"
+                        )
 
                     processing_time = datetime.now(UTC)
                     typed_event = item if isinstance(item, MarketEvent) else None
@@ -612,7 +618,10 @@ class LiveEngine:
                     runtime_state=self._runtime_state,
                     recovery_action="inspect runtime diagnostics before restarting",
                 )
-            if not isinstance(error, asyncio.CancelledError):
+            if (
+                not isinstance(error, asyncio.CancelledError)
+                and self._terminal_failure_reason is None
+            ):
                 self._terminal_failure_reason = f"runtime:{type(error).__name__}"
             if isinstance(error, FeedContinuityError | FeedOverflowError):
                 if self._runtime_state is RuntimeState.RUNNING:
