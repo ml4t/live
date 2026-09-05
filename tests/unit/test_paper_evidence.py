@@ -329,7 +329,22 @@ def _downloader(
     return download
 
 
-def test_artifact_download_uses_github_json_media_type(monkeypatch) -> None:
+@pytest.mark.parametrize(
+    ("url", "expected_accept"),
+    [
+        (
+            "https://api.github.test/repos/ml4t/live/actions/artifacts/42/zip",
+            "application/vnd.github+json",
+        ),
+        (
+            "https://api.github.test/repos/ml4t/live/releases/assets/42",
+            "application/octet-stream",
+        ),
+    ],
+)
+def test_artifact_download_uses_endpoint_media_type(
+    monkeypatch, url: str, expected_accept: str
+) -> None:
     class Response:
         def __enter__(self):
             return self
@@ -342,7 +357,7 @@ def test_artifact_download_uses_github_json_media_type(monkeypatch) -> None:
 
     class Opener:
         def open(self, request, *, timeout: int):
-            assert request.get_header("Accept") == "application/octet-stream"
+            assert request.get_header("Accept") == expected_accept
             assert timeout == 30
             return Response()
 
@@ -352,7 +367,7 @@ def test_artifact_download_uses_github_json_media_type(monkeypatch) -> None:
 
     monkeypatch.setattr("urllib.request.build_opener", build_opener)
 
-    assert fetch_bytes("https://api.github.test/artifact.zip", "token") == b"artifact"
+    assert fetch_bytes(url, "token") == b"artifact"
 
 
 def test_artifact_redirect_drops_github_credentials_on_host_change() -> None:

@@ -76,10 +76,16 @@ def fetch_json(url: str, token: str) -> dict[str, Any]:
 
 
 def fetch_bytes(url: str, token: str) -> bytes:
+    path = urllib.parse.urlsplit(url).path
+    accept = (
+        "application/vnd.github+json"
+        if "/actions/artifacts/" in path
+        else "application/octet-stream"
+    )
     request = urllib.request.Request(
         url,
         headers={
-            "Accept": "application/octet-stream",
+            "Accept": accept,
             "Authorization": f"Bearer {token}",
             "X-GitHub-Api-Version": "2022-11-28",
         },
