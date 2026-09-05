@@ -39,7 +39,7 @@ jobs:
     uses: ./.github/workflows/stable-qualification.yml
 
   paper-evidence:
-    name: Require fresh paper qualification
+    name: Require exact exercises and reusable provider evidence
     runs-on: ubuntu-latest
     outputs:
       wheel_sha256: ${{ steps.paper.outputs.wheel_sha256 }}
@@ -50,6 +50,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          fetch-depth: 0
           ref: ${{ github.event_name == 'workflow_dispatch' && inputs.candidate-sha || github.sha }}
       - name: Match successful retained evidence to this commit
         id: paper
@@ -59,7 +60,6 @@ jobs:
           python scripts/qualification/check_paper_evidence.py
           --repository "${{ github.repository }}"
           --commit "${{ github.event_name == 'workflow_dispatch' && inputs.candidate-sha || github.sha }}"
-          --max-age-days 7
           --github-output "$GITHUB_OUTPUT"
 
   publish:

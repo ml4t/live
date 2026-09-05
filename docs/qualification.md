@@ -49,34 +49,46 @@ acknowledgement, reconnect reconciliation, replacement, cancellation, cleanup, a
 from a fresh process. IB accepts only the standard paper ports and an account identified by IB as a
 paper account. Alpaca accepts only the SDK's official paper endpoint in sandbox mode.
 
-After the order-lifecycle checks, each broker remains connected to its paper account for at least
-six continuous hours. Five-minute snapshots must preserve exact adapter-to-provider positions and
-pending orders, valid account metrics, connection state, and the initial account-state checksum.
-Each broker must complete one controlled reconnect, retain snapshot continuity, keep process RSS
-growth below 25 MiB, and disconnect within five seconds. Any unexpected disconnect, reconciliation
-change, invalid paper identity, or retained error fails the run.
+The order-lifecycle checks run for every candidate. Extended Alpaca, IB, and OKX soaks run
+independently. Set `extended-provider` to the provider whose contract changed, to `all` for initial
+qualification, or to `none` when all three current extended results remain applicable.
 
-The retained bundle contains counts and pass/fail state, not account or order identifiers. The
-release gate downloads and validates the bundle, requires both phases for both brokers, and returns
-the qualified wheel's SHA-256 digest. Before publication, the tag workflow compares that digest with
-the only wheel in its qualified distribution artifact. A successful workflow conclusion or artifact
-name is not sufficient by itself. The evidence must also remain within the release workflow's
-freshness interval.
+Each selected broker remains connected to its paper account for at least six continuous hours.
+Five-minute snapshots must preserve exact adapter-to-provider positions and pending orders, valid
+account metrics, connection state, and the initial account-state checksum. The broker must complete
+one controlled reconnect, retain snapshot continuity, keep process RSS growth below 25 MiB, and
+disconnect within five seconds. Any unexpected disconnect, reconciliation change, invalid paper
+identity, or retained error fails the run.
 
-The same workflow qualifies `OKXFundingFeed` against the public OKX service. It compares adapter
+Every extended report records a provider-contract identity. The identity hashes the provider
+adapter, qualification logic reached by that soak, the resolved provider dependency, and the Linux
+CPython 3.12 runtime contract. OKX also hashes the shared event and queue contracts reached by its
+feed. A changed identity invalidates only that provider's result. Documentation, CI metadata, and
+source code outside the extended provider path do not invalidate it.
+
+The workflow stores redacted evidence as a 90-day Actions artifact and as a durable prerelease
+asset named `provider-evidence-RUN_ID/provider-evidence.zip`. The release gate validates the exact
+candidate's short exercises, then selects a matching extended result for each provider from current
+or earlier runs. Evidence has no time-based expiry. Missing, malformed, or mismatched evidence fails
+closed. The Aug 10 run at `98c414e9d858427c31e1680faccdc8dca498bf6b` is the only legacy result
+accepted without an embedded identity; the verifier recomputes its narrower reviewed identity.
+
+The same workflow qualifies `OKXFundingFeed` against the public OKX service for every candidate. It compares adapter
 events with provider-native observations, observes consecutive complete candles across restart,
 rejects stale input, forces fail-closed overload, and requires shutdown within five seconds. The
-same installed wheel then runs for at least six continuous hours with five-minute event, queue, and
-RSS snapshots and one retained-state restart. The Alpaca, IB, and OKX sessions run concurrently so
-the workflow remains bounded by one six-hour interval. Every complete minute must remain
+selected OKX extended run then continues for at least six hours with five-minute event, queue, and
+RSS snapshots and one retained-state restart. Every complete minute must remain
 contiguous, final state must match a native OKX observation, RSS growth must remain below 25 MiB,
 and errors, rejections, or overflows fail the run. The retained feed bundle also proves that Alpaca,
 IB, DataBento, and generic CCXT feed construction requires `experimental=True` and records each
 adapter's missing guarantees. The release gate requires the paper and feed bundles to identify the
 same commit and wheel.
 
-Do not expose broker credentials to pull-request code. Do not substitute a run from another commit,
-reuse an artifact after a source or workflow change, or point IB qualification at a live port.
+IB Gateway or TWS authentication is an operator prerequisite. Once the paper session is
+authenticated, the self-hosted runner can execute the short check or selected soak without further
+operator input. IB does not support fully unattended login, so a changed IB contract may still wait
+for authentication. Do not expose broker credentials to pull-request code or point IB qualification
+at a live port.
 
 ## Retain Candidate Identity
 

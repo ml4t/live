@@ -12,14 +12,19 @@ from scripts.qualification.qualify_paper import _load_json, _write_json, run_pro
 
 
 async def qualify_provider_soaks(
-    *, candidate: dict[str, Any], checkout_root: Path
+    *, candidate: dict[str, Any], checkout_root: Path, providers: tuple[str, ...]
 ) -> tuple[dict[str, dict[str, Any]], list[str]]:
     tasks = {
-        "alpaca": run_provider_soak(
-            provider="alpaca", candidate=candidate, checkout_root=checkout_root
-        ),
-        "ib": run_provider_soak(provider="ib", candidate=candidate, checkout_root=checkout_root),
-        "okx": qualify_okx_soak(candidate, checkout_root),
+        provider: (
+            qualify_okx_soak(candidate, checkout_root)
+            if provider == "okx"
+            else run_provider_soak(
+                provider=provider,
+                candidate=candidate,
+                checkout_root=checkout_root,
+            )
+        )
+        for provider in providers
     }
     results = await asyncio.gather(*tasks.values(), return_exceptions=True)
     reports: dict[str, dict[str, Any]] = {}
@@ -41,10 +46,18 @@ def main() -> int:
     parser.add_argument("--alpaca-output", type=Path, required=True)
     parser.add_argument("--ib-output", type=Path, required=True)
     parser.add_argument("--okx-output", type=Path, required=True)
+    parser.add_argument(
+        "--provider",
+        choices=("alpaca", "ib", "okx", "all"),
+        default="all",
+    )
     args = parser.parse_args()
+    providers = ("alpaca", "ib", "okx") if args.provider == "all" else (args.provider,)
     reports, failures = asyncio.run(
         qualify_provider_soaks(
-            candidate=_load_json(args.candidate), checkout_root=args.checkout_root
+            candidate=_load_json(args.candidate),
+            checkout_root=args.checkout_root,
+            providers=providers,
         )
     )
     outputs = {
@@ -57,7 +70,7 @@ def main() -> int:
     if failures:
         print("provider soaks: FAIL (" + ", ".join(failures) + ")")
         return 1
-    print("provider soaks: PASS (alpaca, ib, okx)")
+    print("provider soaks: PASS (" + ", ".join(providers) + ")")
     return 0
 
 

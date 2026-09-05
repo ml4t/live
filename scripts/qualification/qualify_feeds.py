@@ -25,6 +25,8 @@ _candidate_identity = _paper._candidate_identity
 _load_json = _paper._load_json
 _verify_installed_candidate = _paper._verify_installed_candidate
 _write_json = _paper._write_json
+_contracts = importlib.import_module("scripts.qualification.provider_contract")
+provider_contract = _contracts.provider_contract
 
 OKX_API = "https://www.okx.com/api/v5"
 OKX_SYMBOL = "BTC-USDT-SWAP"
@@ -453,9 +455,14 @@ async def qualify_okx_soak(candidate: dict[str, Any], checkout_root: Path) -> di
     rss_growth = max(snapshot["rss_bytes"] for snapshot in snapshots) - snapshots[0]["rss_bytes"]
     final_stats = feed.stats
     report = {
-        "schema_version": 1,
+        "schema_version": 2,
         "provider": "okx",
         "candidate": identity,
+        "provider_contract": provider_contract(
+            "okx",
+            checkout_root=checkout_root,
+            ref=str(identity["commit"]),
+        ),
         "started_at": started_at.isoformat(),
         "completed_at": datetime.now(UTC).isoformat(),
         "duration_seconds": round(duration, 3),
@@ -501,7 +508,10 @@ def validate_soak_report(report: dict[str, Any], candidate: dict[str, Any]) -> N
         "overflow_count",
         "passed",
     }
-    if set(report) != required or report.get("schema_version") != 1:
+    schema_version = report.get("schema_version")
+    if schema_version == 2:
+        required.add("provider_contract")
+    if set(report) != required or schema_version not in {1, 2}:
         raise FeedQualificationError("OKX soak report schema is invalid")
     if report.get("provider") != "okx" or report.get("candidate") != _candidate_identity(candidate):
         raise FeedQualificationError("OKX soak report targets a different provider or candidate")

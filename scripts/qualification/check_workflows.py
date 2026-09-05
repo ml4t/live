@@ -489,11 +489,34 @@ def validate_workflows(root: Path = WORKFLOW_ROOT) -> list[str]:
     if retained_paths != {"paper-evidence/", "feed-evidence/"}:
         failures.append("paper qualification does not retain its evidence bundle")
 
+    archive_job = paper.get("jobs", {}).get("archive", {})
+    if _needs(archive_job) != {"paper"} or archive_job.get("runs-on") != "ubuntu-latest":
+        failures.append("provider evidence is not archived by a hosted job after qualification")
+    archive_text = json.dumps(archive_job, sort_keys=True)
+    if "secrets." in archive_text:
+        failures.append("provider evidence archival references a credential secret")
+    archive_downloads = _action_steps(archive_job, "actions/download-artifact")
+    if (
+        len(archive_downloads) != 1
+        or archive_downloads[0].get("with", {}).get("name")
+        != "paper-${{ inputs.candidate-sha }}-${{ github.run_id }}"
+    ):
+        failures.append("provider evidence archival does not download the current run artifact")
+    archive_run_text = _run_text(archive_job)
+    for required in (
+        'gh release create "provider-evidence-${{ github.run_id }}"',
+        '--target "${{ inputs.candidate-sha }}"',
+        "--prerelease",
+    ):
+        if required not in archive_run_text:
+            failures.append(f"provider evidence archival omits: {required}")
+
     allowed_job_writes = {
         ("release.yml", "publish"): {"id-token"},
         ("release.yml", "github-release"): {"contents"},
         ("release.yml", "recovery-publish"): {"id-token"},
         ("release.yml", "recovery-github-release"): {"contents"},
+        ("paper.yml", "archive"): {"contents"},
     }
     for workflow_name, workflow in workflows.items():
         for job_name, job in workflow.get("jobs", {}).items():

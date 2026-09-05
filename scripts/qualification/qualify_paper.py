@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import hashlib
+import importlib
 import importlib.metadata
 import json
 import math
@@ -21,6 +22,13 @@ from pathlib import Path
 from typing import Any
 
 import psutil
+
+REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
+if str(REPOSITORY_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPOSITORY_ROOT))
+
+_contracts = importlib.import_module("scripts.qualification.provider_contract")
+provider_contract = _contracts.provider_contract
 
 GITHUB_API = "https://api.github.com"
 COMMIT_PATTERN = re.compile(r"^[0-9a-f]{40}$")
@@ -847,9 +855,14 @@ async def run_provider_soak(
         and error_count == 0
     )
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "provider": provider,
         "candidate": identity,
+        "provider_contract": provider_contract(
+            provider,
+            checkout_root=checkout_root,
+            ref=str(identity["commit"]),
+        ),
         "started_at": started_at,
         "completed_at": datetime.now(UTC).isoformat(),
         "duration_seconds": duration_seconds,
@@ -980,7 +993,10 @@ def validate_provider_soak_report(
         "failure_type",
         "passed",
     }
-    if set(report) != required or report.get("schema_version") != 1:
+    schema_version = report.get("schema_version")
+    if schema_version == 2:
+        required.add("provider_contract")
+    if set(report) != required or schema_version not in {1, 2}:
         raise PaperQualificationError("provider soak report schema is invalid")
     if report.get("provider") != provider or report.get("candidate") != candidate_identity:
         raise PaperQualificationError("provider soak report targets a different candidate")
