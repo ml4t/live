@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import io
 import json
+import subprocess
 import urllib.request
 import zipfile
 from pathlib import Path
+
+import pytest
 
 from scripts.qualification.check_paper_evidence import (
     _ArtifactRedirectHandler,
@@ -380,6 +383,14 @@ def test_artifact_redirect_drops_github_credentials_on_host_change() -> None:
 def test_legacy_ib_soak_remains_valid_while_changed_providers_do_not() -> None:
     repository = Path(__file__).resolve().parents[2]
     candidate = "HEAD"
+    history_available = subprocess.run(
+        ["git", "cat-file", "-e", f"{LEGACY_COMMIT}^{{commit}}"],
+        cwd=repository,
+        check=False,
+        capture_output=True,
+    )
+    if history_available.returncode != 0:
+        pytest.skip("legacy provider evidence check requires the repository's full Git history")
 
     assert provider_contract_matches(
         "ib",
