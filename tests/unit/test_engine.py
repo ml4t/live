@@ -550,6 +550,31 @@ async def test_run_with_data():
 
 
 @pytest.mark.asyncio
+async def test_broker_disconnect_blocks_the_next_strategy_callback() -> None:
+    broker = MockAsyncBroker()
+
+    class DisconnectingStrategy(RecordingStrategy):
+        def on_data(self, timestamp: datetime, data: dict, context: dict, wrapped: Any) -> None:
+            super().on_data(timestamp, data, context, wrapped)
+            broker._connected = False
+
+    event = (
+        datetime(2024, 1, 1, 9, 30, tzinfo=UTC),
+        {"AAPL": {"close": 150.0}},
+        {},
+    )
+    strategy = DisconnectingStrategy()
+    engine = LiveEngine(strategy, broker, MockDataFeed([event, event]))
+    await engine.connect()
+
+    with pytest.raises(RuntimeError, match="before the next strategy event dispatch"):
+        await engine.run()
+
+    assert len(strategy.on_data_calls) == 1
+    assert engine.stats["terminal_failure_reason"] == "broker_disconnected"
+
+
+@pytest.mark.asyncio
 async def test_typed_events_dispatch_by_kind_and_preserve_causal_context() -> None:
     strategy = RecordingStrategy()
     broker = MockAsyncBroker()
