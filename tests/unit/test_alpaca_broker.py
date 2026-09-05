@@ -13,7 +13,7 @@ from alpaca.trading.enums import TimeInForce
 from alpaca.trading.requests import MarketOrderRequest
 from ml4t.backtest.types import Order, OrderSide, OrderStatus, OrderType, Position
 
-from ml4t.live.brokers.alpaca import AlpacaBroker
+from ml4t.live import AlpacaBroker, ExecutionModeError, LiveRiskConfig, SafeBroker
 
 
 class MockAlpacaAccount:
@@ -73,9 +73,14 @@ class MockAlpacaOrder:
         self.qty = qty
         self.side = side
         self.type = type
-        self.status = AlpacaOrderStatus.NEW if status == "new" else AlpacaOrderStatus.PENDING_NEW
+        self.status = {
+            "new": AlpacaOrderStatus.NEW,
+            "partially_filled": AlpacaOrderStatus.PARTIALLY_FILLED,
+            "filled": AlpacaOrderStatus.FILLED,
+        }.get(status, AlpacaOrderStatus.PENDING_NEW)
         self.filled_qty = filled_qty
         self.filled_avg_price = filled_avg_price
+        self.filled_at = datetime.now(UTC) if status == "filled" else None
         self.limit_price = limit_price
         self.stop_price = stop_price
         self.time_in_force = time_in_force
@@ -860,6 +865,120 @@ class TestAlpacaBrokerOrderSubmission:
         assert order2.order_id == "ML4T-2"
         assert broker._order_counter == 2
 
+    @pytest.mark.asyncio
+    async def test_rest_filled_order_refreshes_positions(self):
+        broker = AlpacaBroker(api_key="PKTEST", secret_key="SECRET")
+        broker._trading_client = MagicMock()
+        broker._connected = True
+        broker._trading_client.submit_order.return_value = MockAlpacaOrder(
+            status="filled",
+            filled_qty="2",
+            filled_avg_price="151.25",
+            qty="2",
+        )
+        broker._trading_client.get_all_positions.return_value = [
+            MockAlpacaPosition("AAPL", "2", "151.25")
+        ]
+
+        order = await broker.submit_order_async("AAPL", 2)
+
+        assert order.status is OrderStatus.FILLED
+        assert order.filled_quantity == 2
+        assert order.filled_price == 151.25
+        assert broker.positions["AAPL"].quantity == 2
+        broker._trading_client.get_all_positions.assert_called_once_with()
+
+    @pytest.mark.asyncio
+    async def test_rest_partial_fill_preserves_evidence_and_refreshes_positions(self):
+        broker = AlpacaBroker(api_key="PKTEST", secret_key="SECRET")
+        broker._trading_client = MagicMock()
+        broker._connected = True
+        broker._trading_client.submit_order.return_value = MockAlpacaOrder(
+            status="partially_filled",
+            filled_qty="1",
+            filled_avg_price="151.25",
+            qty="2",
+        )
+        broker._trading_client.get_all_positions.return_value = [
+            MockAlpacaPosition("AAPL", "1", "151.25")
+        ]
+
+        order = await broker.submit_order_async("AAPL", 2)
+
+        assert order.status is OrderStatus.PENDING
+        assert order.filled_quantity == 1
+        assert order.filled_price == 151.25
+        assert broker.pending_orders == [order]
+        assert broker.positions["AAPL"].quantity == 1
+        broker._trading_client.get_all_positions.assert_called_once_with()
+
+    @pytest.mark.asyncio
+    async def test_rest_fill_refresh_failure_preserves_acceptance_and_poison_snapshot(self):
+        broker = AlpacaBroker(api_key="PKTEST", secret_key="SECRET")
+        broker._trading_client = MagicMock()
+        broker._connected = True
+        broker._trading_client.submit_order.return_value = MockAlpacaOrder(
+            status="filled",
+            filled_qty="2",
+            filled_avg_price="151.25",
+            qty="2",
+        )
+        broker._trading_client.get_all_positions.side_effect = RuntimeError("venue unavailable")
+
+        order = await broker.submit_order_async("AAPL", 2)
+
+        assert order.status is OrderStatus.FILLED
+        assert order.filled_quantity == 2
+        assert broker.is_connected is False
+        with pytest.raises(RuntimeError, match="position state is unavailable"):
+            _ = broker.positions
+        with pytest.raises(RuntimeError, match="position state is unavailable"):
+            broker.get_position("AAPL")
+
+    @pytest.mark.asyncio
+    async def test_safe_broker_commits_accepted_fill_before_blocking_further_trades(self, tmp_path):
+        broker = AlpacaBroker(api_key="PKTEST", secret_key="SECRET")
+        broker._trading_client = MagicMock()
+        broker._trading_client._sandbox = True
+        broker._trading_client._base_url = BaseURL.TRADING_PAPER
+        broker._trading_client.submit_order.return_value = MockAlpacaOrder(
+            status="filled",
+            filled_qty="2",
+            filled_avg_price="151.25",
+            qty="2",
+        )
+        broker._trading_client.get_all_positions.side_effect = RuntimeError("venue unavailable")
+        broker._account_id = "PA-TEST"
+        broker._connected = True
+        safe = SafeBroker(
+            broker,
+            LiveRiskConfig(
+                execution_mode="paper",
+                state_file=str(tmp_path / "risk-state.json"),
+                max_position_value=None,
+                max_position_shares=None,
+                max_total_exposure=None,
+                max_positions=None,
+                max_order_value=None,
+                max_order_shares=None,
+                max_orders_per_minute=None,
+                max_daily_loss=None,
+                max_drawdown_pct=None,
+                max_price_deviation_pct=None,
+                max_data_staleness_seconds=None,
+                dedup_window_seconds=None,
+            ),
+        )
+
+        order = await safe.submit_order_async(
+            "AAPL", 2, order_type=OrderType.LIMIT, limit_price=151.25
+        )
+
+        assert order.status is OrderStatus.FILLED
+        assert safe._state.orders_placed == 1
+        with pytest.raises(ExecutionModeError, match="does not match"):
+            await safe.submit_order_async("AAPL", 2, order_type=OrderType.LIMIT, limit_price=151.25)
+
 
 class TestAlpacaBrokerOrderStatus:
     """Test suite for order status callbacks."""
@@ -912,6 +1031,10 @@ class TestAlpacaBrokerOrderStatus:
     async def test_on_trade_update_partial_fill(self):
         """Test partial fill callback updates status."""
         broker = AlpacaBroker(api_key="PKTEST", secret_key="SECRET")
+        broker._trading_client = MagicMock()
+        broker._trading_client.get_all_positions.return_value = [
+            MockAlpacaPosition("AAPL", "50", "150.25")
+        ]
         broker._connected = True
 
         pending_order = Order(
@@ -943,6 +1066,27 @@ class TestAlpacaBrokerOrderStatus:
         order = broker._pending_orders["ML4T-1"]
         assert order.status == OrderStatus.PENDING  # Still pending
         assert order.filled_quantity == 50
+        assert broker.positions["AAPL"].quantity == 50
+        broker._trading_client.get_all_positions.assert_called_once_with()
+
+    @pytest.mark.asyncio
+    async def test_partial_fill_position_failure_poison_snapshot(self):
+        broker = tracked_order_broker()
+        broker._trading_client = MagicMock()
+        broker._trading_client.get_all_positions.side_effect = RuntimeError("venue unavailable")
+        partial_order = MockAlpacaOrder(
+            id="venue-1",
+            qty="10",
+            status="partially_filled",
+            filled_qty="5",
+            filled_avg_price="150.25",
+        )
+
+        await broker._on_trade_update(MockTradeUpdate("partial_fill", partial_order))
+
+        assert broker.is_connected is False
+        with pytest.raises(RuntimeError, match="order state is unavailable"):
+            _ = broker.positions
 
     @pytest.mark.asyncio
     async def test_on_trade_update_canceled(self):

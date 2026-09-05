@@ -100,6 +100,7 @@ class AlpacaBroker:
         self._alpaca_order_map: dict[str, tuple[str, float]] = {}
         self._account_id: str | None = None
         self._snapshot_error: RuntimeError | None = None
+        self._position_snapshot_poisoned = False
 
     @property
     def execution_capabilities(self) -> frozenset[ExecutionCapability]:
@@ -135,6 +136,7 @@ class AlpacaBroker:
         mode = "paper" if self._paper else "LIVE"
         logger.info(f"AlpacaBroker: Connecting ({mode} trading)")
         self._snapshot_error = None
+        self._position_snapshot_poisoned = False
 
         try:
             # Create REST client
@@ -279,6 +281,8 @@ class AlpacaBroker:
         Returns:
             Dictionary mapping asset symbols to Position objects
         """
+        if self._position_snapshot_poisoned:
+            self._raise_snapshot_error()
         return dict(self._positions)  # Shallow copy is atomic for small dicts
 
     @property
@@ -299,6 +303,8 @@ class AlpacaBroker:
         Returns:
             Position object if exists, None otherwise
         """
+        if self._position_snapshot_poisoned:
+            self._raise_snapshot_error()
         return self._positions.get(asset.upper())
 
     async def get_positions_async(self) -> dict[str, Position]:
@@ -469,17 +475,45 @@ class AlpacaBroker:
                 created_at=alpaca_order.created_at or datetime.now(UTC),
             )
 
-            if order.status is OrderStatus.FILLED:
+            if alpaca_order.status in {
+                AlpacaOrderStatus.FILLED,
+                AlpacaOrderStatus.PARTIALLY_FILLED,
+            }:
                 if alpaca_order.filled_qty is None or alpaca_order.filled_avg_price is None:
-                    raise RuntimeError("Alpaca filled order is missing fill evidence")
-                order.filled_quantity = float(alpaca_order.filled_qty)
-                order.filled_price = float(alpaca_order.filled_avg_price)
+                    raise RuntimeError("Alpaca material fill is missing fill evidence")
+                try:
+                    filled_quantity = float(alpaca_order.filled_qty)
+                    filled_price = float(alpaca_order.filled_avg_price)
+                except (TypeError, ValueError) as error:
+                    raise RuntimeError(
+                        "Alpaca material fill contains non-numeric evidence"
+                    ) from error
+                if (
+                    not math.isfinite(filled_quantity)
+                    or filled_quantity <= 0
+                    or filled_quantity > order.quantity
+                    or (
+                        alpaca_order.status is AlpacaOrderStatus.FILLED
+                        and filled_quantity != order.quantity
+                    )
+                    or not math.isfinite(filled_price)
+                    or filled_price <= 0
+                ):
+                    raise RuntimeError("Alpaca material fill contains invalid evidence")
+                order.filled_quantity = filled_quantity
+                order.filled_price = filled_price
                 order.filled_at = getattr(alpaca_order, "filled_at", None) or datetime.now(UTC)
 
             # Track order
             if order.status is OrderStatus.PENDING:
                 self._pending_orders[order_id] = order
                 self._alpaca_order_map[str(alpaca_order.id)] = (order_id, time.time())
+
+        if order.filled_quantity > 0:
+            try:
+                await self._sync_positions()
+            except Exception as error:
+                self._poison_snapshot("position", error)
 
         logger.info(f"AlpacaBroker: Order {order_id} submitted: {side.value} {qty} {asset}")
         return order
@@ -773,6 +807,7 @@ class AlpacaBroker:
                 if filled_price > 0 and math.isfinite(filled_price):
                     order.filled_price = filled_price
                 logger.info(f"AlpacaBroker: Order {order_id} partial fill: {order.filled_quantity}")
+                await self._sync_positions()
 
             elif event in ("canceled", "expired", "rejected"):
                 # Terminal state - update status and cleanup immediately
@@ -819,10 +854,14 @@ class AlpacaBroker:
                 raise RuntimeError(f"unsupported Alpaca order event {event!r}")
 
         except Exception as e:
-            detail = str(redact_sensitive(str(e)))
-            self._snapshot_error = RuntimeError(f"Alpaca order state is unavailable: {detail}")
-            self._connected = False
-            logger.error("AlpacaBroker: Error processing trade update: %s", detail)
+            self._poison_snapshot("order", e)
+
+    def _poison_snapshot(self, state: str, error: Exception) -> None:
+        detail = str(redact_sensitive(str(error)))
+        self._snapshot_error = RuntimeError(f"Alpaca {state} state is unavailable: {detail}")
+        self._position_snapshot_poisoned = True
+        self._connected = False
+        logger.error("AlpacaBroker: %s state is unavailable: %s", state, detail)
 
     async def _run_trading_stream(self) -> None:
         """Run TradingStream in background thread.
