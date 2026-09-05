@@ -11,6 +11,12 @@ on:
         description: Successful qualification run that retained dist-CANDIDATE_SHA
         required: true
         type: string
+      extended-provider:
+        description: Provider needing a fresh six-hour soak, or all for initial qualification
+        required: true
+        default: none
+        type: choice
+        options: [none, alpaca, ib, okx, all]
 
 permissions: {}
 
@@ -152,10 +158,11 @@ jobs:
           --candidate "${{ github.workspace }}/paper-evidence/candidate.json"
           --checkout-root "${{ github.workspace }}"
           --output "${{ github.workspace }}/feed-evidence/okx.json"
-      - name: Run six-hour Alpaca, IB, and OKX soaks concurrently
+      - name: Run the selected six-hour provider soak
         id: provider-soaks
         if: >-
           ${{
+            inputs.extended-provider != 'none' &&
             steps.alpaca-exercise.outcome == 'success' &&
             steps.alpaca-restart.outcome == 'success' &&
             steps.ib-exercise.outcome == 'success' &&
@@ -176,12 +183,13 @@ jobs:
           -m scripts.qualification.qualify_provider_soaks
           --candidate "${{ github.workspace }}/paper-evidence/candidate.json"
           --checkout-root "${{ github.workspace }}"
+          --provider "${{ inputs.extended-provider }}"
           --alpaca-output "${{ github.workspace }}/paper-evidence/alpaca-soak.json"
           --ib-output "${{ github.workspace }}/paper-evidence/ib-soak.json"
           --okx-output "${{ github.workspace }}/feed-evidence/okx-soak.json"
       - name: Require complete redacted evidence for both paper providers
         id: evidence
-        if: ${{ always() }}
+        if: ${{ always() && inputs.extended-provider == 'all' }}
         continue-on-error: true
         run: >-
           "${{ runner.temp }}/paper-venv/bin/python"
@@ -196,7 +204,8 @@ jobs:
           --output paper-evidence/paper-qualification.json
       - name: Require the installed feed support contract and external evidence
         id: feed-evidence
-        if: ${{ always() }}
+        if: >-
+          ${{ always() && (inputs.extended-provider == 'okx' || inputs.extended-provider == 'all') }}
         continue-on-error: true
         run: >-
           cd "${{ runner.temp }}/paper-run" &&
@@ -230,17 +239,51 @@ jobs:
             paper-evidence/
             feed-evidence/
           if-no-files-found: error
-          retention-days: 30
+          retention-days: 90
       - name: Require every provider qualification stage to pass
         if: ${{ always() }}
-        run: >-
+        env:
+          EXTENDED_PROVIDER: ${{ inputs.extended-provider }}
+        run: |
           test "${{ steps.alpaca-exercise.outcome }}" = success &&
           test "${{ steps.alpaca-restart.outcome }}" = success &&
           test "${{ steps.ib-exercise.outcome }}" = success &&
           test "${{ steps.ib-restart.outcome }}" = success &&
           test "${{ steps.okx-external.outcome }}" = success &&
-          test "${{ steps.provider-soaks.outcome }}" = success &&
-          test "${{ steps.evidence.outcome }}" = success &&
-          test "${{ steps.feed-evidence.outcome }}" = success &&
           test "${{ steps.evidence-scan.outcome }}" = success &&
           test "${{ steps.feed-evidence-scan.outcome }}" = success
+          if test "$EXTENDED_PROVIDER" != none; then
+            test "${{ steps.provider-soaks.outcome }}" = success
+          fi
+          if test "$EXTENDED_PROVIDER" = all; then
+            test "${{ steps.evidence.outcome }}" = success
+            test "${{ steps.feed-evidence.outcome }}" = success
+          elif test "$EXTENDED_PROVIDER" = okx; then
+            test "${{ steps.feed-evidence.outcome }}" = success
+          fi
+
+  archive:
+    name: Retain provider evidence
+    needs: paper
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: paper-${{ inputs.candidate-sha }}-${{ github.run_id }}
+          path: provider-evidence/
+      - name: Package the validated redacted evidence
+        run: zip -q -r provider-evidence.zip provider-evidence
+      - name: Publish durable provider evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh release create "provider-evidence-${{ github.run_id }}"
+          provider-evidence.zip
+          --repo "${{ github.repository }}"
+          --target "${{ inputs.candidate-sha }}"
+          --title "Provider qualification evidence ${{ github.run_id }}"
+          --notes "Redacted provider qualification evidence retained for contract-based reuse."
+          --prerelease

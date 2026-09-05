@@ -450,6 +450,11 @@ async def test_provider_soak_runs_continuously_and_reconnects_once(
     monkeypatch.setattr(paper_qualification, "_build_broker", lambda _provider: broker)
     monkeypatch.setattr(paper_qualification, "_snapshot", fake_snapshot)
     monkeypatch.setattr(paper_qualification, "_provider_state_checksum", lambda *_args: "d" * 64)
+    monkeypatch.setattr(
+        paper_qualification,
+        "provider_contract",
+        lambda *_args, **_kwargs: {"schema_version": 2, "sha256": "e" * 64},
+    )
 
     report = await run_provider_soak(
         provider="alpaca", candidate=_candidate(), checkout_root=tmp_path
