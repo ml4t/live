@@ -11,6 +11,7 @@ from scripts.qualification.check_workflows import (
     paper_runtime_failures,
     paper_soak_failures,
     promotion_failures,
+    release_paper_runtime_failures,
     release_recovery_failures,
     validate_workflows,
 )
@@ -52,6 +53,28 @@ def test_paper_qualification_uses_a_clean_explicit_runtime() -> None:
     assert any(
         "pinned runtime dependency" in failure for failure in paper_runtime_failures(seeded_job)
     )
+
+
+@pytest.mark.parametrize("mutation", ["dependency", "interpreter"])
+def test_release_paper_evidence_uses_a_clean_explicit_runtime(mutation: str) -> None:
+    release = load_workflow(WORKFLOW_ROOT / "release.yml")
+    paper_job = release["jobs"]["paper-evidence"]
+
+    assert release_paper_runtime_failures(paper_job) == []
+
+    seeded_job = deepcopy(paper_job)
+    if mutation == "dependency":
+        runtime = next(step for step in seeded_job["steps"] if step.get("id") == "paper-runtime")
+        runtime["run"] = str(runtime["run"]).replace('"psutil==7.2.2"', "")
+        expected = "pinned runtime dependency"
+    else:
+        paper = next(step for step in seeded_job["steps"] if step.get("id") == "paper")
+        paper["run"] = str(paper["run"]).replace(
+            '"${RUNNER_TEMP}/paper-evidence-venv/bin/python"', "python"
+        )
+        expected = "clean validation environment"
+
+    assert any(expected in failure for failure in release_paper_runtime_failures(seeded_job))
 
 
 @pytest.mark.parametrize(

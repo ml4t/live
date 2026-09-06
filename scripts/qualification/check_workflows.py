@@ -283,6 +283,33 @@ def paper_runtime_failures(paper_job: dict[str, Any]) -> list[str]:
     return failures
 
 
+def release_paper_runtime_failures(paper_job: dict[str, Any]) -> list[str]:
+    """Reject a release evidence gate that depends on ambient runner packages."""
+    steps = _steps(paper_job)
+    indexed = {step.get("id"): (index, step) for index, step in enumerate(steps) if step.get("id")}
+    required = ("paper-runtime", "paper")
+    if any(step_id not in indexed for step_id in required):
+        return ["release paper evidence does not define its clean runtime and gate steps"]
+
+    runtime_index, runtime = indexed["paper-runtime"]
+    paper_index, paper = indexed["paper"]
+    failures = []
+    if runtime_index >= paper_index:
+        failures.append("release paper evidence does not prepare its runtime before validation")
+
+    runtime_text = str(runtime.get("run", ""))
+    paper_python = '"${RUNNER_TEMP}/paper-evidence-venv/bin/python"'
+    if "uv venv --clear --python 3.12" not in runtime_text:
+        failures.append("release paper evidence does not create a clean Python 3.12 environment")
+    if paper_python not in runtime_text or '"psutil==7.2.2"' not in runtime_text:
+        failures.append("release paper evidence does not install its pinned runtime dependency")
+    if not str(paper.get("run", "")).startswith(
+        f"{paper_python} scripts/qualification/check_paper_evidence.py"
+    ):
+        failures.append("release paper evidence does not use the clean validation environment")
+    return failures
+
+
 def validate_workflows(root: Path = WORKFLOW_ROOT) -> list[str]:
     paths = sorted(root.glob("*.yml"))
     workflows = {path.name: load_workflow(path) for path in paths}
@@ -405,6 +432,9 @@ def validate_workflows(root: Path = WORKFLOW_ROOT) -> list[str]:
     ):
         failures.append("release recovery does not require the candidate, source run, and tag")
     failures.extend(promotion_failures(qualification, release))
+    failures.extend(
+        release_paper_runtime_failures(release.get("jobs", {}).get("paper-evidence", {}))
+    )
     publish_job = release.get("jobs", {}).get("publish", {})
     publish_download_names = {
         step.get("with", {}).get("name")
