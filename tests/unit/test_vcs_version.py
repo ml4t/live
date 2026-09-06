@@ -20,13 +20,19 @@ def _wheel(directory: Path, version: str) -> Path:
     return path
 
 
-@pytest.mark.parametrize("version", ("0.1.1", "0.1.1.dev10+gf3135b8"))
-def test_expected_release_series_passes(tmp_path: Path, version: str) -> None:
+@pytest.mark.parametrize(
+    "version",
+    ("0.1.1", "0.1.1.dev10+gf3135b8", "0.1.2.dev1+gf69079b"),
+)
+def test_expected_release_transition_passes(version: str) -> None:
     assert vcs_version_failure(version, "0.1.1") is None
 
 
-@pytest.mark.parametrize("version", ("31362844984.dev10", "0.1.2.dev1", "0.1.1.post1"))
-def test_other_tag_series_and_nondevelopment_versions_fail(version: str) -> None:
+@pytest.mark.parametrize(
+    "version",
+    ("31362844984.dev10", "0.1.3.dev1", "0.2.0.dev1", "0.1.1.post1", "0.1.2"),
+)
+def test_other_tag_series_and_release_versions_fail(version: str) -> None:
     assert vcs_version_failure(version, "0.1.1") is not None
 
 

@@ -31,10 +31,16 @@ def vcs_version_failure(version_text: str, expected_version: str) -> str | None:
     """Return why an unforced build is outside its intended release series."""
     version = Version(version_text)
     expected = Version(expected_version)
-    if version.base_version != expected.base_version:
-        return f"VCS version {version} is outside release series {expected.base_version}"
-    if version != expected and not version.is_devrelease:
+    next_patch = Version(f"{expected.major}.{expected.minor}.{expected.micro + 1}")
+    if version == expected:
+        return None
+    if not version.is_devrelease:
         return f"VCS version {version} is neither {expected} nor a development build"
+    if Version(version.base_version) not in {expected, next_patch}:
+        return (
+            f"VCS version {version} is outside release transition "
+            f"{expected.base_version} to {next_patch.base_version}"
+        )
     return None
 
 

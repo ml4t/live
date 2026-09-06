@@ -52,12 +52,24 @@ jobs:
         with:
           fetch-depth: 0
           ref: ${{ github.event_name == 'workflow_dispatch' && inputs.candidate-sha || github.sha }}
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.10.9"
+      - run: uv python install 3.12
+      - name: Create a clean paper evidence runtime
+        id: paper-runtime
+        run: |
+          uv venv --clear --python 3.12 "${RUNNER_TEMP}/paper-evidence-venv"
+          uv pip install \
+            --python "${RUNNER_TEMP}/paper-evidence-venv/bin/python" \
+            "psutil==7.2.2"
       - name: Match successful retained evidence to this commit
         id: paper
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: >-
-          python scripts/qualification/check_paper_evidence.py
+          "${RUNNER_TEMP}/paper-evidence-venv/bin/python"
+          scripts/qualification/check_paper_evidence.py
           --repository "${{ github.repository }}"
           --commit "${{ github.event_name == 'workflow_dispatch' && inputs.candidate-sha || github.sha }}"
           --github-output "$GITHUB_OUTPUT"
