@@ -39,4 +39,5 @@ src/ml4t/live/_version.py
 CLAUDE.md
 .claude/
 .codex/
+.workspace/
 .ml4t_risk_state.json
