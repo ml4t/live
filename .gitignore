@@ -35,7 +35,8 @@ logs/
 site/
 src/ml4t/live/_version.py
 
-# Claude Code (local development only)
+# Agent config, local development only (Claude Code + Codex)
 CLAUDE.md
 .claude/
+.codex/
 .ml4t_risk_state.json
