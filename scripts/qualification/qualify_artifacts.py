@@ -35,7 +35,7 @@ MANIFEST_PATH = REPOSITORY_ROOT / "artifact-manifest.toml"
 BUILD_CONSTRAINTS = REPOSITORY_ROOT / "build-constraints.txt"
 INSTALLED_SMOKE = Path(__file__).with_name("installed_smoke.py")
 SUPPORTED_PYTHONS = ("3.12", "3.13", "3.14")
-CANDIDATE_VERSION = "0.1.1"
+CANDIDATE_VERSION = os.environ.get("SETUPTOOLS_SCM_PRETEND_VERSION", "0.1.1")
 EXPECTED_DESCRIPTION = "Live trading runtime for ML4T strategies with broker integrations, risk checks, and shadow mode."
 EXPECTED_AUTHOR = "Stefan Jansen <stefan@applied-ai.com>"
 EXPECTED_MAINTAINER = "Stefan Jansen <pm@ml4trading.io>"
@@ -397,7 +397,11 @@ def install_profile(artifact: Path, python_version: str, expected_version: str, 
         cwd=root,
     )
     _run((str(_profile_cli(venv)), "--version"), cwd=root)
-    _run((str(python), "-I", str(INSTALLED_SMOKE)), cwd=root)
+    _run(
+        (str(python), "-I", str(INSTALLED_SMOKE)),
+        cwd=root,
+        environment={"ML4T_EXPECTED_VERSION": expected_version},
+    )
     if artifact.suffix == ".whl" and python_version == SUPPORTED_PYTHONS[0]:
         run_readme_quick_start(python, root)
         run_installed_examples(python, root)
@@ -448,17 +452,6 @@ def qualify_install_profiles(
     return results
 
 
-def _default_evidence_root() -> Path | None:
-    candidate = (
-        REPOSITORY_ROOT.parent
-        / "ml4t-live-dev"
-        / ".workspace"
-        / "work"
-        / ("ml4t-live-release-readiness")
-    )
-    return candidate if candidate.exists() else None
-
-
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--allow-dirty", action="store_true")
@@ -487,8 +480,7 @@ def main() -> int:
         version = validate_artifact_metadata(wheel, sdist)
 
         profiles = qualify_install_profiles((wheel, sdist), version, root / "profiles")
-        evidence_root = args.evidence_root or _default_evidence_root()
-        secret_result = scan_release(REPOSITORY_ROOT, (wheel, sdist), evidence_root)
+        secret_result = scan_release(REPOSITORY_ROOT, (wheel, sdist), args.evidence_root)
 
         failures = [profile for profile in profiles if not profile.passed]
         if secret_result.findings:
@@ -519,7 +511,7 @@ def main() -> int:
                 "bytes_scanned": secret_result.bytes_scanned,
                 "redacted_findings": len(secret_result.findings),
                 "passed": not secret_result.findings,
-                "evidence_included": evidence_root is not None,
+                "evidence_included": args.evidence_root is not None,
             },
             "passed": not failures and not secret_result.findings,
         }

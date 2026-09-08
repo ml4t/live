@@ -174,13 +174,6 @@ def scan_release(
     return scan_payloads(payloads)
 
 
-def _default_evidence_root(repository: Path) -> Path | None:
-    candidate = (
-        repository.parent / "ml4t-live-dev" / ".workspace" / "work" / "ml4t-live-stable-readiness"
-    )
-    return candidate if candidate.exists() else None
-
-
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("artifacts", nargs="*", type=Path)
@@ -188,12 +181,11 @@ def main() -> int:
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
 
-    evidence_root = args.evidence_root or _default_evidence_root(REPOSITORY_ROOT)
-    result = scan_release(REPOSITORY_ROOT, args.artifacts, evidence_root)
+    result = scan_release(REPOSITORY_ROOT, args.artifacts, args.evidence_root)
     report = {
         "schema_version": 1,
         "repository": str(REPOSITORY_ROOT),
-        "evidence_included": evidence_root is not None,
+        "evidence_included": args.evidence_root is not None,
         "sources": result.sources,
         "bytes_scanned": result.bytes_scanned,
         "findings": [asdict(finding) for finding in result.findings],

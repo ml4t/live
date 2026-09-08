@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import tempfile
 from pathlib import Path
 
@@ -104,7 +105,7 @@ async def exercise() -> None:
         assert (root / "state.json").is_file()
         await safe.disconnect()
         assert not await venue.is_connected_async()
-        assert __version__ == "0.1.1"
+        assert __version__ == os.environ["ML4T_EXPECTED_VERSION"]
 
 
 def main() -> None:
