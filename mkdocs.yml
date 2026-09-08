@@ -4,6 +4,8 @@
 site_name: ML4T Live
 site_description: Live trading runtime for causal ML4T strategies
 site_url: https://www.ml4trading.io/docs/live/
+exclude_docs: |
+  overrides/
 repo_url: https://github.com/ml4t/live
 repo_name: ml4t/live
 
@@ -76,6 +78,9 @@ markdown_extensions:
       custom_checkbox: true
   - pymdownx.tilde
 
+hooks:
+  - scripts/qualification/docs_hooks.py
+
 # Plugins
 plugins:
   - search
@@ -120,6 +125,9 @@ nav:
 
 # Extra configuration
 extra:
+  ml4t_library: live
+  ml4t_version: !ENV [ML4T_DOCS_VERSION, development]
+  ml4t_commit: !ENV [ML4T_DOCS_COMMIT, 0000000000000000000000000000000000000000]
   ml4t_docs_hub_url: /docs/
   ml4t_libraries_url: /libraries/
   ml4t_chapters_url: /chapters/

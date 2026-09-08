@@ -27,7 +27,9 @@ STAGE_GROUPS = {
     ),
     "stress": frozenset({"stress"}),
     "performance": frozenset({"performance"}),
-    "documentation": frozenset({"public-claims", "documentation-links", "documentation"}),
+    "documentation": frozenset(
+        {"public-claims", "documentation-links", "documentation", "documentation-identity"}
+    ),
     "distribution": frozenset({"build", "distribution-metadata"}),
 }
 
@@ -187,6 +189,25 @@ def qualification_stages(temporary_directory: Path, repetitions: int = 5) -> lis
                     "--site-dir",
                     str(site_directory),
                 ),
+                {
+                    "ML4T_DOCS_VERSION": CANDIDATE_ENVIRONMENT["SETUPTOOLS_SCM_PRETEND_VERSION"],
+                    "ML4T_DOCS_COMMIT": source_commit(),
+                },
+            ),
+            Stage(
+                "documentation-identity",
+                (
+                    "uv",
+                    "run",
+                    "python",
+                    "scripts/qualification/verify_documentation_identity.py",
+                    "--site-dir",
+                    str(site_directory),
+                    "--version",
+                    CANDIDATE_ENVIRONMENT["SETUPTOOLS_SCM_PRETEND_VERSION"],
+                    "--commit",
+                    source_commit(),
+                ),
             ),
             Stage(
                 "build",
@@ -264,6 +285,17 @@ def repository_status() -> str:
         text=True,
     )
     return result.stdout
+
+
+def source_commit() -> str:
+    result = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=REPOSITORY_ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return result.stdout.strip()
 
 
 def source_date_epoch() -> str:
