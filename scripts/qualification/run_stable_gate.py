@@ -27,7 +27,7 @@ STAGE_GROUPS = {
     ),
     "stress": frozenset({"stress"}),
     "performance": frozenset({"performance"}),
-    "documentation": frozenset({"public-claims", "documentation"}),
+    "documentation": frozenset({"public-claims", "documentation-links", "documentation"}),
     "distribution": frozenset({"build", "distribution-metadata"}),
 }
 
@@ -166,6 +166,15 @@ def qualification_stages(temporary_directory: Path, repetitions: int = 5) -> lis
             Stage(
                 "public-claims",
                 ("uv", "run", "python", "scripts/qualification/check_public_claims.py"),
+            ),
+            Stage(
+                "documentation-links",
+                (
+                    "uv",
+                    "run",
+                    "python",
+                    "scripts/qualification/check_documentation_links.py",
+                ),
             ),
             Stage(
                 "documentation",

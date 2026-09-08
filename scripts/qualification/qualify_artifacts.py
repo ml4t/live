@@ -36,6 +36,17 @@ BUILD_CONSTRAINTS = REPOSITORY_ROOT / "build-constraints.txt"
 INSTALLED_SMOKE = Path(__file__).with_name("installed_smoke.py")
 SUPPORTED_PYTHONS = ("3.12", "3.13", "3.14")
 CANDIDATE_VERSION = "0.1.1"
+EXPECTED_DESCRIPTION = "Live trading runtime for ML4T strategies with broker integrations, risk checks, and shadow mode."
+EXPECTED_AUTHOR = "Stefan Jansen <stefan@applied-ai.com>"
+EXPECTED_MAINTAINER = "Stefan Jansen <pm@ml4trading.io>"
+EXPECTED_KEYWORDS = {
+    "finance",
+    "quantitative-finance",
+    "algorithmic-trading",
+    "live-trading",
+    "broker-api",
+    "risk-management",
+}
 EXPECTED_URLS = {
     "Homepage": "https://www.ml4trading.io/docs/live/",
     "Documentation": "https://www.ml4trading.io/docs/live/",
@@ -45,6 +56,10 @@ EXPECTED_URLS = {
 }
 EXPECTED_CLASSIFIERS = {
     "Development Status :: 5 - Production/Stable",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
@@ -219,6 +234,17 @@ def validate_metadata(message: Message, project: dict[str, object]) -> str:
         failures.append("Requires-Python")
     if message["License-Expression"] != "MIT":
         failures.append("License-Expression")
+    if message["Summary"] != EXPECTED_DESCRIPTION:
+        failures.append("Summary")
+    if message["Author-email"] != EXPECTED_AUTHOR:
+        failures.append("Author-email")
+    if message["Maintainer-email"] != EXPECTED_MAINTAINER:
+        failures.append("Maintainer-email")
+    keywords = {
+        keyword.strip() for keyword in (message["Keywords"] or "").split(",") if keyword.strip()
+    }
+    if keywords != EXPECTED_KEYWORDS:
+        failures.append("Keywords")
 
     version_text = message["Version"]
     try:
@@ -291,6 +317,28 @@ def _profile_cli(venv: Path) -> Path:
     return venv / ("Scripts/ml4t-live.exe" if os.name == "nt" else "bin/ml4t-live")
 
 
+def readme_quick_start() -> str:
+    """Extract the first Python block under the README quick-start heading."""
+    readme = (REPOSITORY_ROOT / "README.md").read_text(encoding="utf-8")
+    heading = "## Quick start\n"
+    _, separator, remainder = readme.partition(heading)
+    if not separator:
+        raise QualificationError("README has no quick-start heading")
+    match = re.search(r"```python\n(?P<source>.*?)\n```", remainder, re.DOTALL)
+    if match is None:
+        raise QualificationError("README quick start has no Python block")
+    return match.group("source") + "\n"
+
+
+def run_readme_quick_start(python: Path, root: Path) -> None:
+    """Execute the documented credential-free quick start against the installed wheel."""
+    script = root / "readme_quick_start.py"
+    script.write_text(readme_quick_start(), encoding="utf-8")
+    result = _run((str(python), "-I", str(script)), cwd=root)
+    if result.stdout != "shadow position: 10 SPY\n":
+        raise QualificationError("README quick start produced unexpected output")
+
+
 def run_installed_examples(python: Path, root: Path) -> None:
     """Run every credential-free maintained example against an installed wheel."""
     example_root = root / "examples"
@@ -351,6 +399,7 @@ def install_profile(artifact: Path, python_version: str, expected_version: str, 
     _run((str(_profile_cli(venv)), "--version"), cwd=root)
     _run((str(python), "-I", str(INSTALLED_SMOKE)), cwd=root)
     if artifact.suffix == ".whl" and python_version == SUPPORTED_PYTHONS[0]:
+        run_readme_quick_start(python, root)
         run_installed_examples(python, root)
 
     consumer = root / "consumer.py"

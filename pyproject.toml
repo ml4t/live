@@ -1,12 +1,30 @@
 [project]
 name = "ml4t-live"
 dynamic = ["version"]
-description = "Live trading platform for ML4T strategies"
+description = "Live trading runtime for ML4T strategies with broker integrations, risk checks, and shadow mode."
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
+authors = [
+    { name = "Stefan Jansen", email = "stefan@applied-ai.com" },
+]
+maintainers = [
+    { name = "Stefan Jansen", email = "pm@ml4trading.io" },
+]
+keywords = [
+    "finance",
+    "quantitative-finance",
+    "algorithmic-trading",
+    "live-trading",
+    "broker-api",
+    "risk-management",
+]
 classifiers = [
     "Development Status :: 5 - Production/Stable",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
