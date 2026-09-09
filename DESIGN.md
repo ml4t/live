@@ -1803,7 +1803,6 @@ ml4t/live/
 | Memory leak: `_recent_orders` | 3.4 | `_prune_history()` called on every order |
 | Memory leak: `_ib_order_map` | 4.1 | Cleanup on terminal states + 1h delay |
 | Queue busy-wait | 3.3 | `None` sentinel for shutdown |
-| Missing warmup data | TBD | Historical data API planned for v1.1 |
 
 ---
 
