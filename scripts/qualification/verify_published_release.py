@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import time
 import urllib.parse
 import urllib.request
 from pathlib import Path
@@ -115,22 +116,43 @@ def _read_json(url: str, *, token: str | None = None) -> dict[str, Any]:
     return payload
 
 
+def remote_release_failures(
+    manifest: dict[str, Any],
+    repository: str,
+    *,
+    attempts: int = 12,
+    wait_seconds: float = 10.0,
+) -> list[str]:
+    """Poll immutable public records until publication propagation completes."""
+    version = urllib.parse.quote(str(manifest.get("version", "")), safe="")
+    tag = urllib.parse.quote(f"v{manifest.get('version', '')}", safe="")
+    failures: list[str] = []
+    for attempt in range(attempts):
+        try:
+            failures = published_release_failures(
+                manifest,
+                _read_json(f"https://pypi.org/pypi/ml4t-live/{version}/json"),
+                _read_json(
+                    f"https://api.github.com/repos/{repository}/releases/tags/{tag}",
+                    token=os.environ.get("GITHUB_TOKEN"),
+                ),
+            )
+        except Exception as error:
+            failures = [f"public release records are unavailable: {error}"]
+        if not failures:
+            return []
+        if attempt + 1 < attempts:
+            time.sleep(wait_seconds)
+    return failures
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--manifest", type=Path, required=True)
     parser.add_argument("--repository", default="ml4t/live")
     args = parser.parse_args()
     manifest = load_json(args.manifest)
-    version = urllib.parse.quote(str(manifest.get("version", "")), safe="")
-    tag = urllib.parse.quote(f"v{manifest.get('version', '')}", safe="")
-    failures = published_release_failures(
-        manifest,
-        _read_json(f"https://pypi.org/pypi/ml4t-live/{version}/json"),
-        _read_json(
-            f"https://api.github.com/repos/{args.repository}/releases/tags/{tag}",
-            token=os.environ.get("GITHUB_TOKEN"),
-        ),
-    )
+    failures = remote_release_failures(manifest, args.repository)
     print(f"published release identity: {'PASS' if not failures else 'FAIL'}")
     for failure in failures:
         print(f"- {failure}")

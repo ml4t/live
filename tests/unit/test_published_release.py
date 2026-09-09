@@ -6,6 +6,7 @@ from copy import deepcopy
 
 import pytest
 
+import scripts.qualification.verify_published_release as verifier
 from scripts.qualification.qualify_artifacts import (
     EXPECTED_AUTHOR,
     EXPECTED_CLASSIFIERS,
@@ -89,4 +90,23 @@ def test_published_identity_drift_is_rejected(target: str, expected: str) -> Non
 
     assert any(
         expected in failure for failure in published_release_failures(manifest, pypi, release)
+    )
+
+
+def test_remote_verification_retries_propagation(monkeypatch: pytest.MonkeyPatch) -> None:
+    manifest, pypi, release = published_fixture()
+    stale_pypi = deepcopy(pypi)
+    stale_pypi["info"]["summary"] = "stale"
+    responses = iter((stale_pypi, release, pypi, release))
+
+    monkeypatch.setattr(verifier, "_read_json", lambda *args, **kwargs: next(responses))
+
+    assert (
+        verifier.remote_release_failures(
+            manifest,
+            "ml4t/live",
+            attempts=2,
+            wait_seconds=0,
+        )
+        == []
     )
