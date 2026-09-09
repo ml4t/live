@@ -67,7 +67,8 @@ before connecting a provider.
 - `LiveEngine`, `SafeBroker`, Interactive Brokers and Alpaca execution adapters, the OKX funding
   feed, and typed bar aggregation are stable-supported within their documented capabilities.
 - Alpaca, Interactive Brokers, generic CCXT, and DataBento feeds require explicit experimental
-  opt-in. Experimental adapters report their missing guarantees on first use.
+  opt-in with `experimental=True`. Experimental adapters report their missing guarantees on first
+  use.
 - Shadow mode never routes orders to the wrapped broker. Paper and live modes require explicit
   execution identity and provider-specific qualification.
 - State and journal files enforce current-user ownership and mode `0600` on POSIX systems. On

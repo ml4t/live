@@ -43,7 +43,10 @@ def test_public_claims_separate_experimental_feeds_from_stable_support() -> None
         "book guide": (ROOT / "docs/book-guide/index.md").read_text(),
     }
 
-    assert "Explicit opt-in experimental adapters for Alpaca, IB" in public_text["README"]
+    assert (
+        "Alpaca, Interactive Brokers, generic CCXT, and DataBento feeds require explicit"
+        in public_text["README"]
+    )
     assert "are not part of the stable support" in public_text["feed guide"]
     assert (
         "| Experimental feeds | `AlpacaDataFeed`, `IBDataFeed`, `DataBentoFeed`, `CryptoFeed`"
