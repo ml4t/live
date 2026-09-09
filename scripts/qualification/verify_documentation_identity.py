@@ -59,9 +59,8 @@ def site_identity_failures(site_dir: Path, *, library: str, version: str, commit
     html_paths = sorted(site_dir.rglob("*.html"))
     failures = [] if html_paths else [f"{site_dir}: no rendered HTML pages"]
     for path in html_paths:
-        failures.extend(
-            html_identity_failures(path.read_text(encoding="utf-8"), expected, str(path))
-        )
+        label = path.relative_to(site_dir).as_posix()
+        failures.extend(html_identity_failures(path.read_text(encoding="utf-8"), expected, label))
     manifest_path = site_dir / "release.json"
     try:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
