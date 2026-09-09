@@ -1,5 +1,5 @@
 name: Bug report
-description: Report reproducible incorrect behavior in ecosystem policy or tooling
+description: Report reproducible incorrect behavior in ml4t-live
 title: "[Bug]: "
 labels:
   - "type: bug"
@@ -11,21 +11,6 @@ body:
     attributes:
       value: |
         Search existing issues first. Do not disclose suspected vulnerabilities here.
-  - type: dropdown
-    id: library
-    attributes:
-      label: Affected library
-      options:
-        - data
-        - engineer
-        - backtest
-        - specs
-        - live
-        - diagnostic
-        - models
-        - ecosystem
-    validations:
-      required: true
   - type: input
     id: version
     attributes:

@@ -3,7 +3,7 @@
 **Version**: 3.0
 **Date**: 2025-11-24
 **Package**: `ml4t-live`
-**Status**: Revised (addresses Gemini v1 + v2 reviews + production patterns)
+**Status**: Revised (records historical review findings)
 
 ---
 
@@ -112,7 +112,7 @@ ml4t-live (depends on ml4t-backtest for protocols, types, Strategy base class)
 
 ### 2.2 Critical Design Decision: Sync/Async Boundary
 
-**Problem** (identified by Gemini review): Strategy.on_data() is synchronous, but live brokers require async I/O.
+**Problem** (identified during review): Strategy.on_data() is synchronous, but live brokers require async I/O.
 
 **Solution**: `ThreadSafeBrokerWrapper` bridges the sync/async boundary:
 
@@ -233,7 +233,7 @@ class ThreadSafeBrokerWrapper:
 
         This blocks the worker thread but NOT the main event loop.
 
-        Timeouts (from Gemini review):
+        Timeouts (for synchronous broker access):
         - Getters (get_cash, get_account_value): 5s (default)
         - Order operations (submit, cancel, close): 30s
         """
@@ -487,7 +487,7 @@ class BarBuffer:
 class BarAggregator:
     """Aggregates raw ticks or 5-second bars into minute bars.
 
-    Addresses Gemini's concerns:
+    Addresses aggregation and finalization requirements:
     1. "If IBDataFeed pushes a tick to Strategy.on_data, the strategy might
        trigger 60x more often than intended." - Buffer incoming data.
     2. "The 15:59 bar is never emitted because no 16:00 tick arrives." -
@@ -511,7 +511,7 @@ class BarAggregator:
         source_feed: "DataFeedProtocol",
         bar_size_minutes: int = 1,
         assets: list[str] | None = None,
-        flush_timeout_seconds: float = 2.0,  # NEW: Gemini fix
+        flush_timeout_seconds: float = 2.0,  # Historical addition
     ):
         self.source = source_feed
         self.bar_size = timedelta(minutes=bar_size_minutes)
@@ -548,7 +548,7 @@ class BarAggregator:
 
     async def _aggregate_loop(self) -> None:
         """Main aggregation loop."""
-        # NEW: Start background flush checker (Gemini "stuck bar" fix)
+        # Start background flush checker
         self._flush_task = asyncio.create_task(self._flush_checker())
 
         try:
@@ -586,7 +586,7 @@ class BarAggregator:
                 self._flush_task.cancel()
 
     async def _flush_checker(self) -> None:
-        """NEW: Force emit bars if no data arrives (Gemini "stuck bar" fix).
+        """Force emit bars if no data arrives.
 
         Scenario: Market closes at 16:00, last tick at 15:59:58. Without this,
         the 15:59 bar never emits because no 16:00 tick arrives to trigger it.
@@ -631,7 +631,7 @@ class BarAggregator:
     async def __aiter__(self) -> AsyncIterator[tuple[datetime, dict, dict]]:
         """Async iterator interface.
 
-        Uses None sentinel for shutdown (Gemini fix: avoids busy-wait with 1s timeout).
+        Uses None sentinel for shutdown to avoid polling on shutdown.
         """
         while True:
             item = await self._queue.get()
@@ -644,7 +644,7 @@ class BarAggregator:
 
 Enhanced SafeBroker that persists risk state across restarts.
 
-**Addresses Gemini v2 issues:**
+**Addresses the following review findings:**
 - Critical Issue A: VirtualPortfolio for shadow mode (prevents infinite buy loop)
 - Atomic JSON writes (prevents corruption on crash)
 - Memory leak fixes (prune completed orders)
@@ -669,13 +669,13 @@ logger = logging.getLogger(__name__)
 
 
 # ============================================================================
-# VirtualPortfolio - NEW (Gemini v2 Critical Issue A fix)
+# VirtualPortfolio
 # ============================================================================
 
 class VirtualPortfolio:
     """Manages internal accounting for Shadow Mode (Paper Trading).
 
-    Addresses Gemini's Critical Issue A: "The Infinite Buy Loop"
+    Prevents repeated shadow orders from ignoring prior virtual fills
 
     Problem: In shadow mode, returning fake Order objects without updating
     position state causes strategies to keep buying forever because
@@ -822,7 +822,7 @@ class LiveRiskConfig:
     max_daily_loss: float = 5_000.0            # Stop if exceeded
     max_drawdown_pct: float = 0.05             # Stop if 5% drawdown
 
-    # NEW: Gemini-suggested safety features
+    # Additional safety features
     max_price_deviation_pct: float = 0.05      # Fat finger: reject if limit >5% from market
     max_data_staleness_seconds: float = 60.0   # Reject if data older than 60s
     dedup_window_seconds: float = 1.0          # Block duplicate orders within 1s
@@ -855,10 +855,9 @@ class RiskState:
 class SafeBroker:
     """Risk-controlled wrapper with state persistence.
 
-    Addresses Gemini v1: "If script crashes and restarts, SafeBroker resets
-    max_daily_loss to 0. A losing strategy could burn through the limit again."
+    Persists loss state across process restarts so limits cannot reset silently.
 
-    Addresses Gemini v2:
+    Addresses additional review findings:
     - Critical Issue A: VirtualPortfolio for shadow mode
     - Memory leaks: _recent_orders pruned even if dedup disabled
     - Atomic JSON writes: write to .tmp then os.replace()
@@ -902,7 +901,7 @@ class SafeBroker:
         # Duplicate detection
         self._recent_orders: list[tuple[float, str, float]] = []  # (time, asset, qty)
 
-        # NEW: VirtualPortfolio for shadow mode (Gemini v2 fix)
+        # Virtual portfolio for shadow mode
         self._virtual_portfolio = VirtualPortfolio(initial_cash=100_000.0)
 
         # Initialize high water mark if not set
@@ -917,7 +916,7 @@ class SafeBroker:
             logger.warning(f"Kill switch was previously activated: {self._state.kill_switch_reason}")
 
     # === BrokerProtocol Implementation ===
-    # NEW: Routes to VirtualPortfolio when shadow_mode=True (Gemini v2 fix)
+    # Route shadow orders to the virtual portfolio
 
     @property
     def positions(self) -> dict[str, Position]:
@@ -1004,7 +1003,7 @@ class SafeBroker:
         # 8. Drawdown check (may activate kill switch)
         await self._check_drawdown()
 
-        # === Shadow Mode (Gemini v2 fix: use VirtualPortfolio) ===
+        # === Shadow Mode ===
         if self.config.shadow_mode:
             # Create filled order
             order = Order(
@@ -1242,7 +1241,7 @@ class SafeBroker:
         return RiskState(date=today)
 
     def _save_state(self) -> None:
-        """Save state to file using atomic write (Gemini v2 fix).
+        """Save state to file using an atomic write.
 
         Writes to .tmp file first, then atomically replaces the target.
         Prevents corruption if process dies mid-write.
@@ -1260,7 +1259,7 @@ class SafeBroker:
             logger.error(f"Failed to save risk state: {e}")
 
     def _prune_history(self) -> None:
-        """Clean up old entries to prevent memory leaks (Gemini v2 fix).
+        """Clean up old entries to enforce bounded retention.
 
         Called on every order to ensure cleanup happens even if
         duplicate checking is disabled.
@@ -1330,7 +1329,7 @@ class IBBroker(AsyncBrokerProtocol):
     3. Event handlers use put_nowait() (non-blocking)
     4. Reconnection handled externally (by LiveEngine or user)
 
-    Addresses Gemini v2:
+    Addresses additional review findings:
     - Critical Issue C: asyncio.Lock on positions to prevent race condition
     - Memory leak: _ib_order_map pruned on terminal order states
 
@@ -1356,7 +1355,7 @@ class IBBroker(AsyncBrokerProtocol):
         self.ib = IB()
         self._connected = False
 
-        # Thread-safe state with locks (Gemini v2 Critical Issue C fix)
+        # Thread-safe state protected by locks
         self._positions: dict[str, Position] = {}
         self._position_lock = asyncio.Lock()  # NEW: Protects position reads/writes
         self._pending_orders: dict[str, Order] = {}
@@ -1411,7 +1410,7 @@ class IBBroker(AsyncBrokerProtocol):
 
     @property
     def positions(self) -> dict[str, Position]:
-        """Thread-safe position access (Gemini v2 Critical Issue C).
+        """Return a thread-safe snapshot of positions.
 
         Note: This is called from worker thread via ThreadSafeBrokerWrapper.
         The lock prevents RuntimeError during dict iteration if IB callback
@@ -1773,9 +1772,9 @@ ml4t/live/
 
 ---
 
-## 7. Addressed Issues from Gemini Reviews
+## 7. Addressed review findings
 
-### Gemini v1 Review Issues
+### Initial review findings
 
 | Issue | Section | Solution |
 |-------|---------|----------|
@@ -1787,7 +1786,7 @@ ml4t/live/
 | Duplicate Orders | 3.4 | dedup_window_seconds filter |
 | Shadow Mode | 3.4 | shadow_mode flag in LiveRiskConfig |
 
-### Gemini v2 Review Issues (Critical)
+### Critical follow-up findings
 
 | Issue | Severity | Section | Solution |
 |-------|----------|---------|----------|
@@ -1795,7 +1794,7 @@ ml4t/live/
 | **Stuck Bar Problem** | MEDIUM | 3.3 | `_flush_checker()` background task emits on timeout |
 | **Race Condition on `_positions`** | MEDIUM | 4.1 | `asyncio.Lock` + safe dict copying |
 
-### Gemini v2 Additional Fixes
+### Additional follow-up findings
 
 | Issue | Section | Solution |
 |-------|---------|----------|
@@ -1808,9 +1807,9 @@ ml4t/live/
 
 ---
 
-## 8. Learnings from Production (Wyden)
+## 8. Production-derived design constraints
 
-Key patterns adopted from production trading platform:
+Patterns retained from production trading systems:
 
 1. **asyncio.Lock not threading.Lock**: For async-safe operations
 2. **Queue-based events**: Non-blocking event handling via asyncio.Queue
@@ -1844,4 +1843,4 @@ Key patterns adopted from production trading platform:
 
 ---
 
-*Document Version: 3.0 | Revised: 2025-11-24 | Addresses Gemini v1 + v2 review feedback*
+*Document Version: 3.0 | Revised: 2025-11-24 | Records historical review findings*

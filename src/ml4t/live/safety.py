@@ -532,7 +532,7 @@ class MarketSnapshot:
 class VirtualPortfolio:
     """Manages internal accounting for Shadow Mode (Paper Trading).
 
-    Addresses Gemini's Critical Issue A: "The Infinite Buy Loop"
+    Tracks prior virtual fills so repeated shadow orders observe current positions
 
     Problem: In shadow mode, returning fake Order objects without updating
     position state causes strategies to keep buying forever because
@@ -870,7 +870,7 @@ class SafeBroker:
                 pass
 
     # === AsyncBrokerProtocol Implementation ===
-    # NEW: Routes to VirtualPortfolio when shadow_mode=True (Gemini v2 fix)
+    # Route shadow orders to the virtual portfolio
 
     @property
     def positions(self) -> dict[str, Position]:
@@ -1430,7 +1430,7 @@ class SafeBroker:
             stop_price=request.stop_price,
         )
 
-        # === Shadow Mode (Gemini v2 fix: use VirtualPortfolio) ===
+        # === Shadow Mode ===
         if self.config.shadow_mode:
             # Create filled order
             order = Order(
@@ -2217,7 +2217,7 @@ class SafeBroker:
         return None
 
     def _prune_history(self) -> None:
-        """Clean up old entries to prevent memory leaks (Gemini v2 fix).
+        """Clean up old entries to enforce bounded retention.
 
         Called on every order to ensure cleanup happens even if
         duplicate checking is disabled.
