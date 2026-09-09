@@ -20,7 +20,7 @@ dependencies = [
     "ib-async==2.1.0",
     "alpaca-py==0.44.0",
     "httpx==0.28.1",
-    "ccxt>=4.5.31,<=4.5.74",
+    "ccxt>=4.5.31,<=4.5.77",
 ]
 
 [project.scripts]
@@ -50,7 +50,7 @@ docs = [
     "mkdocstrings[python]>=0.24.0",
 ]
 experimental = [
-    "databento==0.84.0",
+    "databento==0.86.0",
 ]
 
 [build-system]
