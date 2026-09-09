@@ -19,3 +19,6 @@ jobs:
       actions: read
       contents: read
     uses: ./.github/workflows/stable-qualification.yml
+    with:
+      candidate-sha: ${{ github.event.pull_request.head.sha || github.sha }}
+      candidate-version: "0.1.1"

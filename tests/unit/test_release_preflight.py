@@ -33,6 +33,7 @@ def test_existing_publication_records_block_a_release(
         version="1.2.3",
         candidate_sha=COMMIT,
         checked_out_sha=COMMIT,
+        workflow_sha=COMMIT,
         main_sha=COMMIT,
         publication=publication,
     )
@@ -46,6 +47,7 @@ def test_exact_unpublished_main_candidate_passes() -> None:
             version="1.2.3",
             candidate_sha=COMMIT,
             checked_out_sha=COMMIT,
+            workflow_sha=COMMIT,
             main_sha=COMMIT,
             publication=PublicationState(False, False, False),
         )
@@ -58,9 +60,11 @@ def test_candidate_must_be_the_checked_out_current_main_revision() -> None:
         version="1.2.3",
         candidate_sha=COMMIT,
         checked_out_sha="b" * 40,
+        workflow_sha="d" * 40,
         main_sha="c" * 40,
         publication=PublicationState(False, False, False),
     )
 
     assert "checked-out commit differs from the requested candidate" in failures
+    assert "workflow revision differs from the requested candidate" in failures
     assert "candidate commit is not the current origin/main revision" in failures

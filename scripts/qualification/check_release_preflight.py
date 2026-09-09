@@ -49,6 +49,7 @@ def preflight_failures(
     version: str,
     candidate_sha: str,
     checked_out_sha: str,
+    workflow_sha: str,
     main_sha: str,
     publication: PublicationState,
 ) -> list[str]:
@@ -60,6 +61,8 @@ def preflight_failures(
         failures.append("candidate commit is not a full lowercase SHA")
     if checked_out_sha != candidate_sha:
         failures.append("checked-out commit differs from the requested candidate")
+    if workflow_sha != candidate_sha:
+        failures.append("workflow revision differs from the requested candidate")
     if main_sha != candidate_sha:
         failures.append("candidate commit is not the current origin/main revision")
     if publication.git_tag:
@@ -118,6 +121,7 @@ def main() -> int:
     parser.add_argument("--version", required=True)
     parser.add_argument("--candidate-sha", required=True)
     parser.add_argument("--repository", default="ml4t/live")
+    parser.add_argument("--workflow-sha", required=True)
     parser.add_argument("--output")
     args = parser.parse_args()
 
@@ -125,6 +129,7 @@ def main() -> int:
         version=args.version,
         candidate_sha=args.candidate_sha,
         checked_out_sha=_git_output("rev-parse", "HEAD"),
+        workflow_sha=args.workflow_sha,
         main_sha=_git_output("rev-parse", "refs/remotes/origin/main"),
         publication=publication_state(args.repository, args.version),
     )

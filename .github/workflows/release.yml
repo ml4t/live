@@ -1,46 +1,73 @@
 name: Release
 
 on:
-  push:
-    tags: ["v*"]
   workflow_dispatch:
     inputs:
+      version:
+        description: New stable package version without the v prefix
+        required: true
+        type: string
       candidate-sha:
-        description: Exact qualified commit to recover
-        required: true
-        type: string
-      qualification-run-id:
-        description: Failed release run containing qualified artifacts
-        required: true
-        type: string
-      tag:
-        description: Existing version tag for the candidate
+        description: Exact current main commit to publish
         required: true
         type: string
 
 permissions: {}
 
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 jobs:
-  ecosystem-qualification:
-    name: Ecosystem Qualification
+  preflight:
+    name: Validate unpublished main candidate
+    runs-on: ubuntu-latest
     permissions:
       contents: read
-    if: github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.candidate-sha }}
+      - run: git fetch --no-tags origin main
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.10.9"
+      - name: Check main identity and public version absence
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: >-
+          uv run --no-project --with packaging
+          python scripts/qualification/check_release_preflight.py
+          --version "${{ inputs.version }}"
+          --candidate-sha "${{ inputs.candidate-sha }}"
+          --workflow-sha "${{ github.sha }}"
+          --repository "${{ github.repository }}"
+
+  ecosystem-qualification:
+    name: Ecosystem Qualification
+    needs: preflight
+    permissions:
+      contents: read
     uses: ml4t/ecosystem/.github/workflows/qualify-library.yml@457678d8860d0c816b1dc376e7e2691daa93af4d # v0.1.0
     with:
       import-package: ml4t.live
 
   qualification:
     name: Complete stable qualification
-    if: github.event_name == 'push'
+    needs: preflight
     permissions:
       actions: read
       contents: read
     uses: ./.github/workflows/stable-qualification.yml
+    with:
+      candidate-sha: ${{ inputs.candidate-sha }}
+      candidate-version: ${{ inputs.version }}
 
   paper-evidence:
     name: Require exact exercises and reusable provider evidence
     runs-on: ubuntu-latest
+    needs: [ecosystem-qualification, qualification]
     outputs:
       wheel_sha256: ${{ steps.paper.outputs.wheel_sha256 }}
       sdist_sha256: ${{ steps.paper.outputs.sdist_sha256 }}
@@ -51,7 +78,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.candidate-sha || github.sha }}
+          ref: ${{ inputs.candidate-sha }}
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           version: "0.10.9"
@@ -60,9 +87,7 @@ jobs:
         id: paper-runtime
         run: |
           uv venv --clear --python 3.12 "${RUNNER_TEMP}/paper-evidence-venv"
-          uv pip install \
-            --python "${RUNNER_TEMP}/paper-evidence-venv/bin/python" \
-            "psutil==7.2.2"
+          uv pip install             --python "${RUNNER_TEMP}/paper-evidence-venv/bin/python"             "psutil==7.2.2"
       - name: Match successful retained evidence to this commit
         id: paper
         env:
@@ -71,91 +96,58 @@ jobs:
           "${RUNNER_TEMP}/paper-evidence-venv/bin/python"
           scripts/qualification/check_paper_evidence.py
           --repository "${{ github.repository }}"
-          --commit "${{ github.event_name == 'workflow_dispatch' && inputs.candidate-sha || github.sha }}"
+          --commit "${{ inputs.candidate-sha }}"
           --github-output "$GITHUB_OUTPUT"
+
+  documentation:
+    name: Deploy and verify qualified documentation
+    runs-on: ubuntu-latest
+    needs: [ecosystem-qualification, qualification, paper-evidence]
+    environment: documentation
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.candidate-sha }}
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: docs-${{ inputs.candidate-sha }}
+          path: docs-site/
+      - name: Verify qualified documentation before deployment
+        run: >-
+          python scripts/qualification/verify_documentation_identity.py
+          --site-dir docs-site
+          --version "${{ inputs.version }}"
+          --commit "${{ inputs.candidate-sha }}"
+      - name: Deploy the qualified documentation artifact
+        uses: cpina/github-action-push-to-another-repository@55306faa4ed53b815ae49e564af8cfb359d32ae2 # v1.7.3
+        env:
+          SSH_DEPLOY_KEY: ${{ secrets.DOCS_DEPLOY_KEY }}
+        with:
+          source-directory: docs-site/
+          destination-github-username: ml4t
+          destination-repository-name: website
+          target-directory: static/docs/live/
+          target-branch: main
+          commit-message: "docs(live): release ${{ inputs.version }} from ${{ inputs.candidate-sha }}"
+          user-name: ml4t-bot
+          user-email: bot@ml4trading.io
+      - name: Verify deployed documentation identity
+        run: >-
+          python scripts/qualification/verify_documentation_identity.py
+          --url "https://www.ml4trading.io/docs/live/"
+          --version "${{ inputs.version }}"
+          --commit "${{ inputs.candidate-sha }}"
 
   publish:
     name: Publish exact candidate to PyPI
     runs-on: ubuntu-latest
-    needs: [ecosystem-qualification, qualification, paper-evidence]
+    needs: [ecosystem-qualification, qualification, paper-evidence, documentation]
     environment: pypi
-    permissions:
-      actions: read
-      contents: read
-      id-token: write
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-          ref: ${{ github.sha }}
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: dist-${{ github.sha }}
-          path: dist/
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: qualification-${{ github.sha }}
-          path: qualification-evidence/
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: security-${{ github.sha }}
-          path: security-evidence/
-      - name: Match tag, commit, artifacts, provider evidence, SBOM, and snapshot
-        env:
-          PAPER_WHEEL_SHA256: ${{ needs.paper-evidence.outputs.wheel_sha256 }}
-          PAPER_SDIST_SHA256: ${{ needs.paper-evidence.outputs.sdist_sha256 }}
-        run: >-
-          python scripts/qualification/verify_release_identity.py
-          --artifacts-dir dist
-          --artifact-report qualification-evidence/artifact-qualification.json
-          --security-report security-evidence/security-report.json
-          --sbom security-evidence/sbom.cdx.json
-          --dependency-snapshot security-evidence/dependency-snapshot.json
-          --commit "${{ github.sha }}"
-          --tag "${{ github.ref_name }}"
-          --paper-wheel-sha256 "$PAPER_WHEEL_SHA256"
-          --paper-sdist-sha256 "$PAPER_SDIST_SHA256"
-      - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
-        with:
-          packages-dir: dist/
-          verify-metadata: true
-          print-hash: true
-          attestations: true
-
-  github-release:
-    name: Create GitHub release
-    runs-on: ubuntu-latest
-    needs: publish
-    permissions:
-      actions: read
-      contents: write
-    steps:
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: dist-${{ github.sha }}
-          path: dist/
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: security-${{ github.sha }}
-          path: security-evidence/
-      - name: Create release for the published tag
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: >-
-          gh release create "${{ github.ref_name }}"
-          dist/*
-          security-evidence/sbom.cdx.json
-          security-evidence/dependency-snapshot.json
-          --generate-notes
-          --repo "${{ github.repository }}"
-          --verify-tag
-
-  recovery-publish:
-    name: Recover exact candidate publication to PyPI
-    if: github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
-    needs: paper-evidence
-    environment: pypi
+    outputs:
+      manifest-sha256: ${{ steps.manifest.outputs.sha256 }}
     permissions:
       actions: read
       contents: read
@@ -165,39 +157,35 @@ jobs:
         with:
           fetch-depth: 0
           ref: ${{ inputs.candidate-sha }}
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.10.9"
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          github-token: ${{ github.token }}
-          run-id: ${{ inputs.qualification-run-id }}
           name: dist-${{ inputs.candidate-sha }}
           path: dist/
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          github-token: ${{ github.token }}
-          run-id: ${{ inputs.qualification-run-id }}
           name: qualification-${{ inputs.candidate-sha }}
           path: qualification-evidence/
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          github-token: ${{ github.token }}
-          run-id: ${{ inputs.qualification-run-id }}
           name: security-${{ inputs.candidate-sha }}
           path: security-evidence/
-      - name: Match tag, commit, artifacts, provider evidence, SBOM, and snapshot
+      - name: Write the verified release manifest
+        id: manifest
         env:
           PAPER_WHEEL_SHA256: ${{ needs.paper-evidence.outputs.wheel_sha256 }}
           PAPER_SDIST_SHA256: ${{ needs.paper-evidence.outputs.sdist_sha256 }}
-        run: >-
-          python scripts/qualification/verify_release_identity.py
-          --artifacts-dir dist
-          --artifact-report qualification-evidence/artifact-qualification.json
-          --security-report security-evidence/security-report.json
-          --sbom security-evidence/sbom.cdx.json
-          --dependency-snapshot security-evidence/dependency-snapshot.json
-          --commit "${{ inputs.candidate-sha }}"
-          --tag "${{ inputs.tag }}"
-          --paper-wheel-sha256 "$PAPER_WHEEL_SHA256"
-          --paper-sdist-sha256 "$PAPER_SDIST_SHA256"
+        run: |
+          uv run --no-project --with packaging             python scripts/qualification/verify_release_identity.py             --artifacts-dir dist             --artifact-report qualification-evidence/artifact-qualification.json             --security-report security-evidence/security-report.json             --sbom security-evidence/sbom.cdx.json             --dependency-snapshot security-evidence/dependency-snapshot.json             --commit "${{ inputs.candidate-sha }}"             --tag "v${{ inputs.version }}"             --paper-wheel-sha256 "$PAPER_WHEEL_SHA256"             --paper-sdist-sha256 "$PAPER_SDIST_SHA256"             --output-manifest release-manifest.json
+          echo "sha256=$(sha256sum release-manifest.json | cut -d ' ' -f 1)" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-manifest-${{ inputs.candidate-sha }}
+          path: release-manifest.json
+          if-no-files-found: error
+          retention-days: 90
       - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
         with:
           packages-dir: dist/
@@ -205,35 +193,79 @@ jobs:
           print-hash: true
           attestations: true
 
-  recovery-github-release:
-    name: Create recovered GitHub release
-    if: github.event_name == 'workflow_dispatch'
+  github-release:
+    name: Create tag and GitHub release
     runs-on: ubuntu-latest
-    needs: recovery-publish
+    needs: publish
     permissions:
       actions: read
       contents: write
     steps:
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          github-token: ${{ github.token }}
-          run-id: ${{ inputs.qualification-run-id }}
           name: dist-${{ inputs.candidate-sha }}
           path: dist/
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          github-token: ${{ github.token }}
-          run-id: ${{ inputs.qualification-run-id }}
+          name: qualification-${{ inputs.candidate-sha }}
+          path: qualification-evidence/
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
           name: security-${{ inputs.candidate-sha }}
           path: security-evidence/
-      - name: Create release for the published tag
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-manifest-${{ inputs.candidate-sha }}
+      - name: Create the tag and release from the published candidate
         env:
           GH_TOKEN: ${{ github.token }}
         run: >-
-          gh release create "${{ inputs.tag }}"
+          gh release create "v${{ inputs.version }}"
           dist/*
+          release-manifest.json
+          qualification-evidence/artifact-qualification.json
           security-evidence/sbom.cdx.json
           security-evidence/dependency-snapshot.json
           --generate-notes
           --repo "${{ github.repository }}"
-          --verify-tag
+          --target "${{ inputs.candidate-sha }}"
+
+  post-publication:
+    name: Verify published package, release, and documentation
+    runs-on: ubuntu-latest
+    needs: github-release
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.candidate-sha }}
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.10.9"
+      - run: uv python install 3.12
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-manifest-${{ inputs.candidate-sha }}
+      - name: Verify PyPI metadata and GitHub release digests
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: >-
+          uv run --no-project --with packaging
+          python scripts/qualification/verify_published_release.py
+          --manifest release-manifest.json
+          --repository "${{ github.repository }}"
+      - name: Install and exercise the published wheel
+        env:
+          ML4T_EXPECTED_VERSION: ${{ inputs.version }}
+        run: |
+          uv venv --clear --python 3.12 "${RUNNER_TEMP}/published-venv"
+          uv pip install             --python "${RUNNER_TEMP}/published-venv/bin/python"             --no-cache             --index-url https://pypi.org/simple             "ml4t-live==${{ inputs.version }}"
+          "${RUNNER_TEMP}/published-venv/bin/python" -I             scripts/qualification/installed_smoke.py
+      - name: Verify deployed documentation again
+        run: >-
+          python scripts/qualification/verify_documentation_identity.py
+          --url "https://www.ml4trading.io/docs/live/"
+          --version "${{ inputs.version }}"
+          --commit "${{ inputs.candidate-sha }}"

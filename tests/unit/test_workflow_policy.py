@@ -88,7 +88,7 @@ def test_release_paper_evidence_uses_a_clean_explicit_runtime(mutation: str) -> 
         ("documentation", "every mandatory"),
         ("artifact", "candidate build"),
         ("security", "candidate build"),
-        ("publish", "complete stable"),
+        ("publish", "qualification"),
         ("paper-hash", "paper-qualified wheel hash"),
         ("always", "success dependency"),
     ],
@@ -131,38 +131,32 @@ def test_seeded_mandatory_failure_cannot_reach_publish(mutation: str, expected: 
     [
         ("missing-paper", "fresh paper evidence"),
         ("wrong-source-run", "exact source-run artifact"),
-        ("missing-attestation", "trusted provenance attestations"),
-        ("early-release", "successful publication"),
-        ("missing-repository", "repository explicitly"),
+        ("public-write", "mutate public"),
+        ("missing-policy", "check_release_recovery.py"),
+        ("missing-identity", "verify_release_identity.py"),
     ],
 )
 def test_seeded_recovery_failure_is_rejected(mutation: str, expected: str) -> None:
-    release = load_workflow(WORKFLOW_ROOT / "release.yml")
-    seeded_release = deepcopy(release)
-    recovery_publish = seeded_release["jobs"]["recovery-publish"]
+    recovery = load_workflow(WORKFLOW_ROOT / "release-recovery.yml")
+    seeded_recovery = deepcopy(recovery)
+    verify = seeded_recovery["jobs"]["verify"]
 
     if mutation == "missing-paper":
-        recovery_publish["needs"] = []
+        verify["needs"] = []
     elif mutation == "wrong-source-run":
         download = next(
             step
-            for step in recovery_publish["steps"]
+            for step in verify["steps"]
             if str(step.get("uses", "")).startswith("actions/download-artifact@")
         )
         download["with"]["run-id"] = "123"
-    elif mutation == "missing-attestation":
-        publisher = next(
-            step
-            for step in recovery_publish["steps"]
-            if str(step.get("uses", "")).startswith("pypa/gh-action-pypi-publish@")
-        )
-        publisher["with"]["attestations"] = "false"
-    elif mutation == "early-release":
-        seeded_release["jobs"]["recovery-github-release"]["needs"] = "paper-evidence"
+    elif mutation == "public-write":
+        verify["steps"].append({"run": "gh release create v1.2.3"})
+    elif mutation == "missing-policy":
+        policy = verify["steps"][-1]
+        policy["run"] = str(policy["run"]).replace("check_release_recovery.py", "true")
     else:
-        release_step = seeded_release["jobs"]["recovery-github-release"]["steps"][-1]
-        release_step["run"] = str(release_step["run"]).replace(
-            '--repo "${{ github.repository }}"', ""
-        )
+        identity = verify["steps"][-2]
+        identity["run"] = str(identity["run"]).replace("verify_release_identity.py", "true")
 
-    assert any(expected in failure for failure in release_recovery_failures(seeded_release))
+    assert any(expected in failure for failure in release_recovery_failures(seeded_recovery))
