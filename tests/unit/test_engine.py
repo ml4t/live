@@ -809,7 +809,7 @@ async def test_shared_lifecycle_dispatches_all_callbacks_on_one_worker_thread() 
 async def test_slow_callback_times_out_after_worker_becomes_quiescent() -> None:
     class SlowStrategy(RecordingStrategy):
         def on_data(self, timestamp, data, context, broker) -> None:
-            time.sleep(0.08)
+            time.sleep(0.5)
             super().on_data(timestamp, data, context, broker)
 
     strategy = SlowStrategy()
@@ -817,7 +817,7 @@ async def test_slow_callback_times_out_after_worker_becomes_quiescent() -> None:
     feed = MockDataFeed(
         [(datetime(2024, 1, 2, 14, 30, tzinfo=UTC), {"AAPL": {"close": 100.0}}, {})]
     )
-    engine = LiveEngine(strategy, broker, feed, strategy_callback_timeout_seconds=0.03)
+    engine = LiveEngine(strategy, broker, feed, strategy_callback_timeout_seconds=0.25)
     await engine.connect()
 
     with pytest.raises(StrategyCallbackTimeoutError, match="on_data exceeded") as raised:
