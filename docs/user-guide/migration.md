@@ -75,7 +75,8 @@ See [Backtest to Live](backtest-to-live.md) for the portability boundary and
 ## Migrate From The Published Beta
 
 The published `0.1.0b3` package remains the prerelease API migration baseline. The first stable
-candidate removes no root export from that release, but the following changes require review:
+release, `0.1.0`, removed no root export from that release, but the following changes require
+review:
 
 - Custom broker implementations must satisfy the complete async broker protocol, including
   connection state, positions, pending orders, cancellation, replacement, and paper-identity
@@ -96,8 +97,8 @@ candidate removes no root export from that release, but the following changes re
   explicit positive duration when a reviewed callback legitimately needs longer.
 - Remove the beta `halt_on_error` argument. Lifecycle version 1 always stops, finalizes, and
   reraises a strategy exception; the beta flag was ignored and could imply unsupported recovery.
-- `LiveRiskConfig` requires an explicit `execution_mode`. The old `shadow_mode=True` form remains a
-  compatibility alias. Replace `shadow_mode=False` with either `execution_mode="paper"` or
+- `LiveRiskConfig` requires an explicit `execution_mode`. The `shadow_mode=True` form remains a
+  supported compatibility alias. Replace `shadow_mode=False` with either `execution_mode="paper"` or
   `execution_mode="live"`; the library cannot infer the intended account safely.
 - `LiveEngine.strategy_config` is a stable backtest configuration passed to `on_prepare`. Code that
   reads the instance attribute should treat it as configuration owned by the engine.
@@ -142,14 +143,14 @@ the incompatibility, explain why the normal interval is unsafe, and provide the 
 
 ## Select An Execution Destination Explicitly
 
-The stable candidate rejects `SafeBroker` construction unless `LiveRiskConfig.execution_mode` is
+Stable releases reject `SafeBroker` construction unless `LiveRiskConfig.execution_mode` is
 set to `"shadow"`, `"paper"`, or `"live"`. The old `shadow_mode=False` default could route an order
 to whichever account a provider happened to expose, so preserving that behavior would create a
 financial-safety risk.
 
 Replace `LiveRiskConfig(shadow_mode=True)` with `LiveRiskConfig(execution_mode="shadow")`. Replace
 `LiveRiskConfig(shadow_mode=False)` with `execution_mode="paper"` or `execution_mode="live"` after
-choosing the intended destination. `shadow_mode=True` remains a prerelease compatibility alias for
+choosing the intended destination. `shadow_mode=True` remains a supported compatibility alias for
 shadow execution, but new code should use `execution_mode`.
 
 Paper and live execution also require the connected broker identity to match the selected mode.
