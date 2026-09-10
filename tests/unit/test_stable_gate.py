@@ -62,8 +62,9 @@ def test_gate_has_explicit_topology_and_rotates_critical_fault_order(tmp_path: P
         "stress",
         "performance",
     ]
-    assert names[-5:] == [
+    assert names[-6:] == [
         "documentation",
+        "documentation-identity",
         "build",
         "distribution-metadata",
         "artifact-qualification",

@@ -1,20 +1,25 @@
 name: Docs
 
 on:
+  pull_request:
+    branches: [main]
   push:
     branches: [main]
   workflow_dispatch:
 
-permissions:
-  contents: read
+permissions: {}
 
 concurrency:
-  group: "docs"
+  group: docs-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
+
+env:
+  CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+  CANDIDATE_VERSION: "0.1.1"
 
 jobs:
   build:
-    name: Build & Deploy Docs
+    name: Build documentation
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -22,31 +27,20 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+          ref: ${{ env.CANDIDATE_SHA }}
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           version: "0.10.9"
-
-      - name: Set up Python
-        run: uv python install 3.12
-
-      - name: Install dependencies
-        run: uv sync --python 3.12 --dev --extra docs --locked
-
-      - name: Build docs
-        run: uv run mkdocs build --strict
-
-      - name: Deploy to website repo
-        uses: cpina/github-action-push-to-another-repository@55306faa4ed53b815ae49e564af8cfb359d32ae2 # v1.7.3
+      - run: uv python install 3.12
+      - run: uv sync --python 3.12 --dev --extra docs --locked
+      - name: Build strict commit-bound documentation
         env:
-          SSH_DEPLOY_KEY: ${{ secrets.DOCS_DEPLOY_KEY }}
-        with:
-          source-directory: site/
-          destination-github-username: ml4t
-          destination-repository-name: website
-          target-directory: static/docs/live/
-          target-branch: main
-          commit-message: "docs(live): update from ml4t/live@${{ github.sha }}"
-          user-name: ml4t-bot
-          user-email: bot@ml4trading.io
+          ML4T_DOCS_VERSION: ${{ env.CANDIDATE_VERSION }}
+          ML4T_DOCS_COMMIT: ${{ env.CANDIDATE_SHA }}
+        run: uv run mkdocs build --strict
+      - name: Verify rendered documentation identity
+        run: >-
+          uv run python scripts/qualification/verify_documentation_identity.py
+          --site-dir site
+          --version "${{ env.CANDIDATE_VERSION }}"
+          --commit "${{ env.CANDIDATE_SHA }}"

@@ -280,7 +280,7 @@ class IBBroker:
 
     @property
     def positions(self) -> dict[str, Position]:
-        """Thread-safe position access (Gemini v2 Critical Issue C).
+        """Return a thread-safe snapshot of positions.
 
         Note: This is called from worker thread via ThreadSafeBrokerWrapper.
         The lock prevents RuntimeError during dict iteration if IB callback

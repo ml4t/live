@@ -52,6 +52,19 @@ def artifact_identity(directory: Path) -> tuple[str, dict[str, dict[str, str]]]:
     }
 
 
+def release_manifest(
+    version: str, commit: str, artifacts: dict[str, dict[str, str]]
+) -> dict[str, Any]:
+    """Return the immutable release manifest written before publication."""
+    return {
+        "schema_version": 1,
+        "distribution": "ml4t-live",
+        "version": version,
+        "commit": commit,
+        "artifacts": artifacts,
+    }
+
+
 def list_artifacts(records: Any) -> dict[str, dict[str, str]]:
     """Index list-shaped artifact records by distribution type."""
     if not isinstance(records, list):
@@ -174,6 +187,7 @@ def main() -> int:
     parser.add_argument("--tag", required=True)
     parser.add_argument("--paper-wheel-sha256", required=True)
     parser.add_argument("--paper-sdist-sha256", required=True)
+    parser.add_argument("--output-manifest", type=Path)
     args = parser.parse_args()
     failures = identity_failures(
         artifacts_directory=args.artifacts_dir,
@@ -188,6 +202,12 @@ def main() -> int:
         sbom_sha256=sha256(args.sbom),
         dependency_snapshot_sha256=sha256(args.dependency_snapshot),
     )
+    if not failures and args.output_manifest is not None:
+        version, artifacts = artifact_identity(args.artifacts_dir)
+        args.output_manifest.write_text(
+            json.dumps(release_manifest(version, args.commit, artifacts), indent=2, sort_keys=True)
+            + "\n"
+        )
     print(f"stable release identity: {'PASS' if not failures else 'FAIL'}")
     for failure in failures:
         print(f"- {failure}")

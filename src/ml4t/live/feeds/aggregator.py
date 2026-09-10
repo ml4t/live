@@ -110,7 +110,7 @@ class BarBuffer:
 class BarAggregator:
     """Aggregates raw ticks or 5-second bars into minute bars.
 
-    Addresses Gemini's concerns:
+    Addresses aggregation and finalization requirements:
     1. "If IBDataFeed pushes a tick to Strategy.on_data, the strategy might
        trigger 60x more often than intended." - Buffer incoming data.
     2. "The 15:59 bar is never emitted because no 16:00 tick arrives." -
@@ -199,7 +199,7 @@ class BarAggregator:
 
     async def _aggregate_loop(self) -> None:
         """Main aggregation loop."""
-        # Start background flush checker (Gemini "stuck bar" fix)
+        # Start the background finalization check
         self._flush_task = asyncio.create_task(self._flush_checker())
 
         try:
@@ -301,7 +301,7 @@ class BarAggregator:
             self._signal_stop()
 
     async def _flush_checker(self) -> None:
-        """Force emit bars if no data arrives (Gemini "stuck bar" fix).
+        """Force emit bars if no data arrives.
 
         Scenario: Market closes at 16:00, last tick at 15:59:58. Without this,
         the 15:59 bar never emits because no 16:00 tick arrives to trigger it.

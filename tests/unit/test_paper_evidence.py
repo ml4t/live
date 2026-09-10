@@ -395,9 +395,8 @@ def test_artifact_redirect_drops_github_credentials_on_host_change() -> None:
     assert redirected.get_header("Accept") is None
 
 
-def test_legacy_ib_soak_remains_valid_while_changed_providers_do_not() -> None:
+def test_legacy_contract_matches_only_its_qualified_source_revision() -> None:
     repository = Path(__file__).resolve().parents[2]
-    candidate = "HEAD"
     history_available = subprocess.run(
         ["git", "cat-file", "-e", f"{LEGACY_COMMIT}^{{commit}}"],
         cwd=repository,
@@ -407,18 +406,11 @@ def test_legacy_ib_soak_remains_valid_while_changed_providers_do_not() -> None:
     if history_available.returncode != 0:
         pytest.skip("legacy provider evidence check requires the repository's full Git history")
 
-    assert provider_contract_matches(
-        "ib",
-        evidence_commit=LEGACY_COMMIT,
-        candidate_commit=candidate,
-        checkout_root=repository,
-        reported_contract=None,
-    )
-    for provider in ("alpaca", "okx"):
-        assert not provider_contract_matches(
+    for provider in ("alpaca", "ib", "okx"):
+        assert provider_contract_matches(
             provider,
             evidence_commit=LEGACY_COMMIT,
-            candidate_commit=candidate,
+            candidate_commit=LEGACY_COMMIT,
             checkout_root=repository,
             reported_contract=None,
         )

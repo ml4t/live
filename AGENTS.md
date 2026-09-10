@@ -29,9 +29,6 @@ shutdown.
 | `src/ml4t/live/feeds/` | Broker, exchange, Databento, and aggregate market-data feeds |
 | `tests/integration/` | Cross-component behavior without mandatory live credentials |
 
-Read `src/ml4t/live/AGENTS.md` for package navigation and the nested guides in `brokers/` and
-`feeds/` before changing provider-specific behavior.
-
 ## Safety and compatibility
 
 - Keep shadow mode as the safe first execution path and require explicit selection of live routing.

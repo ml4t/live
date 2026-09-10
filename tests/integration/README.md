@@ -56,7 +56,7 @@ All tests pass individually:
 - ✅ `test_ib_connection` - Connects to TWS, gets account info
 - ✅ `test_position_sync` - Syncs positions from IB
 - ✅ `test_shadow_mode_basic` - Orders NOT sent to IB, VirtualPortfolio works
-- ✅ `test_shadow_mode_prevents_infinite_buy_loop` - Gemini Critical Issue A fixed
+- ✅ `test_shadow_mode_prevents_infinite_buy_loop` - Virtual fills update positions
 - ✅ `test_shadow_mode_risk_limits` - Risk limits enforced
 - ✅ `test_shadow_mode_with_aggregator` - Bar aggregation works
 

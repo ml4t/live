@@ -14,7 +14,9 @@ from pathlib import Path
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 SOURCE_SCOPES = ("src", "tests", "examples", "scripts")
 COVERAGE_MINIMUM = "85"
-CANDIDATE_ENVIRONMENT = {"SETUPTOOLS_SCM_PRETEND_VERSION": "0.1.1"}
+CANDIDATE_ENVIRONMENT = {
+    "SETUPTOOLS_SCM_PRETEND_VERSION": os.environ.get("SETUPTOOLS_SCM_PRETEND_VERSION", "0.1.1")
+}
 STAGE_GROUPS = {
     "source": frozenset(
         {"ruff-format", "ruff", "types", "pre-commit", "workflow-policy", "release-recovery"}
@@ -27,7 +29,9 @@ STAGE_GROUPS = {
     ),
     "stress": frozenset({"stress"}),
     "performance": frozenset({"performance"}),
-    "documentation": frozenset({"public-claims", "documentation"}),
+    "documentation": frozenset(
+        {"public-claims", "documentation-links", "documentation", "documentation-identity"}
+    ),
     "distribution": frozenset({"build", "distribution-metadata"}),
 }
 
@@ -168,6 +172,15 @@ def qualification_stages(temporary_directory: Path, repetitions: int = 5) -> lis
                 ("uv", "run", "python", "scripts/qualification/check_public_claims.py"),
             ),
             Stage(
+                "documentation-links",
+                (
+                    "uv",
+                    "run",
+                    "python",
+                    "scripts/qualification/check_documentation_links.py",
+                ),
+            ),
+            Stage(
                 "documentation",
                 (
                     "uv",
@@ -177,6 +190,25 @@ def qualification_stages(temporary_directory: Path, repetitions: int = 5) -> lis
                     "--strict",
                     "--site-dir",
                     str(site_directory),
+                ),
+                {
+                    "ML4T_DOCS_VERSION": CANDIDATE_ENVIRONMENT["SETUPTOOLS_SCM_PRETEND_VERSION"],
+                    "ML4T_DOCS_COMMIT": source_commit(),
+                },
+            ),
+            Stage(
+                "documentation-identity",
+                (
+                    "uv",
+                    "run",
+                    "python",
+                    "scripts/qualification/verify_documentation_identity.py",
+                    "--site-dir",
+                    str(site_directory),
+                    "--version",
+                    CANDIDATE_ENVIRONMENT["SETUPTOOLS_SCM_PRETEND_VERSION"],
+                    "--commit",
+                    source_commit(),
                 ),
             ),
             Stage(
@@ -255,6 +287,17 @@ def repository_status() -> str:
         text=True,
     )
     return result.stdout
+
+
+def source_commit() -> str:
+    result = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=REPOSITORY_ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return result.stdout.strip()
 
 
 def source_date_epoch() -> str:

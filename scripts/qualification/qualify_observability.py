@@ -17,9 +17,6 @@ from time import monotonic
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 BUILD_CONSTRAINTS = REPOSITORY_ROOT / "build-constraints.txt"
 SECRET_SCANNER = REPOSITORY_ROOT / "scripts" / "qualification" / "scan_release_secrets.py"
-DEFAULT_EVIDENCE_ROOT = (
-    REPOSITORY_ROOT.parent / "ml4t-live-dev" / ".workspace" / "work" / "ml4t-live-stable-readiness"
-)
 SUPPORTED_PYTHONS = ("3.12", "3.13", "3.14")
 TEST_DEPENDENCIES = (
     "pytest==9.1.1",
@@ -38,7 +35,7 @@ OBSERVABILITY_TESTS = (
 STRESS_TEST = Path("tests/stress/test_engine_sustained.py")
 EXPECTED_DISTRIBUTIONS = {
     "ml4t-backtest": "0.1.0",
-    "ml4t-live": "0.1.1",
+    "ml4t-live": os.environ.get("SETUPTOOLS_SCM_PRETEND_VERSION", "0.1.1"),
     "ml4t-specs": "0.1.1",
 }
 PYTEST_INI = """\
@@ -94,11 +91,8 @@ def passed_test_count(output: str) -> int:
 def qualify(
     output: Path | None = None,
     *,
-    evidence_root: Path = DEFAULT_EVIDENCE_ROOT,
+    evidence_root: Path | None = None,
 ) -> dict[str, object]:
-    if not evidence_root.is_dir():
-        raise RuntimeError(f"stable evidence root does not exist: {evidence_root}")
-
     with tempfile.TemporaryDirectory(prefix="ml4t-live-observability-") as temporary:
         root = Path(temporary)
         dist = root / "dist"
@@ -198,16 +192,12 @@ def qualify(
             profiles.append(profile)
 
         secret_scan_path = root / "secret-scan.json"
+        scan_command = [sys.executable, str(SECRET_SCANNER), str(wheel)]
+        if evidence_root is not None:
+            scan_command.extend(("--evidence-root", str(evidence_root)))
+        scan_command.extend(("--output", str(secret_scan_path)))
         run(
-            [
-                sys.executable,
-                str(SECRET_SCANNER),
-                str(wheel),
-                "--evidence-root",
-                str(evidence_root),
-                "--output",
-                str(secret_scan_path),
-            ],
+            scan_command,
             cwd=REPOSITORY_ROOT,
             environment=environment,
         )
@@ -232,7 +222,7 @@ def qualify(
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", type=Path)
-    parser.add_argument("--evidence-root", type=Path, default=DEFAULT_EVIDENCE_ROOT)
+    parser.add_argument("--evidence-root", type=Path)
     args = parser.parse_args()
     print(
         json.dumps(

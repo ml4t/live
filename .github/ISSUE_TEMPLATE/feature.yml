@@ -1,5 +1,5 @@
 name: Feature request
-description: Request a concrete new or expanded capability
+description: Request a concrete new or expanded ml4t-live capability
 title: "[Feature]: "
 labels:
   - "type: feature"
@@ -7,21 +7,6 @@ labels:
   - "status: needs-triage"
   - "compatibility: affected"
 body:
-  - type: dropdown
-    id: library
-    attributes:
-      label: Owning library
-      options:
-        - data
-        - engineer
-        - backtest
-        - specs
-        - live
-        - diagnostic
-        - models
-        - ecosystem
-    validations:
-      required: true
   - type: input
     id: version
     attributes:

@@ -10,7 +10,11 @@ from pathlib import Path
 
 import pytest
 
-from scripts.qualification.verify_release_identity import identity_failures, sha256
+from scripts.qualification.verify_release_identity import (
+    identity_failures,
+    release_manifest,
+    sha256,
+)
 
 COMMIT = "a" * 40
 
@@ -90,6 +94,19 @@ def release_fixture(tmp_path: Path) -> dict:
 
 def test_consistent_stable_release_identity_passes(tmp_path: Path) -> None:
     assert identity_failures(**release_fixture(tmp_path)) == []
+
+
+def test_release_manifest_records_version_commit_names_and_digests(tmp_path: Path) -> None:
+    fixture = release_fixture(tmp_path)
+    manifest = release_manifest("1.2.3", COMMIT, fixture["artifact_report"]["artifacts"])
+
+    assert manifest == {
+        "schema_version": 1,
+        "distribution": "ml4t-live",
+        "version": "1.2.3",
+        "commit": COMMIT,
+        "artifacts": fixture["artifact_report"]["artifacts"],
+    }
 
 
 @pytest.mark.parametrize(

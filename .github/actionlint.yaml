@@ -1,0 +1,4 @@
+self-hosted-runner:
+  labels: [ib-paper]
+
+config-variables: null

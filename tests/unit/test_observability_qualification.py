@@ -9,7 +9,6 @@ from scripts.qualification.qualify_observability import (
     STRESS_TEST,
     passed_test_count,
 )
-from scripts.qualification.scan_release_secrets import _default_evidence_root
 
 ROOT = Path(__file__).parents[2]
 
@@ -18,15 +17,6 @@ def test_qualification_inputs_exist_and_include_sustained_diagnostics() -> None:
     assert all((ROOT / path).is_file() for path in OBSERVABILITY_TESTS)
     assert (ROOT / STRESS_TEST).is_file()
     assert STRESS_TEST not in OBSERVABILITY_TESTS
-
-
-def test_secret_scan_defaults_to_stable_evidence(tmp_path) -> None:
-    repository = tmp_path / "ml4t-live"
-    evidence = tmp_path / "ml4t-live-dev" / ".workspace" / "work" / "ml4t-live-stable-readiness"
-    repository.mkdir()
-    evidence.mkdir(parents=True)
-
-    assert _default_evidence_root(repository) == evidence
 
 
 def test_passed_test_count_requires_success_summary() -> None:

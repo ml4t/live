@@ -113,7 +113,7 @@ async def test_position_sync(ib_broker):
 async def test_position_access_thread_safe(ib_broker):
     """Test thread-safe position access.
 
-    TASK-012: Verify shallow copy prevents race conditions (Gemini Critical Issue C).
+    Verify that callers cannot mutate the broker's position cache.
     """
     await ib_broker._sync_positions()
 
