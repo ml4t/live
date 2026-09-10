@@ -79,7 +79,7 @@ def test_metadata_contract_accepts_declared_stable_candidate() -> None:
         project = tomllib.load(stream)["project"]
     message = email.message.Message()
     message["Name"] = "ml4t-live"
-    message["Version"] = "0.1.1"
+    message["Version"] = qualify_artifacts.CANDIDATE_VERSION
     message["Requires-Python"] = ">=3.12"
     message["License-Expression"] = "MIT"
     message["Summary"] = EXPECTED_DESCRIPTION
@@ -93,7 +93,7 @@ def test_metadata_contract_accepts_declared_stable_candidate() -> None:
     for dependency in project["dependencies"]:
         message["Requires-Dist"] = dependency
 
-    assert validate_metadata(message, project) == "0.1.1"
+    assert validate_metadata(message, project) == qualify_artifacts.CANDIDATE_VERSION
 
 
 def test_metadata_contract_rejects_noncanonical_identity() -> None:
@@ -101,7 +101,7 @@ def test_metadata_contract_rejects_noncanonical_identity() -> None:
         project = tomllib.load(stream)["project"]
     message = email.message.Message()
     message["Name"] = "ml4t-live"
-    message["Version"] = "0.1.1"
+    message["Version"] = qualify_artifacts.CANDIDATE_VERSION
     message["Requires-Python"] = ">=3.12"
     message["License-Expression"] = "MIT"
     message["Summary"] = "Generic live trading package"
@@ -124,7 +124,7 @@ def test_metadata_contract_rejects_development_build_of_stable_candidate() -> No
         project = tomllib.load(stream)["project"]
     message = email.message.Message()
     message["Name"] = "ml4t-live"
-    message["Version"] = "0.1.1.dev1"
+    message["Version"] = f"{qualify_artifacts.CANDIDATE_VERSION}.dev1"
     message["Requires-Python"] = ">=3.12"
     message["License-Expression"] = "MIT"
     message["Summary"] = EXPECTED_DESCRIPTION
@@ -145,7 +145,7 @@ def test_metadata_contract_rejects_development_build_of_stable_candidate() -> No
 def test_metadata_contract_rejects_python_315_upper_bound() -> None:
     message = email.message.Message()
     message["Name"] = "ml4t-live"
-    message["Version"] = "0.1.1"
+    message["Version"] = qualify_artifacts.CANDIDATE_VERSION
     message["Requires-Python"] = ">=3.12,<3.15"
     message["License-Expression"] = "MIT"
 
