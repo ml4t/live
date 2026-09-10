@@ -243,23 +243,33 @@ jobs:
       - name: Require every provider qualification stage to pass
         if: ${{ always() }}
         env:
+          ALPACA_EXERCISE: ${{ steps.alpaca-exercise.outcome }}
+          ALPACA_RESTART: ${{ steps.alpaca-restart.outcome }}
           EXTENDED_PROVIDER: ${{ inputs.extended-provider }}
+          FEED_EVIDENCE: ${{ steps.feed-evidence.outcome }}
+          FEED_EVIDENCE_SCAN: ${{ steps.feed-evidence-scan.outcome }}
+          IB_EXERCISE: ${{ steps.ib-exercise.outcome }}
+          IB_RESTART: ${{ steps.ib-restart.outcome }}
+          OKX_EXTERNAL: ${{ steps.okx-external.outcome }}
+          PAPER_EVIDENCE: ${{ steps.evidence.outcome }}
+          PAPER_EVIDENCE_SCAN: ${{ steps.evidence-scan.outcome }}
+          PROVIDER_SOAKS: ${{ steps.provider-soaks.outcome }}
         run: |
-          test "${{ steps.alpaca-exercise.outcome }}" = success &&
-          test "${{ steps.alpaca-restart.outcome }}" = success &&
-          test "${{ steps.ib-exercise.outcome }}" = success &&
-          test "${{ steps.ib-restart.outcome }}" = success &&
-          test "${{ steps.okx-external.outcome }}" = success &&
-          test "${{ steps.evidence-scan.outcome }}" = success &&
-          test "${{ steps.feed-evidence-scan.outcome }}" = success
+          test "$ALPACA_EXERCISE" = success
+          test "$ALPACA_RESTART" = success
+          test "$IB_EXERCISE" = success
+          test "$IB_RESTART" = success
+          test "$OKX_EXTERNAL" = success
+          test "$PAPER_EVIDENCE_SCAN" = success
+          test "$FEED_EVIDENCE_SCAN" = success
           if test "$EXTENDED_PROVIDER" != none; then
-            test "${{ steps.provider-soaks.outcome }}" = success
+            test "$PROVIDER_SOAKS" = success
           fi
           if test "$EXTENDED_PROVIDER" = all; then
-            test "${{ steps.evidence.outcome }}" = success
-            test "${{ steps.feed-evidence.outcome }}" = success
+            test "$PAPER_EVIDENCE" = success
+            test "$FEED_EVIDENCE" = success
           elif test "$EXTENDED_PROVIDER" = okx; then
-            test "${{ steps.feed-evidence.outcome }}" = success
+            test "$FEED_EVIDENCE" = success
           fi
 
   archive:

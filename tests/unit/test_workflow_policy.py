@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+import subprocess
 from copy import deepcopy
 
 import pytest
@@ -36,6 +38,66 @@ def test_paper_soak_requires_every_short_provider_check() -> None:
     soak["if"] = str(soak["if"]).replace("steps.ib-exercise.outcome", "")
 
     assert any("ib-exercise" in failure for failure in paper_soak_failures(seeded_job))
+
+
+def test_paper_gate_fails_for_each_required_provider_outcome() -> None:
+    paper = load_workflow(WORKFLOW_ROOT / "paper.yml")
+    gate = next(
+        step
+        for step in paper["jobs"]["paper"]["steps"]
+        if step.get("name") == "Require every provider qualification stage to pass"
+    )
+    outcomes = {
+        "ALPACA_EXERCISE": "success",
+        "ALPACA_RESTART": "success",
+        "FEED_EVIDENCE": "skipped",
+        "FEED_EVIDENCE_SCAN": "success",
+        "IB_EXERCISE": "success",
+        "IB_RESTART": "success",
+        "OKX_EXTERNAL": "success",
+        "PAPER_EVIDENCE": "skipped",
+        "PAPER_EVIDENCE_SCAN": "success",
+        "PROVIDER_SOAKS": "skipped",
+        "EXTENDED_PROVIDER": "none",
+    }
+
+    def run_gate(env: dict[str, str]) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            ["bash", "-euo", "pipefail", "-c", gate["run"]],
+            check=False,
+            capture_output=True,
+            env={**os.environ, **env},
+            text=True,
+        )
+
+    assert run_gate(outcomes).returncode == 0
+    for variable in (
+        "ALPACA_EXERCISE",
+        "ALPACA_RESTART",
+        "IB_EXERCISE",
+        "IB_RESTART",
+        "OKX_EXTERNAL",
+        "PAPER_EVIDENCE_SCAN",
+        "FEED_EVIDENCE_SCAN",
+    ):
+        seeded = {**outcomes, variable: "failure"}
+        assert run_gate(seeded).returncode != 0, variable
+
+    assert (
+        run_gate({**outcomes, "EXTENDED_PROVIDER": "ib", "PROVIDER_SOAKS": "failure"}).returncode
+        != 0
+    )
+    all_outcomes = {
+        **outcomes,
+        "EXTENDED_PROVIDER": "all",
+        "FEED_EVIDENCE": "success",
+        "PAPER_EVIDENCE": "success",
+        "PROVIDER_SOAKS": "success",
+    }
+    assert run_gate(all_outcomes).returncode == 0
+    for variable in ("FEED_EVIDENCE", "PAPER_EVIDENCE", "PROVIDER_SOAKS"):
+        seeded = {**all_outcomes, variable: "failure"}
+        assert run_gate(seeded).returncode != 0, variable
 
 
 def test_paper_qualification_uses_a_clean_explicit_runtime() -> None:
