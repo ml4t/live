@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import runpy
 from collections.abc import Callable, Sequence
 from pathlib import Path
@@ -47,6 +48,7 @@ def test_gate_has_explicit_topology_and_rotates_critical_fault_order(tmp_path: P
     stages = qualification_stages(tmp_path, 5)
     names = [stage.name for stage in stages]
     critical = [stage for stage in stages if stage.name.startswith("critical-faults-")]
+    candidate_version = os.environ.get("SETUPTOOLS_SCM_PRETEND_VERSION", "0.1.1")
 
     assert names[:12] == [
         "ruff-format",
@@ -74,16 +76,16 @@ def test_gate_has_explicit_topology_and_rotates_critical_fault_order(tmp_path: P
     assert len({stage.command[6] for stage in critical}) == 5
     by_name = {stage.name: stage for stage in stages}
     assert by_name["dependency-compatibility"].environment == {
-        "SETUPTOOLS_SCM_PRETEND_VERSION": "0.1.1"
+        "SETUPTOOLS_SCM_PRETEND_VERSION": candidate_version
     }
     assert by_name["artifact-qualification"].environment == {
-        "SETUPTOOLS_SCM_PRETEND_VERSION": "0.1.1"
+        "SETUPTOOLS_SCM_PRETEND_VERSION": candidate_version
     }
     assert by_name["security-qualification"].environment == {
-        "SETUPTOOLS_SCM_PRETEND_VERSION": "0.1.1"
+        "SETUPTOOLS_SCM_PRETEND_VERSION": candidate_version
     }
     assert by_name["build"].environment == {
-        "SETUPTOOLS_SCM_PRETEND_VERSION": "0.1.1",
+        "SETUPTOOLS_SCM_PRETEND_VERSION": candidate_version,
         "SOURCE_DATE_EPOCH": NAMESPACE["source_date_epoch"](),
     }
 
