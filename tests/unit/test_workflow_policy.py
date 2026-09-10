@@ -4,6 +4,7 @@ from copy import deepcopy
 
 import pytest
 
+from scripts.qualification.check_paper_outcomes import outcome_failures
 from scripts.qualification.check_workflows import (
     WORKFLOW_ROOT,
     action_pin_failures,
@@ -36,6 +37,46 @@ def test_paper_soak_requires_every_short_provider_check() -> None:
     soak["if"] = str(soak["if"]).replace("steps.ib-exercise.outcome", "")
 
     assert any("ib-exercise" in failure for failure in paper_soak_failures(seeded_job))
+
+
+def test_paper_gate_fails_for_each_required_provider_outcome() -> None:
+    outcomes = {
+        "alpaca-exercise": "success",
+        "alpaca-restart": "success",
+        "feed-evidence": "skipped",
+        "feed-evidence-scan": "success",
+        "ib-exercise": "success",
+        "ib-restart": "success",
+        "okx-external": "success",
+        "paper-evidence": "skipped",
+        "paper-evidence-scan": "success",
+        "provider-soaks": "skipped",
+    }
+
+    assert outcome_failures(outcomes, "none") == []
+    for variable in (
+        "alpaca-exercise",
+        "alpaca-restart",
+        "ib-exercise",
+        "ib-restart",
+        "okx-external",
+        "paper-evidence-scan",
+        "feed-evidence-scan",
+    ):
+        seeded = {**outcomes, variable: "failure"}
+        assert outcome_failures(seeded, "none") == [variable]
+
+    assert outcome_failures(outcomes, "ib") == ["provider-soaks"]
+    all_outcomes = {
+        **outcomes,
+        "feed-evidence": "success",
+        "paper-evidence": "success",
+        "provider-soaks": "success",
+    }
+    assert outcome_failures(all_outcomes, "all") == []
+    for variable in ("feed-evidence", "paper-evidence", "provider-soaks"):
+        seeded = {**all_outcomes, variable: "failure"}
+        assert outcome_failures(seeded, "all") == [variable]
 
 
 def test_paper_qualification_uses_a_clean_explicit_runtime() -> None:

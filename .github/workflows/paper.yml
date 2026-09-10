@@ -243,24 +243,31 @@ jobs:
       - name: Require every provider qualification stage to pass
         if: ${{ always() }}
         env:
+          ALPACA_EXERCISE: ${{ steps.alpaca-exercise.outcome }}
+          ALPACA_RESTART: ${{ steps.alpaca-restart.outcome }}
           EXTENDED_PROVIDER: ${{ inputs.extended-provider }}
-        run: |
-          test "${{ steps.alpaca-exercise.outcome }}" = success &&
-          test "${{ steps.alpaca-restart.outcome }}" = success &&
-          test "${{ steps.ib-exercise.outcome }}" = success &&
-          test "${{ steps.ib-restart.outcome }}" = success &&
-          test "${{ steps.okx-external.outcome }}" = success &&
-          test "${{ steps.evidence-scan.outcome }}" = success &&
-          test "${{ steps.feed-evidence-scan.outcome }}" = success
-          if test "$EXTENDED_PROVIDER" != none; then
-            test "${{ steps.provider-soaks.outcome }}" = success
-          fi
-          if test "$EXTENDED_PROVIDER" = all; then
-            test "${{ steps.evidence.outcome }}" = success
-            test "${{ steps.feed-evidence.outcome }}" = success
-          elif test "$EXTENDED_PROVIDER" = okx; then
-            test "${{ steps.feed-evidence.outcome }}" = success
-          fi
+          FEED_EVIDENCE: ${{ steps.feed-evidence.outcome }}
+          FEED_EVIDENCE_SCAN: ${{ steps.feed-evidence-scan.outcome }}
+          IB_EXERCISE: ${{ steps.ib-exercise.outcome }}
+          IB_RESTART: ${{ steps.ib-restart.outcome }}
+          OKX_EXTERNAL: ${{ steps.okx-external.outcome }}
+          PAPER_EVIDENCE: ${{ steps.evidence.outcome }}
+          PAPER_EVIDENCE_SCAN: ${{ steps.evidence-scan.outcome }}
+          PROVIDER_SOAKS: ${{ steps.provider-soaks.outcome }}
+        run: >-
+          "${{ runner.temp }}/paper-venv/bin/python"
+          scripts/qualification/check_paper_outcomes.py
+          --extended-provider "$EXTENDED_PROVIDER"
+          --alpaca-exercise "$ALPACA_EXERCISE"
+          --alpaca-restart "$ALPACA_RESTART"
+          --ib-exercise "$IB_EXERCISE"
+          --ib-restart "$IB_RESTART"
+          --okx-external "$OKX_EXTERNAL"
+          --paper-evidence-scan "$PAPER_EVIDENCE_SCAN"
+          --feed-evidence-scan "$FEED_EVIDENCE_SCAN"
+          --provider-soaks "$PROVIDER_SOAKS"
+          --paper-evidence "$PAPER_EVIDENCE"
+          --feed-evidence "$FEED_EVIDENCE"
 
   archive:
     name: Retain provider evidence
