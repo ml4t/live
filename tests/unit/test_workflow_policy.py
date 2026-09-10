@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-import os
-import subprocess
 from copy import deepcopy
 
 import pytest
 
+from scripts.qualification.check_paper_outcomes import outcome_failures
 from scripts.qualification.check_workflows import (
     WORKFLOW_ROOT,
     action_pin_failures,
@@ -41,63 +40,43 @@ def test_paper_soak_requires_every_short_provider_check() -> None:
 
 
 def test_paper_gate_fails_for_each_required_provider_outcome() -> None:
-    paper = load_workflow(WORKFLOW_ROOT / "paper.yml")
-    gate = next(
-        step
-        for step in paper["jobs"]["paper"]["steps"]
-        if step.get("name") == "Require every provider qualification stage to pass"
-    )
     outcomes = {
-        "ALPACA_EXERCISE": "success",
-        "ALPACA_RESTART": "success",
-        "FEED_EVIDENCE": "skipped",
-        "FEED_EVIDENCE_SCAN": "success",
-        "IB_EXERCISE": "success",
-        "IB_RESTART": "success",
-        "OKX_EXTERNAL": "success",
-        "PAPER_EVIDENCE": "skipped",
-        "PAPER_EVIDENCE_SCAN": "success",
-        "PROVIDER_SOAKS": "skipped",
-        "EXTENDED_PROVIDER": "none",
+        "alpaca-exercise": "success",
+        "alpaca-restart": "success",
+        "feed-evidence": "skipped",
+        "feed-evidence-scan": "success",
+        "ib-exercise": "success",
+        "ib-restart": "success",
+        "okx-external": "success",
+        "paper-evidence": "skipped",
+        "paper-evidence-scan": "success",
+        "provider-soaks": "skipped",
     }
 
-    def run_gate(env: dict[str, str]) -> subprocess.CompletedProcess[str]:
-        return subprocess.run(
-            ["bash", "-euo", "pipefail", "-c", gate["run"]],
-            check=False,
-            capture_output=True,
-            env={**os.environ, **env},
-            text=True,
-        )
-
-    assert run_gate(outcomes).returncode == 0
+    assert outcome_failures(outcomes, "none") == []
     for variable in (
-        "ALPACA_EXERCISE",
-        "ALPACA_RESTART",
-        "IB_EXERCISE",
-        "IB_RESTART",
-        "OKX_EXTERNAL",
-        "PAPER_EVIDENCE_SCAN",
-        "FEED_EVIDENCE_SCAN",
+        "alpaca-exercise",
+        "alpaca-restart",
+        "ib-exercise",
+        "ib-restart",
+        "okx-external",
+        "paper-evidence-scan",
+        "feed-evidence-scan",
     ):
         seeded = {**outcomes, variable: "failure"}
-        assert run_gate(seeded).returncode != 0, variable
+        assert outcome_failures(seeded, "none") == [variable]
 
-    assert (
-        run_gate({**outcomes, "EXTENDED_PROVIDER": "ib", "PROVIDER_SOAKS": "failure"}).returncode
-        != 0
-    )
+    assert outcome_failures(outcomes, "ib") == ["provider-soaks"]
     all_outcomes = {
         **outcomes,
-        "EXTENDED_PROVIDER": "all",
-        "FEED_EVIDENCE": "success",
-        "PAPER_EVIDENCE": "success",
-        "PROVIDER_SOAKS": "success",
+        "feed-evidence": "success",
+        "paper-evidence": "success",
+        "provider-soaks": "success",
     }
-    assert run_gate(all_outcomes).returncode == 0
-    for variable in ("FEED_EVIDENCE", "PAPER_EVIDENCE", "PROVIDER_SOAKS"):
+    assert outcome_failures(all_outcomes, "all") == []
+    for variable in ("feed-evidence", "paper-evidence", "provider-soaks"):
         seeded = {**all_outcomes, variable: "failure"}
-        assert run_gate(seeded).returncode != 0, variable
+        assert outcome_failures(seeded, "all") == [variable]
 
 
 def test_paper_qualification_uses_a_clean_explicit_runtime() -> None:

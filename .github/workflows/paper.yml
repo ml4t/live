@@ -254,23 +254,20 @@ jobs:
           PAPER_EVIDENCE: ${{ steps.evidence.outcome }}
           PAPER_EVIDENCE_SCAN: ${{ steps.evidence-scan.outcome }}
           PROVIDER_SOAKS: ${{ steps.provider-soaks.outcome }}
-        run: |
-          test "$ALPACA_EXERCISE" = success
-          test "$ALPACA_RESTART" = success
-          test "$IB_EXERCISE" = success
-          test "$IB_RESTART" = success
-          test "$OKX_EXTERNAL" = success
-          test "$PAPER_EVIDENCE_SCAN" = success
-          test "$FEED_EVIDENCE_SCAN" = success
-          if test "$EXTENDED_PROVIDER" != none; then
-            test "$PROVIDER_SOAKS" = success
-          fi
-          if test "$EXTENDED_PROVIDER" = all; then
-            test "$PAPER_EVIDENCE" = success
-            test "$FEED_EVIDENCE" = success
-          elif test "$EXTENDED_PROVIDER" = okx; then
-            test "$FEED_EVIDENCE" = success
-          fi
+        run: >-
+          "${{ runner.temp }}/paper-venv/bin/python"
+          scripts/qualification/check_paper_outcomes.py
+          --extended-provider "$EXTENDED_PROVIDER"
+          --alpaca-exercise "$ALPACA_EXERCISE"
+          --alpaca-restart "$ALPACA_RESTART"
+          --ib-exercise "$IB_EXERCISE"
+          --ib-restart "$IB_RESTART"
+          --okx-external "$OKX_EXTERNAL"
+          --paper-evidence-scan "$PAPER_EVIDENCE_SCAN"
+          --feed-evidence-scan "$FEED_EVIDENCE_SCAN"
+          --provider-soaks "$PROVIDER_SOAKS"
+          --paper-evidence "$PAPER_EVIDENCE"
+          --feed-evidence "$FEED_EVIDENCE"
 
   archive:
     name: Retain provider evidence
