@@ -186,10 +186,14 @@ class IBBroker:
                 timeout=20,  # Outer timeout wrapper
             )
         except (TimeoutError, ConnectionRefusedError) as e:
+            self.ib.disconnect()
+            self._connected = False
             detail = str(redact_sensitive(str(e)))
             logger.error("IBBroker: Connection failed: %s", detail)
             raise RuntimeError(f"IB connection failed: {detail}") from None
         except Exception as e:
+            self.ib.disconnect()
+            self._connected = False
             detail = str(redact_sensitive(str(e)))
             logger.error("IBBroker: Unexpected connect error: %s", detail)
             raise RuntimeError(f"IB connection failed: {detail}") from None
