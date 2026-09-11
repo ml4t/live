@@ -126,6 +126,22 @@ class TestIBBrokerSetup:
 
     @pytest.mark.asyncio
     @patch("ml4t.live.brokers.ib.IB")
+    async def test_failed_connect_cleans_up_partial_vendor_state(self, mock_ib_class):
+        mock_ib = MagicMock()
+        mock_ib_class.return_value = mock_ib
+        mock_ib.connectAsync = AsyncMock(side_effect=TimeoutError)
+
+        broker = IBBroker()
+        broker.ib = mock_ib
+
+        with pytest.raises(RuntimeError, match="IB connection failed"):
+            await broker.connect()
+
+        mock_ib.disconnect.assert_called_once()
+        assert broker._connected is False
+
+    @pytest.mark.asyncio
+    @patch("ml4t.live.brokers.ib.IB")
     async def test_disconnect(self, mock_ib_class):
         """Test disconnect from IB."""
         mock_ib = MagicMock()

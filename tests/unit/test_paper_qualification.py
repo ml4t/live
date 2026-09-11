@@ -472,6 +472,37 @@ async def test_provider_soak_runs_continuously_and_reconnects_once(
 
 
 @pytest.mark.asyncio
+async def test_controlled_ib_reconnect_recovers_from_transient_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    broker = MagicMock()
+    broker.connect = AsyncMock(side_effect=[RuntimeError("transient timeout"), None])
+    sleep = AsyncMock()
+    monkeypatch.setattr(paper_qualification.asyncio, "sleep", sleep)
+
+    await paper_qualification._connect_for_controlled_reconnect("ib", broker)
+
+    assert broker.connect.await_count == 2
+    sleep.assert_awaited_once_with(paper_qualification.SOAK_RECONNECT_RETRY_SECONDS)
+
+
+@pytest.mark.asyncio
+async def test_controlled_ib_reconnect_fails_after_bounded_attempts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    broker = MagicMock()
+    broker.connect = AsyncMock(side_effect=RuntimeError("persistent timeout"))
+    sleep = AsyncMock()
+    monkeypatch.setattr(paper_qualification.asyncio, "sleep", sleep)
+
+    with pytest.raises(RuntimeError, match="persistent timeout"):
+        await paper_qualification._connect_for_controlled_reconnect("ib", broker)
+
+    assert broker.connect.await_count == paper_qualification.SOAK_RECONNECT_ATTEMPTS
+    assert sleep.await_count == paper_qualification.SOAK_RECONNECT_ATTEMPTS - 1
+
+
+@pytest.mark.asyncio
 async def test_capability_and_policy_rejections_never_reach_provider(tmp_path: Path) -> None:
     class FakeIB:
         def __init__(self) -> None:

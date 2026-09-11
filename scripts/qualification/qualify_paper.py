@@ -43,6 +43,8 @@ SOAK_DURATION_SECONDS = 6 * 60 * 60
 SOAK_SNAPSHOT_INTERVAL_SECONDS = 5 * 60
 SOAK_RSS_GROWTH_LIMIT_BYTES = 25 * 1024 * 1024
 SOAK_SHUTDOWN_LIMIT_SECONDS = 5.0
+SOAK_RECONNECT_ATTEMPTS = 3
+SOAK_RECONNECT_RETRY_SECONDS = 2.0
 EXERCISE_STEP_SEQUENCE = (
     "installed_candidate",
     "connect",
@@ -742,6 +744,18 @@ async def _sleep_until(deadline: float) -> None:
         await asyncio.sleep(remaining)
 
 
+async def _connect_for_controlled_reconnect(provider: str, broker: Any) -> None:
+    attempts = SOAK_RECONNECT_ATTEMPTS if provider == "ib" else 1
+    for attempt in range(1, attempts + 1):
+        try:
+            await broker.connect()
+            return
+        except RuntimeError:
+            if attempt == attempts:
+                raise
+            await asyncio.sleep(SOAK_RECONNECT_RETRY_SECONDS)
+
+
 async def run_provider_soak(
     *, provider: str, candidate: dict[str, Any], checkout_root: Path
 ) -> dict[str, Any]:
@@ -797,7 +811,7 @@ async def run_provider_soak(
                 maximum_shutdown_seconds = max(
                     maximum_shutdown_seconds, time.monotonic() - shutdown_started
                 )
-                await broker.connect()
+                await _connect_for_controlled_reconnect(provider, broker)
                 broker.assert_paper_trading()
                 reconnect_count += 1
                 reconnected = True
