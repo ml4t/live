@@ -65,7 +65,7 @@ jobs:
       candidate-version: ${{ inputs.version }}
 
   paper-evidence:
-    name: Require exact exercises and reusable provider evidence
+    name: Bind exact artifacts to reusable provider evidence
     runs-on: ubuntu-latest
     needs: [ecosystem-qualification, qualification]
     outputs:

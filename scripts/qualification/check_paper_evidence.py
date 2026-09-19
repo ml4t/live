@@ -1,4 +1,4 @@
-"""Require exact-candidate exercises and matching retained provider evidence."""
+"""Bind exact candidate artifacts to matching retained provider evidence."""
 
 from __future__ import annotations
 

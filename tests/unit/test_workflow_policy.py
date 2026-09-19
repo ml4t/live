@@ -200,7 +200,7 @@ def test_seeded_mandatory_failure_cannot_reach_publish(mutation: str, expected: 
 @pytest.mark.parametrize(
     ("mutation", "expected"),
     [
-        ("missing-paper", "fresh paper evidence"),
+        ("missing-paper", "provider evidence"),
         ("wrong-source-run", "exact source-run artifact"),
         ("public-write", "mutate public"),
         ("missing-policy", "check_release_recovery.py"),

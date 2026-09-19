@@ -180,7 +180,7 @@ def promotion_failures(qualification: dict[str, Any], release: dict[str, Any]) -
         failures.append("a post-qualification release job rebuilds the candidate")
     paper_evidence = release_jobs.get("paper-evidence", {})
     if "check_paper_evidence.py" not in _run_text(paper_evidence):
-        failures.append("release does not verify fresh paper evidence for the exact commit")
+        failures.append("release does not verify matching provider evidence")
     if paper_evidence.get("outputs", {}).get("wheel_sha256") != (
         "${{ steps.paper.outputs.wheel_sha256 }}"
     ):
@@ -258,7 +258,7 @@ def release_recovery_failures(recovery: dict[str, Any]) -> list[str]:
         failures.append("release recovery evidence does not bind the exact candidate artifact")
     verify = jobs.get("verify", {})
     if _needs(verify) != {"paper-evidence"}:
-        failures.append("release recovery verification does not require fresh paper evidence")
+        failures.append("release recovery verification does not require provider evidence")
     downloads = _action_steps(verify, "actions/download-artifact")
     expected_downloads = {
         "dist-${{ inputs.candidate-sha }}",

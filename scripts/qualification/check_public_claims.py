@@ -41,6 +41,7 @@ PROHIBITED_CLAIMS = (
     "identical outputs in backtest and live modes",
     "same code for backtest and live",
     "this strategy is **identical** to what we use in backtesting",
+    "order-lifecycle checks run for every candidate",
 )
 
 OBSOLETE_ADOPTION_ARGUMENTS = ("shadow_mode=True", "shadow_mode=False")
@@ -94,6 +95,9 @@ REQUIRED_TEXT = {
     ),
     "docs/qualification.md": (
         "exact candidate commit",
+        "matching provider contract",
+        "Monthly provider health",
+        "there is no manual release bypass",
         "does not create a tag",
         "does not publish",
         "does not place a live-money order",
