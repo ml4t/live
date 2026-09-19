@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import json
+from io import BytesIO
 from pathlib import Path
 
 import pytest
 
 from scripts.qualification.verify_documentation_identity import (
+    deployed_identity_failures,
     expected_identity,
     html_identity_failures,
     site_identity_failures,
@@ -51,3 +53,35 @@ def test_site_identity_checks_every_page_and_manifest(tmp_path: Path) -> None:
     (nested / "index.html").write_text(rendered_page(commit="b" * 40))
     failures = site_identity_failures(tmp_path, library="live", version="1.2.3", commit=COMMIT)
     assert any("api/index.html: ml4t-commit" in failure for failure in failures)
+
+
+def test_deployed_identity_default_allows_four_minutes_for_propagation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    requests: list[str] = []
+    sleeps: list[float] = []
+
+    def open_url(url: str, *, timeout: int) -> BytesIO:
+        requests.append(url)
+        assert timeout == 20
+        version = "1.2.3" if len(requests) <= 23 * 3 else "1.2.4"
+        return BytesIO(rendered_page(version=version).encode())
+
+    monkeypatch.setattr(
+        "scripts.qualification.verify_documentation_identity.urllib.request.urlopen", open_url
+    )
+    monkeypatch.setattr(
+        "scripts.qualification.verify_documentation_identity.time.sleep", sleeps.append
+    )
+
+    assert (
+        deployed_identity_failures(
+            "https://example.test/docs/live/",
+            library="live",
+            version="1.2.4",
+            commit=COMMIT,
+        )
+        == []
+    )
+    assert len(requests) == 24 * 3
+    assert sleeps == [10.0] * 23
