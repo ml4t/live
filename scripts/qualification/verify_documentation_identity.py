@@ -79,7 +79,7 @@ def deployed_identity_failures(
     library: str,
     version: str,
     commit: str,
-    attempts: int = 12,
+    attempts: int = 24,
     wait_seconds: float = 10.0,
 ) -> list[str]:
     """Poll representative deployed pages until every identity matches."""

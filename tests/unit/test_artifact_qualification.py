@@ -29,9 +29,17 @@ from scripts.qualification.qualify_artifacts import (
     run_readme_quick_start,
     validate_metadata,
 )
+from scripts.qualification.qualify_artifacts import (
+    build_distributions as build_release_distributions,
+)
 from scripts.qualification.scan_release_secrets import scan_payloads
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
+
+
+@pytest.fixture(scope="module")
+def built_distributions(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, Path]:
+    return build_release_distributions(tmp_path_factory.mktemp("distribution"), "1704067200")
 
 
 def test_release_manifest_marks_typing_and_excludes_agent_files() -> None:
@@ -72,6 +80,23 @@ def test_external_artifact_input_requires_one_pair(tmp_path: Path) -> None:
     (tmp_path / "unexpected.whl").touch()
     with pytest.raises(QualificationError, match="exactly one wheel"):
         distribution_pair(tmp_path)
+
+
+def test_built_distributions_preserve_canonical_public_identity(
+    built_distributions: tuple[Path, Path],
+) -> None:
+    wheel, sdist = built_distributions
+    messages = (
+        email.message_from_bytes(qualify_artifacts._wheel_member(wheel, ".dist-info/METADATA")),
+        email.message_from_bytes(qualify_artifacts._sdist_member(sdist, "/PKG-INFO")),
+    )
+
+    for message in messages:
+        urls = dict(value.split(", ", maxsplit=1) for value in message.get_all("Project-URL", []))
+        assert message["Author-email"] == "Stefan Jansen <stefan@applied-ai.com>"
+        assert message["Maintainer-email"] == "Stefan Jansen <pm@ml4trading.io>"
+        assert urls["Homepage"] == "https://www.ml4trading.io/"
+        assert urls["Documentation"] == "https://www.ml4trading.io/docs/live/"
 
 
 def test_metadata_contract_accepts_declared_stable_candidate() -> None:
