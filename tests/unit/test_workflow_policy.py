@@ -10,8 +10,10 @@ from scripts.qualification.check_workflows import (
     action_pin_failures,
     load_workflow,
     paper_runtime_failures,
+    paper_selection_failures,
     paper_soak_failures,
     promotion_failures,
+    provider_health_failures,
     release_paper_runtime_failures,
     release_recovery_failures,
     validate_workflows,
@@ -26,7 +28,7 @@ def test_every_external_action_is_immutable_and_updateable() -> None:
     assert action_pin_failures(WORKFLOW_ROOT.glob("*.yml")) == []
 
 
-def test_paper_soak_requires_every_short_provider_check() -> None:
+def test_paper_soak_requires_each_selected_provider_check() -> None:
     paper = load_workflow(WORKFLOW_ROOT / "paper.yml")
     paper_job = paper["jobs"]["paper"]
 
@@ -37,6 +39,19 @@ def test_paper_soak_requires_every_short_provider_check() -> None:
     soak["if"] = str(soak["if"]).replace("steps.ib-exercise.outcome", "")
 
     assert any("ib-exercise" in failure for failure in paper_soak_failures(seeded_job))
+
+
+def test_short_checks_run_only_for_the_selected_provider_or_all() -> None:
+    paper = load_workflow(WORKFLOW_ROOT / "paper.yml")
+    paper_job = paper["jobs"]["paper"]
+
+    assert paper_selection_failures(paper_job) == []
+
+    seeded_job = deepcopy(paper_job)
+    ib_exercise = next(step for step in seeded_job["steps"] if step.get("id") == "ib-exercise")
+    del ib_exercise["if"]
+
+    assert paper_selection_failures(seeded_job) == ["ib-exercise is not limited to ib or all"]
 
 
 def test_paper_gate_fails_for_each_required_provider_outcome() -> None:
@@ -50,23 +65,15 @@ def test_paper_gate_fails_for_each_required_provider_outcome() -> None:
         "okx-external": "success",
         "paper-evidence": "skipped",
         "paper-evidence-scan": "success",
-        "provider-soaks": "skipped",
+        "provider-soaks": "success",
     }
 
-    assert outcome_failures(outcomes, "none") == []
-    for variable in (
-        "alpaca-exercise",
-        "alpaca-restart",
-        "ib-exercise",
-        "ib-restart",
-        "okx-external",
-        "paper-evidence-scan",
-        "feed-evidence-scan",
-    ):
+    assert outcome_failures(outcomes, "alpaca") == []
+    for variable in ("alpaca-exercise", "alpaca-restart", "provider-soaks"):
         seeded = {**outcomes, variable: "failure"}
-        assert outcome_failures(seeded, "none") == [variable]
+        assert outcome_failures(seeded, "alpaca") == [variable]
+    assert outcome_failures({**outcomes, "ib-exercise": "failure"}, "alpaca") == []
 
-    assert outcome_failures(outcomes, "ib") == ["provider-soaks"]
     all_outcomes = {
         **outcomes,
         "feed-evidence": "success",
@@ -77,6 +84,10 @@ def test_paper_gate_fails_for_each_required_provider_outcome() -> None:
     for variable in ("feed-evidence", "paper-evidence", "provider-soaks"):
         seeded = {**all_outcomes, variable: "failure"}
         assert outcome_failures(seeded, "all") == [variable]
+
+    okx_outcomes = {**outcomes, "feed-evidence": "success"}
+    assert outcome_failures(okx_outcomes, "okx") == []
+    assert outcome_failures({**okx_outcomes, "okx-external": "failure"}, "okx") == ["okx-external"]
 
 
 def test_paper_qualification_uses_a_clean_explicit_runtime() -> None:
@@ -96,7 +107,7 @@ def test_paper_qualification_uses_a_clean_explicit_runtime() -> None:
     )
 
 
-@pytest.mark.parametrize("mutation", ["dependency", "interpreter"])
+@pytest.mark.parametrize("mutation", ["dependency", "interpreter", "artifact"])
 def test_release_paper_evidence_uses_a_clean_explicit_runtime(mutation: str) -> None:
     release = load_workflow(WORKFLOW_ROOT / "release.yml")
     paper_job = release["jobs"]["paper-evidence"]
@@ -108,14 +119,33 @@ def test_release_paper_evidence_uses_a_clean_explicit_runtime(mutation: str) -> 
         runtime = next(step for step in seeded_job["steps"] if step.get("id") == "paper-runtime")
         runtime["run"] = str(runtime["run"]).replace('"psutil==7.2.2"', "")
         expected = "pinned runtime dependency"
-    else:
+    elif mutation == "interpreter":
         paper = next(step for step in seeded_job["steps"] if step.get("id") == "paper")
         paper["run"] = str(paper["run"]).replace(
             '"${RUNNER_TEMP}/paper-evidence-venv/bin/python"', "python"
         )
         expected = "clean validation environment"
+    else:
+        download = next(
+            step
+            for step in seeded_job["steps"]
+            if str(step.get("uses", "")).startswith("actions/download-artifact@")
+        )
+        download["with"]["name"] = "dist-wrong"
+        expected = "exact candidate artifacts"
 
     assert any(expected in failure for failure in release_paper_runtime_failures(seeded_job))
+
+
+def test_monthly_provider_health_is_visible_but_cannot_publish() -> None:
+    health = load_workflow(WORKFLOW_ROOT / "provider-health.yml")
+
+    assert provider_health_failures(health) == []
+
+    seeded = deepcopy(health)
+    seeded["jobs"]["provider-health"]["permissions"]["id-token"] = "write"
+
+    assert provider_health_failures(seeded) == ["provider health can mutate a public release"]
 
 
 @pytest.mark.parametrize(

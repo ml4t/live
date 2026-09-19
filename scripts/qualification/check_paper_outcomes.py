@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 from collections.abc import Sequence
 
-SHORT_OUTCOMES = (
+ALL_OUTCOMES = (
     "alpaca-exercise",
     "alpaca-restart",
     "ib-exercise",
@@ -14,13 +14,21 @@ SHORT_OUTCOMES = (
     "paper-evidence-scan",
     "feed-evidence-scan",
 )
+PROVIDER_OUTCOMES = {
+    "alpaca": ("alpaca-exercise", "alpaca-restart"),
+    "ib": ("ib-exercise", "ib-restart"),
+    "okx": ("okx-external",),
+}
 
 
 def outcome_failures(outcomes: dict[str, str], extended_provider: str) -> list[str]:
     """Return required qualification stages whose outcomes are not successful."""
-    required = list(SHORT_OUTCOMES)
-    if extended_provider != "none":
-        required.append("provider-soaks")
+    selected = (
+        tuple(name for names in PROVIDER_OUTCOMES.values() for name in names)
+        if extended_provider == "all"
+        else PROVIDER_OUTCOMES[extended_provider]
+    )
+    required = [*selected, "paper-evidence-scan", "feed-evidence-scan", "provider-soaks"]
     if extended_provider == "all":
         required.extend(("paper-evidence", "feed-evidence"))
     elif extended_provider == "okx":
@@ -32,15 +40,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--extended-provider",
-        choices=("none", "alpaca", "ib", "okx", "all"),
+        choices=("alpaca", "ib", "okx", "all"),
         required=True,
     )
-    for name in (*SHORT_OUTCOMES, "provider-soaks", "paper-evidence", "feed-evidence"):
+    for name in (*ALL_OUTCOMES, "provider-soaks", "paper-evidence", "feed-evidence"):
         parser.add_argument(f"--{name}", required=True)
     args = parser.parse_args(argv)
     outcomes = {
         name: getattr(args, name.replace("-", "_"))
-        for name in (*SHORT_OUTCOMES, "provider-soaks", "paper-evidence", "feed-evidence")
+        for name in (*ALL_OUTCOMES, "provider-soaks", "paper-evidence", "feed-evidence")
     }
     failures = outcome_failures(outcomes, args.extended_provider)
     if failures:
