@@ -12,11 +12,11 @@ on:
         required: true
         type: string
       extended-provider:
-        description: Provider needing a fresh six-hour soak, or all for initial qualification
+        description: Provider needing fresh evidence, or all for initial qualification
         required: true
-        default: none
+        default: all
         type: choice
-        options: [none, alpaca, ib, okx, all]
+        options: [alpaca, ib, okx, all]
 
 permissions: {}
 
@@ -75,6 +75,7 @@ jobs:
           mkdir -p "${{ runner.temp }}/paper-run" "${{ runner.temp }}/paper-state"
       - name: Exercise Alpaca paper order lifecycle
         id: alpaca-exercise
+        if: ${{ inputs.extended-provider == 'alpaca' || inputs.extended-provider == 'all' }}
         continue-on-error: true
         env:
           ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
@@ -92,7 +93,11 @@ jobs:
           --output "${{ github.workspace }}/paper-evidence/alpaca-exercise.json"
       - name: Reconcile Alpaca in a fresh process
         id: alpaca-restart
-        if: ${{ always() }}
+        if: >-
+          ${{
+            always() &&
+            (inputs.extended-provider == 'alpaca' || inputs.extended-provider == 'all')
+          }}
         continue-on-error: true
         env:
           ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
@@ -110,7 +115,11 @@ jobs:
           --output "${{ github.workspace }}/paper-evidence/alpaca-restart.json"
       - name: Exercise IB paper order lifecycle
         id: ib-exercise
-        if: ${{ always() }}
+        if: >-
+          ${{
+            always() &&
+            (inputs.extended-provider == 'ib' || inputs.extended-provider == 'all')
+          }}
         continue-on-error: true
         env:
           IB_ACCOUNT: ${{ secrets.IB_ACCOUNT }}
@@ -130,7 +139,11 @@ jobs:
           --output "${{ github.workspace }}/paper-evidence/ib-exercise.json"
       - name: Reconcile IB in a fresh process
         id: ib-restart
-        if: ${{ always() }}
+        if: >-
+          ${{
+            always() &&
+            (inputs.extended-provider == 'ib' || inputs.extended-provider == 'all')
+          }}
         continue-on-error: true
         env:
           IB_ACCOUNT: ${{ secrets.IB_ACCOUNT }}
@@ -150,6 +163,7 @@ jobs:
           --output "${{ github.workspace }}/paper-evidence/ib-restart.json"
       - name: Qualify the supported OKX feed against the public service
         id: okx-external
+        if: ${{ inputs.extended-provider == 'okx' || inputs.extended-provider == 'all' }}
         continue-on-error: true
         run: >-
           cd "${{ runner.temp }}/paper-run" &&
@@ -162,12 +176,31 @@ jobs:
         id: provider-soaks
         if: >-
           ${{
-            inputs.extended-provider != 'none' &&
-            steps.alpaca-exercise.outcome == 'success' &&
-            steps.alpaca-restart.outcome == 'success' &&
-            steps.ib-exercise.outcome == 'success' &&
-            steps.ib-restart.outcome == 'success' &&
-            steps.okx-external.outcome == 'success'
+            always() &&
+            (
+              (
+                inputs.extended-provider == 'alpaca' &&
+                steps.alpaca-exercise.outcome == 'success' &&
+                steps.alpaca-restart.outcome == 'success'
+              ) ||
+              (
+                inputs.extended-provider == 'ib' &&
+                steps.ib-exercise.outcome == 'success' &&
+                steps.ib-restart.outcome == 'success'
+              ) ||
+              (
+                inputs.extended-provider == 'okx' &&
+                steps.okx-external.outcome == 'success'
+              ) ||
+              (
+                inputs.extended-provider == 'all' &&
+                steps.alpaca-exercise.outcome == 'success' &&
+                steps.alpaca-restart.outcome == 'success' &&
+                steps.ib-exercise.outcome == 'success' &&
+                steps.ib-restart.outcome == 'success' &&
+                steps.okx-external.outcome == 'success'
+              )
+            )
           }}
         continue-on-error: true
         env:

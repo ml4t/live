@@ -23,13 +23,11 @@ MANDATORY_JOBS = {
     "documentation",
 }
 POST_BUILD_JOBS = {"artifact-qualification", "security"}
-PAPER_QUICK_STEP_IDS = (
-    "alpaca-exercise",
-    "alpaca-restart",
-    "ib-exercise",
-    "ib-restart",
-    "okx-external",
-)
+PAPER_PROVIDER_STEPS = {
+    "alpaca": ("alpaca-exercise", "alpaca-restart"),
+    "ib": ("ib-exercise", "ib-restart"),
+    "okx": ("okx-external",),
+}
 ACTION_PATTERN = re.compile(
     r"^\s*-?\s*uses:\s*([^\s#]+)(?:\s+#\s+(v[0-9][A-Za-z0-9_.-]*))?\s*$",
     re.MULTILINE,
@@ -182,7 +180,7 @@ def promotion_failures(qualification: dict[str, Any], release: dict[str, Any]) -
         failures.append("a post-qualification release job rebuilds the candidate")
     paper_evidence = release_jobs.get("paper-evidence", {})
     if "check_paper_evidence.py" not in _run_text(paper_evidence):
-        failures.append("release does not verify fresh paper evidence for the exact commit")
+        failures.append("release does not verify matching provider evidence")
     if paper_evidence.get("outputs", {}).get("wheel_sha256") != (
         "${{ steps.paper.outputs.wheel_sha256 }}"
     ):
@@ -250,9 +248,17 @@ def release_recovery_failures(recovery: dict[str, Any]) -> list[str]:
         failures.append("release recovery does not require candidate, source run, and tag")
 
     jobs = recovery.get("jobs", {})
+    paper = jobs.get("paper-evidence", {})
+    paper_downloads = _action_steps(paper, "actions/download-artifact")
+    if (
+        len(paper_downloads) != 1
+        or paper_downloads[0].get("with", {}).get("name") != "dist-${{ inputs.candidate-sha }}"
+        or paper_downloads[0].get("with", {}).get("run-id") != "${{ inputs.qualification-run-id }}"
+    ):
+        failures.append("release recovery evidence does not bind the exact candidate artifact")
     verify = jobs.get("verify", {})
     if _needs(verify) != {"paper-evidence"}:
-        failures.append("release recovery verification does not require fresh paper evidence")
+        failures.append("release recovery verification does not require provider evidence")
     downloads = _action_steps(verify, "actions/download-artifact")
     expected_downloads = {
         "dist-${{ inputs.candidate-sha }}",
@@ -281,16 +287,44 @@ def release_recovery_failures(recovery: dict[str, Any]) -> list[str]:
 
 
 def paper_soak_failures(paper_job: dict[str, Any]) -> list[str]:
-    """Reject a long soak that can start after a short provider check fails."""
+    """Reject a provider soak that can start without its selected short checks."""
     soak_steps = [step for step in _steps(paper_job) if step.get("id") == "provider-soaks"]
     if len(soak_steps) != 1:
         return ["paper qualification must define one provider-soaks step"]
     condition = str(soak_steps[0].get("if", ""))
     failures = []
-    for step_id in PAPER_QUICK_STEP_IDS:
-        required = f"steps.{step_id}.outcome == 'success'"
-        if required not in condition:
-            failures.append(f"paper soak does not require successful {step_id}")
+    for provider, step_ids in PAPER_PROVIDER_STEPS.items():
+        if f"inputs.extended-provider == '{provider}'" not in condition:
+            failures.append(f"paper soak has no {provider} selection branch")
+        for step_id in step_ids:
+            required = f"steps.{step_id}.outcome == 'success'"
+            if required not in condition:
+                failures.append(f"paper soak does not require successful {step_id}")
+    if "inputs.extended-provider == 'all'" not in condition:
+        failures.append("paper soak has no all-provider selection branch")
+    return failures
+
+
+def paper_selection_failures(paper_job: dict[str, Any]) -> list[str]:
+    """Reject short checks that run for an unrelated provider selection."""
+    indexed = {step.get("id"): step for step in _steps(paper_job) if step.get("id")}
+    failures = []
+    for provider, step_ids in PAPER_PROVIDER_STEPS.items():
+        expected = {
+            f"inputs.extended-provider == '{provider}'",
+            "inputs.extended-provider == 'all'",
+        }
+        unrelated = {
+            f"inputs.extended-provider == '{other}'"
+            for other in PAPER_PROVIDER_STEPS
+            if other != provider
+        }
+        for step_id in step_ids:
+            condition = str(indexed.get(step_id, {}).get("if", ""))
+            if any(item not in condition for item in expected):
+                failures.append(f"{step_id} is not limited to {provider} or all")
+            if any(item in condition for item in unrelated):
+                failures.append(f"{step_id} can run for an unrelated provider")
     return failures
 
 
@@ -351,6 +385,50 @@ def release_paper_runtime_failures(paper_job: dict[str, Any]) -> list[str]:
         f"{paper_python} scripts/qualification/check_paper_evidence.py"
     ):
         failures.append("release paper evidence does not use the clean validation environment")
+    if "--artifacts-dir dist" not in str(paper.get("run", "")):
+        failures.append("release paper evidence does not bind the exact candidate artifacts")
+    downloads = _action_steps(paper_job, "actions/download-artifact")
+    if (
+        len(downloads) != 1
+        or downloads[0].get("with", {}).get("name") != "dist-${{ inputs.candidate-sha }}"
+        or downloads[0].get("with", {}).get("path") != "dist/"
+    ):
+        failures.append("release paper evidence does not download the exact candidate artifacts")
+    return failures
+
+
+def provider_health_failures(health: dict[str, Any]) -> list[str]:
+    """Reject a monthly health workflow that is incomplete or can publish."""
+    failures = []
+    if _triggers(health) != {"schedule", "workflow_dispatch"}:
+        failures.append("provider health is not monthly and manually dispatchable")
+    schedules = health.get("on", {}).get("schedule", [])
+    if schedules != [{"cron": "0 14 15 * *"}]:
+        failures.append("provider health does not have one monthly schedule")
+    job = health.get("jobs", {}).get("provider-health", {})
+    if job.get("environment") != "paper":
+        failures.append("provider health does not use the protected paper environment")
+    matrix = job.get("strategy", {}).get("matrix", {}).get("include", [])
+    expected = {
+        ("alpaca", "tests/integration/test_alpaca_integration.py"),
+        ("ib", "tests/integration/test_ib_integration.py"),
+        ("okx", "tests/integration/test_okx_integration.py"),
+    }
+    actual = {
+        (entry.get("provider"), entry.get("test_path"))
+        for entry in matrix
+        if isinstance(entry, dict)
+    }
+    if actual != expected or job.get("strategy", {}).get("fail-fast") != "false":
+        failures.append("provider health does not independently cover every stable provider")
+    text = json.dumps(health, sort_keys=True)
+    if "--run-external" not in text:
+        failures.append("provider health does not execute external checks")
+    if any(
+        forbidden in text
+        for forbidden in ("gh-action-pypi-publish", "gh release create", "id-token")
+    ):
+        failures.append("provider health can mutate a public release")
     return failures
 
 
@@ -363,6 +441,7 @@ def validate_workflows(root: Path = WORKFLOW_ROOT) -> list[str]:
         "release.yml",
         "release-recovery.yml",
         "paper.yml",
+        "provider-health.yml",
         "docs.yml",
     }
     failures = []
@@ -376,6 +455,7 @@ def validate_workflows(root: Path = WORKFLOW_ROOT) -> list[str]:
     release = workflows["release.yml"]
     recovery = workflows["release-recovery.yml"]
     paper = workflows["paper.yml"]
+    health = workflows["provider-health.yml"]
     for name, workflow in workflows.items():
         failures.extend(_permission_failures(name, workflow.get("permissions"), set()))
         if "pull_request_target" in _triggers(workflow):
@@ -523,7 +603,9 @@ def validate_workflows(root: Path = WORKFLOW_ROOT) -> list[str]:
         failures.append("paper qualification is not manual-only")
     paper_job = paper.get("jobs", {}).get("paper", {})
     failures.extend(paper_soak_failures(paper_job))
+    failures.extend(paper_selection_failures(paper_job))
     failures.extend(paper_runtime_failures(paper_job))
+    failures.extend(provider_health_failures(health))
     if paper_job.get("environment") != "paper":
         failures.append("paper qualification does not use the protected paper environment")
     if "secrets." not in json.dumps(paper_job, sort_keys=True):

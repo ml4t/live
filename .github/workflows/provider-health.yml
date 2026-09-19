@@ -1,0 +1,44 @@
+name: Monthly provider health
+
+on:
+  schedule:
+    - cron: "0 14 15 * *"
+  workflow_dispatch:
+
+permissions: {}
+
+env:
+  UV_NO_SOURCES: "1"
+  UV_VERSION: "0.10.9"
+
+jobs:
+  provider-health:
+    name: ${{ matrix.provider }} health
+    runs-on: [self-hosted, linux, x64, ib-paper]
+    timeout-minutes: 20
+    environment: paper
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - provider: alpaca
+            test_path: tests/integration/test_alpaca_integration.py
+          - provider: ib
+            test_path: tests/integration/test_ib_integration.py
+          - provider: okx
+            test_path: tests/integration/test_okx_integration.py
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          version: ${{ env.UV_VERSION }}
+      - run: uv python install 3.12
+      - name: Install the default-branch health environment
+        run: uv sync --python 3.12 --all-extras --dev --locked
+      - name: Check current provider availability and behavior
+        env:
+          ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
+          ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
+        run: uv run pytest --run-external "${{ matrix.test_path }}" -q
