@@ -13,6 +13,7 @@ from scripts.qualification.check_paper_evidence import (
     _ArtifactRedirectHandler,
     fetch_bytes,
     find_paper_evidence,
+    write_github_output,
 )
 from scripts.qualification.provider_contract import (
     provider_contract,
@@ -28,6 +29,10 @@ from scripts.qualification.qualify_paper import (
 
 COMMIT = "a" * 40
 LEGACY_COMMIT = "98c414e9d858427c31e1680faccdc8dca498bf6b"
+CANDIDATE_ARTIFACTS = {
+    "wheel": {"filename": "candidate.whl", "sha256": "d" * 64},
+    "sdist": {"filename": "candidate.tar.gz", "sha256": "e" * 64},
+}
 
 
 def _fetcher(
@@ -244,7 +249,10 @@ def _okx_soak_report(commit: str) -> dict:
     return report
 
 
-def _archive(commit: str = COMMIT) -> bytes:
+def _archive(
+    commit: str = COMMIT,
+    providers: frozenset[str] = frozenset({"alpaca", "ib", "okx"}),
+) -> bytes:
     bundle = {
         "schema_version": 1,
         "generated_at": "2026-08-08T02:01:00+00:00",
@@ -267,6 +275,8 @@ def _archive(commit: str = COMMIT) -> bytes:
     with zipfile.ZipFile(payload, "w") as archive:
         archive.writestr("paper-evidence/candidate.json", json.dumps(_manifest(commit)))
         for provider in ("alpaca", "ib"):
+            if provider not in providers:
+                continue
             for phase in ("exercise", "restart"):
                 archive.writestr(
                     f"paper-evidence/{provider}-{phase}.json",
@@ -276,8 +286,9 @@ def _archive(commit: str = COMMIT) -> bytes:
                 f"paper-evidence/{provider}-soak.json",
                 json.dumps(_soak_report(provider, commit)),
             )
-        archive.writestr("feed-evidence/okx.json", json.dumps(_okx_report(commit)))
-        archive.writestr("feed-evidence/okx-soak.json", json.dumps(_okx_soak_report(commit)))
+        if "okx" in providers:
+            archive.writestr("feed-evidence/okx.json", json.dumps(_okx_report(commit)))
+            archive.writestr("feed-evidence/okx-soak.json", json.dumps(_okx_soak_report(commit)))
         archive.writestr("paper-qualification.json", json.dumps(bundle))
         archive.writestr(
             "feed-qualification.json",
@@ -327,6 +338,49 @@ def _downloader(
         return payload
 
     return download
+
+
+def _multi_run_services(
+    evidence: list[tuple[int, str, str, frozenset[str]]],
+):
+    runs = [
+        {
+            "id": run_id,
+            "head_sha": commit,
+            "conclusion": "success",
+            "status": "completed",
+            "created_at": created_at,
+            "artifacts_url": f"https://api.github.test/artifacts/{run_id}",
+            "html_url": f"https://github.test/run/{run_id}",
+        }
+        for run_id, commit, created_at, _providers in evidence
+    ]
+    payloads = {
+        f"https://api.github.test/archive/{run_id}": _archive(commit, providers)
+        for run_id, commit, _created_at, providers in evidence
+    }
+
+    def fetch(url: str, token: str) -> dict:
+        assert token == "token"
+        if "/actions/workflows/" in url:
+            return {"workflow_runs": runs}
+        run_id = int(url.rsplit("/", 1)[-1])
+        run = next(run for run in runs if run["id"] == run_id)
+        return {
+            "artifacts": [
+                {
+                    "name": f"paper-{run['head_sha']}-{run_id}",
+                    "expired": False,
+                    "archive_download_url": f"https://api.github.test/archive/{run_id}",
+                }
+            ]
+        }
+
+    def download(url: str, token: str) -> bytes:
+        assert token == "token"
+        return payloads[url]
+
+    return fetch, download
 
 
 @pytest.mark.parametrize(
@@ -436,12 +490,13 @@ def test_reported_provider_contract_must_match_its_source_revision() -> None:
     )
 
 
-def test_exact_candidate_and_matching_provider_evidence_passes() -> None:
+def test_candidate_hashes_come_from_current_artifacts_not_provider_archive() -> None:
     evidence = find_paper_evidence(
         repository="ml4t/live",
         commit=COMMIT,
         token="token",
         checkout_root=Path("."),
+        candidate_artifacts=CANDIDATE_ARTIFACTS,
         fetcher=_fetcher("2026-08-07T20:00:00Z"),
         downloader=_downloader(),
         contract_matcher=lambda *_args, **_kwargs: True,
@@ -449,13 +504,9 @@ def test_exact_candidate_and_matching_provider_evidence_passes() -> None:
 
     assert evidence is not None
     assert {key: value for key, value in evidence.items() if key != "providers"} == {
-        "run_id": 42,
-        "run_url": "https://github.test/run/42",
-        "created_at": "2026-08-07T20:00:00Z",
-        "artifact": f"paper-{COMMIT}-42",
-        "qualification_run_id": 41,
-        "wheel_sha256": "b" * 64,
-        "sdist_sha256": "c" * 64,
+        "commit": COMMIT,
+        "wheel_sha256": "d" * 64,
+        "sdist_sha256": "e" * 64,
     }
     assert set(evidence["providers"]) == {"alpaca", "ib", "okx"}
 
@@ -466,6 +517,7 @@ def test_age_does_not_invalidate_matching_provider_evidence() -> None:
         commit=COMMIT,
         token="token",
         checkout_root=Path("."),
+        candidate_artifacts=CANDIDATE_ARTIFACTS,
         fetcher=_fetcher("2026-07-01T20:00:00Z"),
         downloader=_downloader(),
         contract_matcher=lambda *_args, **_kwargs: True,
@@ -480,6 +532,7 @@ def test_changed_provider_contract_fails_closed() -> None:
         commit=COMMIT,
         token="token",
         checkout_root=Path("."),
+        candidate_artifacts=CANDIDATE_ARTIFACTS,
         fetcher=_fetcher("2026-08-07T20:00:00Z"),
         downloader=_downloader(),
         contract_matcher=lambda provider, **_kwargs: provider != "ib",
@@ -494,6 +547,7 @@ def test_expired_paper_artifact_fails() -> None:
         commit=COMMIT,
         token="token",
         checkout_root=Path("."),
+        candidate_artifacts=CANDIDATE_ARTIFACTS,
         fetcher=_fetcher("2026-08-07T20:00:00Z", expired=True),
         downloader=_downloader(),
         contract_matcher=lambda *_args, **_kwargs: True,
@@ -508,13 +562,46 @@ def test_durable_release_asset_replaces_an_expired_actions_artifact() -> None:
         commit=COMMIT,
         token="token",
         checkout_root=Path("."),
+        candidate_artifacts=CANDIDATE_ARTIFACTS,
         fetcher=_fetcher("2026-08-07T20:00:00Z", expired=True, release=True),
         downloader=_downloader(expected_url="https://api.github.test/release-asset/42"),
         contract_matcher=lambda *_args, **_kwargs: True,
     )
 
     assert evidence is not None
-    assert evidence["artifact"] == "provider-evidence-42/provider-evidence.zip"
+    assert {source["artifact"] for source in evidence["providers"].values()} == {
+        "provider-evidence-42/provider-evidence.zip"
+    }
+
+
+def test_providers_can_be_selected_from_independent_matching_runs() -> None:
+    alpaca_commit = "1" * 40
+    ib_commit = "2" * 40
+    okx_commit = "3" * 40
+    fetcher, downloader = _multi_run_services(
+        [
+            (41, alpaca_commit, "2026-08-09T20:00:00Z", frozenset({"alpaca"})),
+            (42, ib_commit, "2026-08-08T20:00:00Z", frozenset({"ib"})),
+            (43, okx_commit, "2026-08-07T20:00:00Z", frozenset({"okx"})),
+        ]
+    )
+    expected = {"alpaca": alpaca_commit, "ib": ib_commit, "okx": okx_commit}
+
+    evidence = find_paper_evidence(
+        repository="ml4t/live",
+        commit=COMMIT,
+        token="token",
+        checkout_root=Path("."),
+        candidate_artifacts=CANDIDATE_ARTIFACTS,
+        fetcher=fetcher,
+        downloader=downloader,
+        contract_matcher=lambda provider, **kwargs: kwargs["evidence_commit"] == expected[provider],
+    )
+
+    assert evidence is not None
+    assert {
+        provider: source["commit"] for provider, source in evidence["providers"].items()
+    } == expected
 
 
 def test_wrong_commit_inside_retained_artifact_fails() -> None:
@@ -523,6 +610,7 @@ def test_wrong_commit_inside_retained_artifact_fails() -> None:
         commit=COMMIT,
         token="token",
         checkout_root=Path("."),
+        candidate_artifacts=CANDIDATE_ARTIFACTS,
         fetcher=_fetcher("2026-08-07T20:00:00Z"),
         downloader=_downloader(_archive("c" * 40)),
         contract_matcher=lambda *_args, **_kwargs: True,
@@ -537,6 +625,7 @@ def test_malformed_retained_artifact_fails() -> None:
         commit=COMMIT,
         token="token",
         checkout_root=Path("."),
+        candidate_artifacts=CANDIDATE_ARTIFACTS,
         fetcher=_fetcher("2026-08-07T20:00:00Z"),
         downloader=_downloader(b"not a zip"),
         contract_matcher=lambda *_args, **_kwargs: True,
@@ -555,9 +644,18 @@ def test_missing_feed_qualification_fails() -> None:
         commit=COMMIT,
         token="token",
         checkout_root=Path("."),
+        candidate_artifacts=CANDIDATE_ARTIFACTS,
         fetcher=_fetcher("2026-08-07T20:00:00Z"),
         downloader=_downloader(payload.getvalue()),
         contract_matcher=lambda *_args, **_kwargs: True,
     )
 
     assert evidence is None
+
+
+def test_failed_lookup_writes_no_release_outputs(tmp_path: Path) -> None:
+    output = tmp_path / "github-output"
+
+    write_github_output(output, None)
+
+    assert not output.exists()

@@ -35,6 +35,8 @@ verify_candidate_manifest = _paper.verify_candidate_manifest
 _candidate_identity = _paper._candidate_identity
 _contracts = importlib.import_module("scripts.qualification.provider_contract")
 provider_contract_matches = _contracts.provider_contract_matches
+_release = importlib.import_module("scripts.qualification.verify_release_identity")
+artifact_identity = _release.artifact_identity
 
 GITHUB_API = "https://api.github.com"
 
@@ -118,37 +120,44 @@ def _optional_json(archive: zipfile.ZipFile, suffix: str) -> dict[str, Any] | No
 
 
 def validate_evidence_archive(payload: bytes, expected_commit: str) -> dict[str, Any]:
-    """Validate exact-candidate exercises and any retained extended reports."""
+    """Validate every complete provider result present in an evidence archive."""
     with zipfile.ZipFile(io.BytesIO(payload)) as archive:
         manifest = _unique_json(archive, "candidate.json")
         verify_candidate_manifest(manifest)
         identity = _candidate_identity(manifest)
         if identity["commit"] != expected_commit:
             raise PaperQualificationError("paper artifact targets a different commit")
+        providers: dict[str, dict[str, Any]] = {}
         for provider in ("alpaca", "ib"):
-            for phase in ("exercise", "restart"):
-                validate_provider_report(
-                    _unique_json(archive, f"{provider}-{phase}.json"),
-                    identity,
-                    provider,
-                    phase,
-                )
-        validate_okx_report(_unique_json(archive, "okx.json"), manifest)
-        soaks: dict[str, dict[str, Any]] = {}
-        for provider, suffix in {
-            "alpaca": "alpaca-soak.json",
-            "ib": "ib-soak.json",
-            "okx": "okx-soak.json",
-        }.items():
-            report = _optional_json(archive, suffix)
-            if report is None:
+            reports = {
+                phase: _optional_json(archive, f"{provider}-{phase}.json")
+                for phase in ("exercise", "restart")
+            }
+            soak = _optional_json(archive, f"{provider}-soak.json")
+            present = [*reports.values(), soak]
+            if not any(present):
                 continue
-            if provider == "okx":
-                validate_okx_soak_report(report, manifest)
-            else:
-                validate_provider_soak_report(report, identity, provider)
-            soaks[provider] = report
-    return {"candidate": identity, "soaks": soaks}
+            if not all(present):
+                raise PaperQualificationError(f"paper artifact has incomplete {provider} evidence")
+            for phase, report in reports.items():
+                if report is None:
+                    raise PaperQualificationError(
+                        f"paper artifact has incomplete {provider} evidence"
+                    )
+                validate_provider_report(report, identity, provider, phase)
+            if soak is None:
+                raise PaperQualificationError(f"paper artifact has incomplete {provider} evidence")
+            validate_provider_soak_report(soak, identity, provider)
+            providers[provider] = {**reports, "soak": soak}
+        okx = _optional_json(archive, "okx.json")
+        okx_soak = _optional_json(archive, "okx-soak.json")
+        if okx is not None or okx_soak is not None:
+            if okx is None or okx_soak is None:
+                raise FeedQualificationError("paper artifact has incomplete okx evidence")
+            validate_okx_report(okx, manifest)
+            validate_okx_soak_report(okx_soak, manifest)
+            providers["okx"] = {"exercise": okx, "soak": okx_soak}
+    return {"candidate": identity, "providers": providers}
 
 
 def _archive_source(
@@ -192,6 +201,7 @@ def find_paper_evidence(
     commit: str,
     token: str,
     checkout_root: Path,
+    candidate_artifacts: dict[str, dict[str, str]],
     fetcher: Callable[[str, str], dict[str, Any]] = fetch_json,
     downloader: Callable[[str, str], bytes] = fetch_bytes,
     contract_matcher: Callable[..., bool] = provider_contract_matches,
@@ -205,7 +215,6 @@ def find_paper_evidence(
     )
     runs_url = f"{GITHUB_API}/repos/{repository}/actions/workflows/paper.yml/runs?{query}"
     runs = fetcher(runs_url, token).get("workflow_runs", [])
-    candidate_evidence: dict[str, Any] | None = None
     provider_evidence: dict[str, dict[str, Any]] = {}
     for run in sorted(runs, key=lambda item: item.get("created_at", ""), reverse=True):
         evidence_commit = run.get("head_sha")
@@ -238,20 +247,10 @@ def find_paper_evidence(
             zipfile.BadZipFile,
         ):
             continue
-        identity = archive["candidate"]
-        if evidence_commit == commit and candidate_evidence is None:
-            candidate_evidence = {
-                "run_id": run["id"],
-                "run_url": run.get("html_url"),
-                "created_at": run["created_at"],
-                "artifact": evidence_name,
-                "qualification_run_id": identity["qualification_run_id"],
-                "wheel_sha256": identity["wheel_sha256"],
-                "sdist_sha256": identity["sdist_sha256"],
-            }
-        for provider, report in archive["soaks"].items():
+        for provider, reports in archive["providers"].items():
             if provider in provider_evidence:
                 continue
+            report = reports["soak"]
             if contract_matcher(
                 provider,
                 evidence_commit=evidence_commit,
@@ -266,26 +265,43 @@ def find_paper_evidence(
                     "completed_at": report["completed_at"],
                     "artifact": evidence_name,
                 }
-    if candidate_evidence is None or set(provider_evidence) != {"alpaca", "ib", "okx"}:
+    if set(provider_evidence) != {"alpaca", "ib", "okx"}:
         return None
-    return {**candidate_evidence, "providers": provider_evidence}
+    return {
+        "commit": commit,
+        "wheel_sha256": candidate_artifacts["wheel"]["sha256"],
+        "sdist_sha256": candidate_artifacts["sdist"]["sha256"],
+        "providers": provider_evidence,
+    }
+
+
+def write_github_output(path: Path, evidence: dict[str, Any] | None) -> None:
+    """Write release artifact hashes only after every provider has valid evidence."""
+    if evidence is None:
+        return
+    with path.open("a") as output:
+        output.write(f"wheel_sha256={evidence['wheel_sha256']}\n")
+        output.write(f"sdist_sha256={evidence['sdist_sha256']}\n")
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--repository", required=True)
     parser.add_argument("--commit", required=True)
+    parser.add_argument("--artifacts-dir", type=Path, required=True)
     parser.add_argument("--output")
     parser.add_argument("--github-output", type=Path)
     args = parser.parse_args()
     token = os.environ.get("GITHUB_TOKEN", "")
     if not token:
         raise RuntimeError("GITHUB_TOKEN is required to read workflow evidence")
+    _, candidate_artifacts = artifact_identity(args.artifacts_dir)
     evidence = find_paper_evidence(
         repository=args.repository,
         commit=args.commit,
         token=token,
         checkout_root=REPOSITORY_ROOT,
+        candidate_artifacts=candidate_artifacts,
     )
     report = {
         "schema_version": 1,
@@ -298,17 +314,16 @@ def main() -> int:
         output = Path(args.output)
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
-    if args.github_output and evidence:
-        with args.github_output.open("a") as output:
-            output.write(f"wheel_sha256={evidence['wheel_sha256']}\n")
-            output.write(f"sdist_sha256={evidence['sdist_sha256']}\n")
+    if args.github_output:
+        write_github_output(args.github_output, evidence)
     print(f"paper evidence: {'PASS' if evidence else 'FAIL'} for commit {args.commit}")
     if evidence:
-        print(
-            f"run_id={evidence['run_id']} created_at={evidence['created_at']} "
-            f"wheel_sha256={evidence['wheel_sha256']} "
-            f"sdist_sha256={evidence['sdist_sha256']}"
-        )
+        print(f"wheel_sha256={evidence['wheel_sha256']} sdist_sha256={evidence['sdist_sha256']}")
+        for provider, source in evidence["providers"].items():
+            print(
+                f"provider={provider} run_id={source['run_id']} "
+                f"commit={source['commit']} completed_at={source['completed_at']}"
+            )
     return int(evidence is None)
 
 
