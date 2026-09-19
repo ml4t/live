@@ -467,7 +467,7 @@ def validate_workflows(root: Path = WORKFLOW_ROOT) -> list[str]:
         failures.append("CI does not call the reusable qualification workflow")
     if ci_qualification.get("with") != {
         "candidate-sha": "${{ github.event.pull_request.head.sha || github.sha }}",
-        "candidate-version": "0.1.1",
+        "candidate-version": "0.1.2",
     }:
         failures.append("CI does not bind the reusable qualification candidate")
 
