@@ -48,7 +48,7 @@ EXPECTED_KEYWORDS = {
     "risk-management",
 }
 EXPECTED_URLS = {
-    "Homepage": "https://www.ml4trading.io/docs/live/",
+    "Homepage": "https://www.ml4trading.io/",
     "Documentation": "https://www.ml4trading.io/docs/live/",
     "Repository": "https://github.com/ml4t/live",
     "Issues": "https://github.com/ml4t/live/issues",

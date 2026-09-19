@@ -45,7 +45,7 @@ dependencies = [
 ml4t-live = "ml4t.live.cli.main:app"
 
 [project.urls]
-Homepage = "https://www.ml4trading.io/docs/live/"
+Homepage = "https://www.ml4trading.io/"
 Documentation = "https://www.ml4trading.io/docs/live/"
 Repository = "https://github.com/ml4t/live"
 Issues = "https://github.com/ml4t/live/issues"
