@@ -98,11 +98,20 @@ shared lifecycle and canonical intent contracts. See the
 git clone https://github.com/ml4t/live.git
 cd live
 uv sync --all-extras --dev --locked
+
+uv run ruff check --no-fix src tests
+uv run ruff format --check src tests
+uv run ty check
+uv run pytest
+```
+
+Run the repository's full release qualification before preparing a release:
+
+```bash
 uv run python scripts/qualification/run_stable_gate.py
 ```
 
-The full gate runs lint, formatting, type checking, tests, coverage, stress and performance checks,
-strict documentation, package builds, clean artifact installs, and security qualification.
+The qualification script is the authoritative definition of the full release gate.
 
 Report defects through the [issue tracker](https://github.com/ml4t/live/issues). Report suspected
 vulnerabilities through [private vulnerability reporting](https://github.com/ml4t/live/security/advisories/new),
