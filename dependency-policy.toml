@@ -59,18 +59,18 @@ license = "BSD-3-Clause"
 support = "active upstream; exact pre-1.0 transport API"
 
 [dependencies.ccxt]
-requirement = "ccxt>=4.5.31,<=4.5.74"
+requirement = "ccxt>=4.5.31,<=4.5.78"
 minimum = "ccxt==4.5.31"
-locked = "ccxt==4.5.74"
-maximum = "ccxt==4.5.74"
+locked = "ccxt==4.5.78"
+maximum = "ccxt==4.5.78"
 license = "MIT"
 support = "active upstream; accepted patch interval is exercised at both endpoints"
 
 [dependencies.databento]
-requirement = "databento==0.84.0"
-minimum = "databento==0.84.0"
-locked = "databento==0.84.0"
-maximum = "databento==0.84.0"
+requirement = "databento==0.86.0"
+minimum = "databento==0.86.0"
+locked = "databento==0.86.0"
+maximum = "databento==0.86.0"
 license = "Apache-2.0"
 support = "experimental optional adapter; exact SDK version"
 matrix = false
