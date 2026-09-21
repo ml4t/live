@@ -38,6 +38,13 @@ shutdown.
   behavior as part of the shipped contract.
 - Treat documentation, examples, and deterministic provider-contract tests as release surfaces.
 
+## Guide maintenance
+
+Update this guide when the public runtime surface, provider ownership, safety contract,
+documentation path, or quality command changes. Keep provider credentials, current qualification
+runs, issue state, and private operating notes in their designated systems rather than this public
+guide.
+
 ## Quality commands
 
 ```bash
