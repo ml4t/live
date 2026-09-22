@@ -659,6 +659,8 @@ class IBBroker:
         else:
             raise ValueError(f"Unsupported order type: {order_type}")
 
+        # Send a concrete TIF so TWS presets cannot change it after submission.
+        order.tif = "DAY"
         # Honor the caller's extended-hours intent (no-op before this was set).
         order.outsideRth = outside_rth
         return order
