@@ -85,7 +85,7 @@ ib_async = "ib-async"
 "ml4t.specs" = "ml4t-specs"
 
 [build-dependencies.hatchling]
-requirement = "hatchling==1.32.0"
+requirement = "hatchling==1.32.3"
 license = "MIT"
 support = "active upstream; exact isolated-build backend"
 
