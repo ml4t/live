@@ -835,7 +835,7 @@ wheels = [
 
 [[package]]
 name = "hatchling"
-version = "1.32.0"
+version = "1.32.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "packaging" },
@@ -844,9 +844,9 @@ dependencies = [
     { name = "tomlkit" },
     { name = "trove-classifiers" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/69/08/33331757185504aae48b8d9bd78cec03a76e3aecfb52e549d05a2347c0dd/hatchling-1.32.0.tar.gz", hash = "sha256:0bdbde4a52b06c37e3eca395f85a762bf0ef06fe374fd8ae429dc6be10230f5f", size = 57783, upload-time = "2026-08-11T05:03:44.114Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/62/7f/b20bd29978bec1f2ddd3bbc1cdc5829bb2dd5c1476facd8a84bfe9934c5e/hatchling-1.32.3.tar.gz", hash = "sha256:acdd4436d84d829c6e7ae6df723241d8f0bca9c5bad5a6148bd41f2ea6b8a792", size = 58154, upload-time = "2026-09-17T20:05:11.675Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/a9/84/1798b6d85ecde0e31546004efd25c5de1b1f49250644a60cce460e12593a/hatchling-1.32.0-py3-none-any.whl", hash = "sha256:0e17c9c3b9aa7c625acc8d0f5b622f107d5049af9ecf5ada4de1aada5be7cdbc", size = 78435, upload-time = "2026-08-11T05:03:42.644Z" },
+    { url = "https://files.pythonhosted.org/packages/f6/89/268c7e4b2bcf2071047366c4c3b4b0e89f640e13ea7bfdaf1df6c40e5140/hatchling-1.32.3-py3-none-any.whl", hash = "sha256:d05b350af5d9aa5bf7b34b434a45a742b99e67d0b48ea67d240cfeab98e13945", size = 78895, upload-time = "2026-09-17T20:05:10.38Z" },
 ]
 
 [[package]]
@@ -1335,7 +1335,7 @@ provides-extras = ["dev", "docs", "experimental"]
 [package.metadata.requires-dev]
 build = [
     { name = "hatch-vcs", specifier = "==0.5.0" },
-    { name = "hatchling", specifier = "==1.32.0" },
+    { name = "hatchling", specifier = "==1.32.3" },
 ]
 dev = [
     { name = "databento", marker = "python_full_version < '3.15'", specifier = ">=0.38.0" },
@@ -2609,14 +2609,14 @@ wheels = [
 
 [[package]]
 name = "vcs-versioning"
-version = "2.3.4"
+version = "2.4.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "packaging" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/a0/00/c883501b0c55b7d0ec33e67813e9a38563ea84bfecebce9b3347fa52d845/vcs_versioning-2.3.4.tar.gz", hash = "sha256:f3443da15a34a32755b04324e33c6166add300c7661f45902225190c9337f711", size = 149647, upload-time = "2026-09-03T13:04:31.205Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/3e/97/792a4ef20344f9af3e16098b58b45eb5d6202259b84fc80c43bc000a5e6c/vcs_versioning-2.4.1.tar.gz", hash = "sha256:d4575de3115ec9434393c87c80ffb0eb98a16056bfe2b11ce0f3a97aff67fe0a", size = 164222, upload-time = "2026-09-16T07:47:40.267Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/a0/30/cbf2883ee604dc83ff510516ae05e93b17bfcb4d18279ae12905e13f49da/vcs_versioning-2.3.4-py3-none-any.whl", hash = "sha256:076afa0e12a42a23faba92bcb62cb016c1ce38051ceee1f302de1e2676a68bbc", size = 115414, upload-time = "2026-09-03T13:04:29.925Z" },
+    { url = "https://files.pythonhosted.org/packages/d7/20/29378edc8d7d2ce41892adc1356f4c6c6ae03b945d04ca6ade61afa3d5dc/vcs_versioning-2.4.1-py3-none-any.whl", hash = "sha256:b7089ec9bef67b2cad82148366e8eac4d63173f440ec62628282b59eb96bbcb0", size = 122157, upload-time = "2026-09-16T07:47:38.811Z" },
 ]
 
 [[package]]
