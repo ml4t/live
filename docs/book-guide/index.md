@@ -7,8 +7,8 @@ Each file below was checked in that Git tree. "Calls Live" means its code import
 "manual" means it teaches a method without that import; "related" means another workflow informs
 Live decisions. A matching topic alone does not mean a notebook runs this library.
 
-The Alpaca and IB feed notebooks use an experimental opt-in data source. Their broker adapters
-have a separate stable paper contract.
+The Alpaca and IB notebooks use experimental feeds. Their broker adapters have a separate stable
+paper contract.
 
 ## Run and control a Live strategy
 
