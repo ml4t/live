@@ -126,6 +126,7 @@ EXTERNAL_EXAMPLES = frozenset(
         "ib_paper_equity.py",
         "live_ib_example.py",
         "okx_funding_paper.py",
+        "okx_shadow_strategy.py",
     }
 )
 
@@ -234,7 +235,10 @@ def check_public_claims(root: Path = REPOSITORY_ROOT) -> list[str]:
         for heading in ("Prerequisites:", "Expected Output:", "Expected Failure:", "Cleanup:"):
             if heading not in text:
                 failures.append(f"external example {name} does not state: {heading}")
-        if name != "okx_funding_paper.py" and "paper" not in text.casefold():
+        if (
+            name not in {"okx_funding_paper.py", "okx_shadow_strategy.py"}
+            and "paper" not in text.casefold()
+        ):
             failures.append(f"external broker example {name} does not identify a paper account")
     return failures
 
