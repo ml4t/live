@@ -1,88 +1,85 @@
 # Book Guide
 
-This guide maps `ml4t-live` to **Machine Learning for Trading, Third Edition** so you can move between
-the library docs and the book materials without guessing which notebook or chapter matters.
+The public companion files for *Machine Learning for Trading, Third Edition* show the methods and
+operating decisions behind Live workflows. These links point to commit
+[`d2edec54b1c7a6a9d7a97d8129eb05db4491e1eb`](https://github.com/stefan-jansen/machine-learning-for-trading/tree/d2edec54b1c7a6a9d7a97d8129eb05db4491e1eb).
+Each file below was checked in that Git tree. "Calls Live" means its code imports `ml4t.live`;
+"manual" means it teaches a method without that import; "related" means another workflow informs
+Live decisions. A matching topic alone does not mean a notebook runs this library.
 
-## How To Use This Guide
+The Alpaca and IB feed notebooks use an experimental opt-in data source. Their broker adapters
+have a separate stable paper contract.
 
-- Start with the chapter map if you are reading the book.
-- Start with the API map if you are coming from the library and want the matching notebook.
-- Treat the listed code paths as the canonical references in the `ml4t/code` repository.
+## Run and control a Live strategy
 
-## Chapter To Feature Map
+- [Unified framework demo][unified] calls Live and Backtest to compare lifecycle traces and
+  portable strategy decisions. Follow [Backtest to Live](../user-guide/backtest-to-live.md).
+- [IB paper trading demo][ib-paper] calls Live with an IB paper broker and experimental IB feed. It
+  requires TWS or IB Gateway. Follow [Brokers](../user-guide/brokers.md).
+- [Alpaca paper trading demo][alpaca-paper] calls Live with Alpaca paper execution and an
+  experimental Alpaca feed. It requires credentials. Follow [Brokers](../user-guide/brokers.md).
+- [Alpaca crypto live demo][alpaca-crypto] calls Live for a crypto venue workflow. Review its live
+  order prerequisites before attempting it. Follow [Brokers](../user-guide/brokers.md).
+- [Pipeline verification][pipeline] calls Live to compare research and deployment inputs and
+  decisions. Follow [Backtest to Live](../user-guide/backtest-to-live.md).
+- [Safety and risk demo][safety] calls Live to exercise `SafeBroker` and shadow risk behavior.
+  Follow [Risk Controls](../user-guide/risk.md).
+- [Runtime safety showcase][runtime-safety] calls Live to show stale-data rejection, persistent
+  kill switch, reconciliation, and engine health. Follow the [Operator Guide](../user-guide/operator-guide.md).
+- [Crypto funding deployment loop][funding-loop] calls `AlpacaBroker` only in its
+  operator-authorized paper path. It uses OKX public data for a separate execution rehearsal.
+  Follow [Data Feeds](../user-guide/feeds.md).
 
-| Book material | What it teaches | `ml4t-live` connection |
-| --- | --- | --- |
-| Chapter 16 strategy simulation | event-driven strategies and parity-friendly design | the strategy surface you carry into `LiveEngine` |
-| Chapter 18 costs | execution frictions and turnover budgets | the live costs you compare against post-deployment |
-| Chapter 19 risk management | kill switches, drawdowns, limits | `LiveRiskConfig`, `SafeBroker`, staged rollout |
-| Chapter 25 live trading systems | brokers, feeds, operational parity, deployment | the core `ml4t-live` library surface |
-| Chapter 26 MLOps governance | shadow mode, challenger rollout, circuit breakers | operational procedures around `ml4t-live` |
+The crypto funding loop trains on Binance-derived perpetual data, observes OKX funding and bars,
+and maps a subset to Alpaca USD spot crypto for paper execution. The venues and instruments differ;
+its paper orders do not reproduce a perpetual-futures backtest. The notebook needs its case-study
+artifacts and outbound data access, and paper submission needs credentials and explicit operator
+opt-in. The [synthetic shadow quickstart](../getting-started/quickstart.md) is the local first run.
 
-## Notebook And Script Map
+## Learn the methods before deployment
 
-| Book path | Why it matters here |
-| --- | --- |
-| `code/16_strategy_simulation/06_framework_parity.py` | shows why keeping one strategy interface matters before live deployment |
-| `code/25_live_trading/01_unified_framework_demo.py` | compares lifecycle traces, canonical intents, and signals across the two engines |
-| `code/25_live_trading/03_ib_paper_trading_demo.py` | Interactive Brokers connectivity path |
-| `code/25_live_trading/04_alpaca_paper_trading_demo.py` | Alpaca paper-trading path |
-| `code/25_live_trading/05_alpaca_crypto_live_demo.py` | Alpaca crypto workflow |
-| `code/25_live_trading/08_pipeline_verification.py` | parity checks between research and live workflows |
-| `code/25_live_trading/09_crypto_funding_deployment_loop.py` | OKX funding-rate deployment loop |
-| `code/25_live_trading/10_safety_risk_demo.py` | `SafeBroker` limits, shadow mode, and kill-switch behavior |
-| `code/26_mlops_governance/03_safe_model_rollout.py` | shadow-mode and staged-promotion procedures around live deployment |
-| `code/26_mlops_governance/04_circuit_breakers.py` | broader operational safety concepts that complement `SafeBroker` |
+- [Framework parity][parity] is a related Backtest workflow that compares strategy behavior before
+  a Live port. It does not import Live. Follow [Backtest to Live](../user-guide/backtest-to-live.md).
+- [Safe model rollout][rollout] teaches staged promotion and shadow evaluation manually. It does
+  not import Live. Follow the [Operator Guide](../user-guide/operator-guide.md).
+- [Circuit breakers][circuit] teaches operational safety manually. It does not implement
+  `SafeBroker`. Follow [Risk Controls](../user-guide/risk.md).
+- [Crypto financial features][features] is a related feature workflow using Engineer. It does not
+  import Live. Follow [Backtest to Live](../user-guide/backtest-to-live.md).
+- [Crypto backtest][crypto-backtest] simulates funding-aligned decisions manually. It does not
+  import Live. Follow [Backtest to Live](../user-guide/backtest-to-live.md).
+- [Crypto risk management][crypto-risk] studies sizing and risk manually. It does not import Live.
+  Follow [Risk Controls](../user-guide/risk.md).
 
-## Case Study Link: Crypto Perpetuals Funding
+The case-study files use research data, model artifacts, and their own simulation assumptions.
+`LiveEngine` needs a feed, venue capability check, broker account state, and explicit `LiveRiskConfig`.
+Do not treat a research result as a qualified paper or live run.
 
-The clearest live-trading case-study bridge in the current book materials is the crypto perpetuals
-workflow:
+## Find the public interface
 
-| Case-study path | Library relevance |
-| --- | --- |
-| `code/case_studies/crypto_perps_funding/03_financial_features.py` | feature definitions that must stay consistent in live inference |
-| `code/case_studies/crypto_perps_funding/14_backtest.py` | the validated backtest side of the strategy |
-| `code/case_studies/crypto_perps_funding/17_risk_management.py` | portfolio and risk assumptions before deployment |
-| `code/25_live_trading/okx_funding_rate_demo.py` | the live-style deployment bridge using exchange funding data |
+- Run lifecycle callbacks with `LiveEngine` and `ThreadSafeBrokerWrapper`:
+  [Backtest to Live](../user-guide/backtest-to-live.md).
+- Limit and audit orders with `LiveRiskConfig`, `SafeBroker`, `RiskState`, and `VirtualPortfolio`:
+  [Risk Controls](../user-guide/risk.md).
+- Connect `IBBroker` or `AlpacaBroker`: [Brokers](../user-guide/brokers.md).
+- Choose `OKXFundingFeed`, `BarAggregator`, or an experimental provider feed:
+  [Data Feeds](../user-guide/feeds.md).
+- Inspect or restart with `LiveEngine.runtime_status` and `SafeBroker.reconciliation_report`:
+  [Operator Guide](../user-guide/operator-guide.md).
 
-## From Book Concepts To Library APIs
+See the [API Reference](../api/index.md) for exact signatures and options.
 
-| Book concept | Library API |
-| --- | --- |
-| portable decision logic | `LiveEngine` plus a lifecycle-v1 `Strategy` subclass using supported broker operations |
-| sync strategy calling async infrastructure | `ThreadSafeBrokerWrapper` |
-| explicit deployment risk policy | `LiveRiskConfig` |
-| pre-trade enforcement and kill switch | `SafeBroker` |
-| paper-like live validation without routing orders | `execution_mode="shadow"` with `VirtualPortfolio` |
-| broker-specific execution path | `IBBroker` or `AlpacaBroker` |
-| stable-supported live data source | `OKXFundingFeed` |
-| experimental opt-in data source | `AlpacaDataFeed`, `IBDataFeed`, `DataBentoFeed`, `CryptoFeed` |
-
-## What The Book Often Shows Manually
-
-The notebooks are pedagogical and frequently expose mechanics directly. The library turns those same
-ideas into reusable interfaces:
-
-- notebook orchestration becomes `LiveEngine`
-- ad hoc risk checks become `SafeBroker`
-- replay/live feed adapters become `DataFeedProtocol` implementations
-- deployment-stage bookkeeping becomes `RiskState` and `VirtualPortfolio`
-
-## Best Reading Path
-
-If you are learning the stack end to end, the most efficient route is:
-
-1. `code/16_strategy_simulation/06_framework_parity.py`
-2. [Backtest to Live](../user-guide/backtest-to-live.md)
-3. `code/25_live_trading/01_unified_framework_demo.py`
-4. the broker page that matches your venue
-5. `code/25_live_trading/10_safety_risk_demo.py`
-6. [Risk Controls](../user-guide/risk.md)
-
-## Related Docs
-
-- [Home](../index.md)
-- [Quickstart](../getting-started/quickstart.md)
-- [Backtest to Live](../user-guide/backtest-to-live.md)
-- [API Reference](../api/index.md)
+[unified]: https://github.com/stefan-jansen/machine-learning-for-trading/blob/d2edec54b1c7a6a9d7a97d8129eb05db4491e1eb/25_live_trading/01_unified_framework_demo.ipynb
+[ib-paper]: https://github.com/stefan-jansen/machine-learning-for-trading/blob/d2edec54b1c7a6a9d7a97d8129eb05db4491e1eb/25_live_trading/03_ib_paper_trading_demo.ipynb
+[alpaca-paper]: https://github.com/stefan-jansen/machine-learning-for-trading/blob/d2edec54b1c7a6a9d7a97d8129eb05db4491e1eb/25_live_trading/04_alpaca_paper_trading_demo.ipynb
+[alpaca-crypto]: https://github.com/stefan-jansen/machine-learning-for-trading/blob/d2edec54b1c7a6a9d7a97d8129eb05db4491e1eb/25_live_trading/05_alpaca_crypto_live_demo.ipynb
+[pipeline]: https://github.com/stefan-jansen/machine-learning-for-trading/blob/d2edec54b1c7a6a9d7a97d8129eb05db4491e1eb/25_live_trading/08_pipeline_verification.ipynb
+[safety]: https://github.com/stefan-jansen/machine-learning-for-trading/blob/d2edec54b1c7a6a9d7a97d8129eb05db4491e1eb/25_live_trading/10_safety_risk_demo.ipynb
+[runtime-safety]: https://github.com/stefan-jansen/machine-learning-for-trading/blob/d2edec54b1c7a6a9d7a97d8129eb05db4491e1eb/25_live_trading/13_runtime_safety_showcase.ipynb
+[funding-loop]: https://github.com/stefan-jansen/machine-learning-for-trading/blob/d2edec54b1c7a6a9d7a97d8129eb05db4491e1eb/25_live_trading/09_crypto_funding_deployment_loop.ipynb
+[parity]: https://github.com/stefan-jansen/machine-learning-for-trading/blob/d2edec54b1c7a6a9d7a97d8129eb05db4491e1eb/16_strategy_simulation/06_framework_parity.ipynb
+[rollout]: https://github.com/stefan-jansen/machine-learning-for-trading/blob/d2edec54b1c7a6a9d7a97d8129eb05db4491e1eb/26_mlops_governance/03_safe_model_rollout.ipynb
+[circuit]: https://github.com/stefan-jansen/machine-learning-for-trading/blob/d2edec54b1c7a6a9d7a97d8129eb05db4491e1eb/26_mlops_governance/04_circuit_breakers.ipynb
+[features]: https://github.com/stefan-jansen/machine-learning-for-trading/blob/d2edec54b1c7a6a9d7a97d8129eb05db4491e1eb/case_studies/crypto_perps_funding/03_financial_features.ipynb
+[crypto-backtest]: https://github.com/stefan-jansen/machine-learning-for-trading/blob/d2edec54b1c7a6a9d7a97d8129eb05db4491e1eb/case_studies/crypto_perps_funding/13_backtest.ipynb
+[crypto-risk]: https://github.com/stefan-jansen/machine-learning-for-trading/blob/d2edec54b1c7a6a9d7a97d8129eb05db4491e1eb/case_studies/crypto_perps_funding/15_risk_management.ipynb

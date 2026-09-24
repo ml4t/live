@@ -98,6 +98,8 @@ class SyntheticBarFeed:
     def __init__(self, duration_seconds: int) -> None:
         self.duration_seconds = duration_seconds
         self._running = False
+        self.completed = asyncio.Event()
+        self._stopped = asyncio.Event()
         self._index = 0
         self._started_at = datetime.now(UTC).replace(microsecond=0)
 
@@ -106,12 +108,17 @@ class SyntheticBarFeed:
 
     def stop(self) -> None:
         self._running = False
+        self._stopped.set()
 
     def __aiter__(self) -> AsyncIterator[tuple[datetime, dict, dict]]:
         return self
 
     async def __anext__(self) -> tuple[datetime, dict, dict]:
-        if not self._running or self._index >= self.duration_seconds:
+        if not self._running:
+            raise StopAsyncIteration
+        if self._index >= self.duration_seconds:
+            self.completed.set()
+            await self._stopped.wait()
             raise StopAsyncIteration
 
         timestamp = self._started_at + timedelta(seconds=self._index)
@@ -212,19 +219,24 @@ async def main() -> int:
                 state_file=str(state_file),
             ),
         )
-        engine = LiveEngine(
-            ShadowMomentumStrategy(), safe_broker, SyntheticBarFeed(DURATION_SECONDS)
-        )
+        feed = SyntheticBarFeed(DURATION_SECONDS)
+        engine = LiveEngine(ShadowMomentumStrategy(), safe_broker, feed)
 
         print("Starting shadow mode demo with a synthetic feed.")
         await engine.connect()
         heartbeat_task = asyncio.create_task(heartbeat(safe_broker))
 
+        async def stop_after_final_bar() -> None:
+            await feed.completed.wait()
+            await engine.stop()
+
+        stop_task = asyncio.create_task(stop_after_final_bar())
         try:
             await engine.run()
         finally:
             heartbeat_task.cancel()
-            await asyncio.gather(heartbeat_task, return_exceptions=True)
+            stop_task.cancel()
+            await asyncio.gather(heartbeat_task, stop_task, return_exceptions=True)
             await engine.stop()
 
         positions = safe_broker.positions

@@ -219,3 +219,20 @@ except RiskLimitError as exc:
 5. Increase size only after repeated clean starts and expected fills.
 
 For the broader chapter map, use the [Book Guide](../book-guide/index.md).
+
+## Book examples
+
+The [safety and risk notebook](https://github.com/stefan-jansen/machine-learning-for-trading/blob/d2edec54b1c7a6a9d7a97d8129eb05db4491e1eb/25_live_trading/10_safety_risk_demo.ipynb)
+calls `SafeBroker` to show shadow limits. The
+[runtime safety notebook](https://github.com/stefan-jansen/machine-learning-for-trading/blob/d2edec54b1c7a6a9d7a97d8129eb05db4491e1eb/25_live_trading/13_runtime_safety_showcase.ipynb)
+calls Live to show persistence and restart reconciliation. The
+[circuit-breaker notebook](https://github.com/stefan-jansen/machine-learning-for-trading/blob/d2edec54b1c7a6a9d7a97d8129eb05db4491e1eb/26_mlops_governance/04_circuit_breakers.ipynb)
+teaches broader controls manually; it does not call Live.
+
+## Verify the controls locally
+
+Run `uv run python examples/risk_guard_demo.py`. The script submits one order with fresh synthetic
+data, rejects a stale-data order, and activates the daily-loss kill switch without reaching a
+provider. Confirm the output includes `fresh_data_order: accepted`, `stale_data_block:`, and
+`kill_switch_active: True`. This checks the control path, not broker execution. See
+[`LiveRiskConfig` and `SafeBroker`](../api/index.md#safety-and-rollout) for exact options.

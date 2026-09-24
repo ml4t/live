@@ -13,6 +13,8 @@ session, prints progress every five seconds, and exits after about a minute.
 
 `risk_guard_demo.py` demonstrates two runtime guards without a real broker: stale-data rejection and daily-loss kill-switch activation. It accepts one fresh-data shadow order, blocks one stale-data order, then shows the kill switch activating after a simulated equity drop.
 
+`okx_shadow_strategy.py` is a strategy module for `ml4t-live shadow`. It prints completed OKX bars without submitting orders. The CLI uses its `SYMBOLS` list and needs outbound HTTPS but no credentials.
+
 `okx_funding_paper.py` uses the public OKX REST API to poll BTC, ETH, and SOL perpetual swaps on 1-minute candles. It needs only outbound HTTPS access to `okx.com`, prints funding snapshots and simple long/short bias labels, and exits after about 70 seconds.
 
 `alpaca_paper_equity.py` connects to Alpaca paper trading for SPY, QQQ, and IWM with a tiny moving-average crossover strategy. It requires `ALPACA_API_KEY` and `ALPACA_SECRET_KEY`, uses paper-only endpoints, prints heartbeats every five seconds, and exits after about 95 seconds.

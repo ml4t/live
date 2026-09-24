@@ -4,8 +4,7 @@ Run a lifecycle-v1 `Strategy` against real brokers and live market data, with `S
 controls layered on top.
 
 `ml4t-live` is the deployment layer in the ML4T stack. It sits after research and backtesting, where
-the main problem is no longer "does this idea work?" but "can I run it safely against a broker without
-preserving its portable decisions and controlling operational risk?" The library is built for staged rollout:
+the task is to preserve portable strategy decisions while controlling broker and operational risk. The library is built for staged rollout:
 shadow mode first, then paper trading, then small live size under explicit limits.
 
 <div class="grid cards" markdown>
@@ -43,6 +42,14 @@ shadow mode first, then paper trading, then small live size under explicit limit
     [:octicons-arrow-right-24: Book Guide](book-guide/index.md)
 
 </div>
+
+## Start with a completed run
+
+The [Quickstart](getting-started/quickstart.md) runs `LiveEngine` against synthetic bars with
+`SafeBroker(execution_mode="shadow")`. It prints strategy prices, virtual positions, and a final
+completion line without credentials or venue orders. Then use the
+[task guides](user-guide/examples.md), [exact API reference](api/index.md), and
+[checked book examples](book-guide/index.md) for your next task.
 
 ## What You Can Do With It Right Now
 

@@ -70,7 +70,7 @@ export IB_CLIENT_ID=1999
 `SafeBroker(execution_mode="shadow")`, and runs a bounded live-engine session.
 
 ```bash
-uv run ml4t-live shadow examples/shadow_mode_demo.py --feed okx --duration 60
+uv run ml4t-live shadow examples/okx_shadow_strategy.py --feed okx --duration 60
 ```
 
 Supported flags:

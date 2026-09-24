@@ -31,7 +31,7 @@ def test_external_examples_document_safe_operation() -> None:
         text = (ROOT / "examples" / name).read_text()
         for heading in ("Prerequisites:", "Expected Output:", "Expected Failure:", "Cleanup:"):
             assert heading in text
-        if name != "okx_funding_paper.py":
+        if name not in {"okx_funding_paper.py", "okx_shadow_strategy.py"}:
             assert "paper" in text.casefold()
 
 

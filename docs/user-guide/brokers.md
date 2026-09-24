@@ -145,3 +145,19 @@ except RiskLimitError as exc:
 
 For the surrounding migration story, read [Backtest to Live](backtest-to-live.md) and the
 [Book Guide](../book-guide/index.md).
+
+## Book examples
+
+The [IB paper notebook](https://github.com/stefan-jansen/machine-learning-for-trading/blob/d2edec54b1c7a6a9d7a97d8129eb05db4491e1eb/25_live_trading/03_ib_paper_trading_demo.ipynb)
+and [Alpaca paper notebook](https://github.com/stefan-jansen/machine-learning-for-trading/blob/d2edec54b1c7a6a9d7a97d8129eb05db4491e1eb/25_live_trading/04_alpaca_paper_trading_demo.ipynb)
+call the respective Live adapters. They require configured paper accounts; the market-data feeds in
+those notebooks are experimental. Follow the [credential-free quickstart](../getting-started/quickstart.md)
+before connecting either provider.
+
+## Verify a paper connection safely
+
+With a configured paper account, run the [CLI preflight](cli.md#preflight) for `ib` or `alpaca`
+with `--strict`. Confirm that connectivity, account state, execution identity, and reconciliation
+are clean before starting a strategy. Preflight reads broker state and sends no orders. Paper order
+lifecycle behavior still requires a separately authorized provider qualification. The
+[API reference](../api/index.md#brokers) lists adapter signatures.

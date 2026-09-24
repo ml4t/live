@@ -216,3 +216,19 @@ the engine watchdog can stop and restart the broker/feed pair after `feed_silent
 - Use `OKXFundingFeed` for perpetual-swap strategies that depend on funding-rate context.
 - Use `BarAggregator` when your upstream feed is tick-oriented but your strategy expects bars.
 - Pass `experimental=True` only after accepting the limitations reported by an experimental feed.
+
+## Book example
+
+The [crypto funding deployment notebook](https://github.com/stefan-jansen/machine-learning-for-trading/blob/d2edec54b1c7a6a9d7a97d8129eb05db4491e1eb/25_live_trading/09_crypto_funding_deployment_loop.ipynb)
+uses public OKX data and conditionally calls Live's `AlpacaBroker` for paper execution. It is a
+research-to-deployment case study with different data and execution venues, not an example of
+`OKXFundingFeed` itself. Use the [CLI shadow guide](cli.md#shadow) for the feed's public API path.
+
+## Verify a feed safely
+
+For the stable OKX feed, run `uv run ml4t-live shadow examples/okx_shadow_strategy.py --feed okx
+--duration 60` with outbound HTTPS available. Observe `last_bar_age`, `health`, and any
+`recent_intents`; no venue order is routed. Public data can be quiet or unavailable, so a bounded
+run does not prove feed continuity or paper readiness. For Alpaca, IB, DataBento, and generic CCXT,
+constructors and deterministic adapter tests check only the typed contract. Their service behavior
+needs separate provider qualification. See the [API reference](../api/index.md#data-feeds-and-aggregation).
