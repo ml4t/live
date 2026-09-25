@@ -44,6 +44,7 @@ await broker.connect()
 - `7496` is the usual TWS live port
 - `4002` and `4001` are the usual paper/live IB Gateway ports
 - TWS or IB Gateway must be running with API access enabled before you connect
+- Submitted orders use `DAY` time in force so TWS presets do not change their duration.
 
 ## Alpaca
 
