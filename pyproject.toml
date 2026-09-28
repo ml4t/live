@@ -38,7 +38,7 @@ dependencies = [
     "ib-async==2.1.0",
     "alpaca-py==0.44.0",
     "httpx==0.28.1",
-    "ccxt>=4.5.31,<=4.5.78",
+    "ccxt>=4.5.31,<=4.5.84",
 ]
 
 [project.scripts]
@@ -68,11 +68,11 @@ docs = [
     "mkdocstrings[python]>=0.24.0",
 ]
 experimental = [
-    "databento==0.86.0",
+    "databento==0.87.0",
 ]
 
 [build-system]
-requires = ["hatchling==1.32.0", "hatch-vcs==0.5.0"]
+requires = ["hatchling==1.32.4", "hatch-vcs==0.5.0"]
 build-backend = "hatchling.build"
 
 [tool.hatch.version]
@@ -100,7 +100,7 @@ exclude = ["**/AGENTS.md"]
 
 [dependency-groups]
 build = [
-    "hatchling==1.32.0",
+    "hatchling==1.32.4",
     "hatch-vcs==0.5.0",
 ]
 test = [
