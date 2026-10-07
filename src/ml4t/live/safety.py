@@ -839,6 +839,7 @@ class SafeBroker:
         # Rate limiting
         self._order_timestamps: list[float] = []
         self._order_operation_lock = asyncio.Lock()
+        self._shadow_order_sequence = 0
 
         # Duplicate detection
         self._recent_orders: list[tuple[float, str, float]] = []  # (time, asset, qty)
@@ -1130,7 +1131,7 @@ class SafeBroker:
                     side=request.side,
                     quantity=request.quantity,
                     order_type=OrderType.MARKET,
-                    order_id=f"SHADOW-REDUCE-{int(time.time() * 1_000_000)}",
+                    order_id=self._new_shadow_order_id("SHADOW-REDUCE"),
                     status=OrderStatus.FILLED,
                     filled_quantity=request.quantity,
                     filled_price=price,
@@ -1440,7 +1441,7 @@ class SafeBroker:
                 order_type=order_type,
                 limit_price=limit_price,
                 stop_price=stop_price,
-                order_id=f"SHADOW-{int(time.time() * 1000)}",
+                order_id=self._new_shadow_order_id("SHADOW"),
                 status=OrderStatus.FILLED,
                 filled_quantity=quantity,
                 filled_price=price,
@@ -1509,6 +1510,11 @@ class SafeBroker:
             ) from error
 
         return order
+
+    def _new_shadow_order_id(self, prefix: str) -> str:
+        """Return an id that stays unique even when several orders share one clock reading."""
+        self._shadow_order_sequence += 1
+        return f"{prefix}-{self._shadow_order_sequence}"
 
     def _commit_accepted_order(self, request: CanonicalOrderRequest) -> None:
         """Commit counters and histories only after an order is accepted."""

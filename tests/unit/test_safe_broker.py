@@ -786,6 +786,29 @@ def test_prune_history_removes_old_recent_orders(mock_broker, config):
 # === Submit Order Integration Tests ===
 
 
+async def test_shadow_order_ids_stay_unique_when_the_clock_does_not_advance(
+    mock_broker, config, monkeypatch
+):
+    """Millisecond shadow ids collide when two orders are accepted in the same tick."""
+    config.shadow_mode = True
+    config.execution_mode = "shadow"
+    config.dedup_window_seconds = 0
+    safe = SafeBroker(mock_broker, config)
+    monkeypatch.setattr("ml4t.live.safety.time.time", lambda: 1_700_000_000.0)
+    safe._record_market_data(
+        datetime.now(UTC),
+        {"AAPL": {"close": 150.0}, "MSFT": {"close": 300.0}},
+        {},
+    )
+
+    first = await safe.submit_order_async("AAPL", 1, OrderSide.BUY)
+    second = await safe.submit_order_async("MSFT", 1, OrderSide.BUY)
+
+    assert first.order_id != second.order_id
+    assert first.order_id.startswith("SHADOW-")
+    assert second.order_id.startswith("SHADOW-")
+
+
 async def test_submit_order_shadow_mode(mock_broker, config):
     """Test submit_order_async in shadow mode."""
     config.shadow_mode = True
