@@ -1528,6 +1528,21 @@ async def test_trade_update_faults_poison_the_snapshot(
 
 
 @pytest.mark.asyncio
+async def test_fill_event_does_not_invent_a_quantity():
+    """A fill with no reported size must not be rewritten into a full fill."""
+    broker = tracked_order_broker()
+    vendor_order = MockAlpacaOrder(id="venue-1", filled_qty="0")
+    vendor_order.filled_avg_price = "10"
+
+    await broker._on_trade_update(MockTradeUpdate("fill", vendor_order))
+
+    assert broker.is_connected is False
+    assert "incomplete or invalid" in str(broker._snapshot_error)
+    assert broker._pending_orders["ML4T-1"].status is OrderStatus.PENDING
+    assert broker._pending_orders["ML4T-1"].filled_quantity == 0
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("event", ["replaced", "done_for_day"])
 async def test_terminal_trade_updates_remove_all_tracking(event):
     broker = tracked_order_broker()
