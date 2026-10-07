@@ -216,6 +216,21 @@ class TestAlpacaBrokerSetup:
         assert broker.positions["AAPL"].current_price == 0.0
 
     @pytest.mark.asyncio
+    async def test_sync_positions_signs_short_holdings(self):
+        """Alpaca reports an unsigned qty plus a long/short side."""
+        client = MagicMock()
+        client.get_all_positions.return_value = [
+            MockAlpacaPosition("AAPL", "50", "160.00", side="short", current_price="155.00"),
+        ]
+        broker = AlpacaBroker(api_key="PKTEST", secret_key="SECRET")
+        broker._trading_client = client
+
+        await broker._sync_positions()
+
+        assert broker.positions["AAPL"].quantity == -50.0
+        assert broker.get_position("AAPL").quantity == -50.0
+
+    @pytest.mark.asyncio
     @patch("ml4t.live.brokers.alpaca.TradingClient")
     @patch("ml4t.live.brokers.alpaca.TradingStream")
     async def test_connect_syncs_pending_orders(self, mock_stream_class, mock_client_class):
