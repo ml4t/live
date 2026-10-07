@@ -125,8 +125,8 @@ class ThreadSafeBrokerWrapper:
             TimeoutError: If operation times out
             RuntimeError: If broker error occurs
         """
-        # Can use positions property since it returns a copy
-        return self.positions.get(asset)
+        # Position maps are keyed by the canonical uppercase symbol.
+        return self.positions.get(asset.upper())
 
     def get_positions(self) -> dict[str, Position]:
         """Get all current positions through the portable strategy facade."""
