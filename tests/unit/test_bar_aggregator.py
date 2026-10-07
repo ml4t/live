@@ -102,6 +102,29 @@ class TestBarAggregator:
 
         assert aggregator._truncate_to_bar(timestamp) == datetime(2024, 1, 1, 10, 35, tzinfo=UTC)
 
+    async def test_bar_windows_do_not_restart_at_the_hour(self) -> None:
+        """Sizes that do not divide 60 minutes must stay aligned across the hour."""
+        start = datetime(2024, 1, 1, 10, 30, tzinfo=UTC)
+        events = await collect(
+            BarAggregator(
+                MockDataFeed(
+                    [
+                        trade("AAPL", start, 100.0, 1),
+                        trade("AAPL", start + timedelta(minutes=59), 110.0, 1),
+                        trade("AAPL", start + timedelta(minutes=90), 120.0, 1),
+                    ]
+                ),
+                bar_size_minutes=90,
+            )
+        )
+
+        assert [event.event_time for event in events] == [
+            start,
+            start + timedelta(minutes=90),
+        ]
+        assert events[0].payload == BarPayload(100.0, 110.0, 100.0, 110.0, 2.0)
+        assert events[1].payload == BarPayload(120.0, 120.0, 120.0, 120.0, 1.0)
+
     async def test_boundary_and_shutdown_emit_exact_completed_bars(self) -> None:
         start = datetime(2024, 1, 1, 10, tzinfo=UTC)
         events = await collect(
