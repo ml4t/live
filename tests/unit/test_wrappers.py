@@ -269,6 +269,7 @@ async def test_get_position():
     assert pos is not None
     assert pos.asset == "AAPL"
     assert pos.quantity == 100
+    assert wrapper.get_position("aapl").quantity == 100
     assert wrapper.get_position("TSLA") is None
 
 
