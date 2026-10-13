@@ -4,5 +4,8 @@ contact_links:
     url: https://github.com/ml4t/live/security/advisories/new
     about: Report suspected vulnerabilities privately.
   - name: Usage questions
-    url: https://github.com/orgs/ml4t/discussions
-    about: Ask questions that do not describe a defect or requested change.
+    url: https://www.ml4trading.io/docs/live/
+    about: Read the usage documentation before opening a focused issue.
+  - name: Contribution guide
+    url: https://github.com/ml4t/live/blob/main/CONTRIBUTING.md
+    about: Read the shared contribution requirements and repository-specific checks.
