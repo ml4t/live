@@ -421,19 +421,22 @@ async def test_scheduled_target_matches_when_observable_state_is_equivalent(tmp_
 
 
 @pytest.mark.asyncio
-async def test_lowercase_close_reduces_the_position_created_by_the_strategy(tmp_path) -> None:
+@pytest.mark.parametrize("symbol", ["spy", " spy "])
+async def test_lowercase_close_reduces_the_position_created_by_the_strategy(
+    tmp_path, symbol
+) -> None:
     class CloseStrategy(Strategy):
         def __init__(self):
             self.observations = []
 
         def on_data(self, timestamp, data, context, broker):
             if not self.observations:
-                broker.submit_order("SPY", 1)
+                broker.submit_order(symbol, 1)
                 self.observations.append(broker.get_position("SPY").quantity)
             else:
-                position = broker.get_position("spy")
+                position = broker.get_position(symbol)
                 self.observations.append(None if position is None else position.quantity)
-                broker.close_position("spy")
+                broker.close_position(symbol)
 
     safe = SafeBroker(
         DeterministicLiveBroker(),

@@ -126,7 +126,7 @@ class ThreadSafeBrokerWrapper:
             RuntimeError: If broker error occurs
         """
         # Position maps are keyed by the canonical uppercase symbol.
-        return self.positions.get(asset.upper())
+        return self.positions.get(asset.strip().upper())
 
     def get_positions(self) -> dict[str, Position]:
         """Get all current positions through the portable strategy facade."""

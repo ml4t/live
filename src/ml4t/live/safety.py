@@ -982,7 +982,7 @@ class SafeBroker:
         Returns:
             Position object or None
         """
-        normalized = asset.upper()
+        normalized = asset.strip().upper()
         if self.config.shadow_mode:
             return self._virtual_portfolio.positions.get(normalized)
         return self._broker.positions.get(normalized)
@@ -2656,7 +2656,7 @@ class SafeBroker:
         Returns:
             Position object or None
         """
-        normalized = asset.upper()
+        normalized = asset.strip().upper()
         if self.config.shadow_mode:
             return self._virtual_portfolio.positions.get(normalized)
         return await self._broker.get_position_async(normalized)
