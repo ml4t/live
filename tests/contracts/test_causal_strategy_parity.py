@@ -421,6 +421,34 @@ async def test_scheduled_target_matches_when_observable_state_is_equivalent(tmp_
 
 
 @pytest.mark.asyncio
+async def test_lowercase_close_reduces_the_position_created_by_the_strategy(tmp_path) -> None:
+    class CloseStrategy(Strategy):
+        def __init__(self):
+            self.observations = []
+
+        def on_data(self, timestamp, data, context, broker):
+            if not self.observations:
+                broker.submit_order("SPY", 1)
+                self.observations.append(broker.get_position("SPY").quantity)
+            else:
+                position = broker.get_position("spy")
+                self.observations.append(None if position is None else position.quantity)
+                broker.close_position("spy")
+
+    safe = SafeBroker(
+        DeterministicLiveBroker(),
+        LiveRiskConfig(execution_mode="shadow", state_file=str(tmp_path / "state.json")),
+    )
+    strategy = CloseStrategy()
+    engine = LiveEngine(strategy, safe, DeterministicLiveFeed(market_events()))
+    await engine.connect()
+    await engine.run()
+
+    assert strategy.observations == [1, 1]
+    assert safe.positions == {}
+
+
+@pytest.mark.asyncio
 async def test_late_same_session_target_is_rejected_without_submission_in_both_engines(
     tmp_path,
 ) -> None:
