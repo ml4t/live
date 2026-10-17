@@ -188,6 +188,8 @@ Optional symbol filtering:
 feed = BarAggregator(raw_feed, bar_size_minutes=5, assets=["SPY", "QQQ"])
 ```
 
+Intervals align to `1970-01-01T00:00:00Z` and keep their configured duration across UTC midnight.
+
 The aggregator emits one event per asset so sparse symbols retain independent interval boundaries.
 An elapsed interval emits once as `complete`. If shutdown occurs before the current interval ends,
 its buffered value emits once as `evolving`. Late input cannot reopen an already completed interval.

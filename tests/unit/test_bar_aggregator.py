@@ -125,6 +125,30 @@ class TestBarAggregator:
         assert events[0].payload == BarPayload(100.0, 110.0, 100.0, 110.0, 2.0)
         assert events[1].payload == BarPayload(120.0, 120.0, 120.0, 120.0, 1.0)
 
+    async def test_bar_windows_do_not_overlap_across_midnight(self) -> None:
+        start = datetime(2024, 1, 1, 23, tzinfo=UTC)
+        events = await collect(
+            BarAggregator(
+                MockDataFeed(
+                    [
+                        trade("AAPL", start + timedelta(minutes=50), 100.0, 1),
+                        trade("AAPL", start + timedelta(minutes=80), 110.0, 1),
+                        trade("AAPL", start + timedelta(minutes=100), 120.0, 1),
+                    ]
+                ),
+                bar_size_minutes=100,
+            )
+        )
+
+        assert datetime.fromisoformat(events[0].metadata["bar_end"]) <= events[1].event_time
+        assert [event.event_time for event in events] == [
+            start,
+            start + timedelta(minutes=100),
+        ]
+        assert events[0].metadata["bar_end"] == (start + timedelta(minutes=100)).isoformat()
+        assert events[0].payload == BarPayload(100.0, 110.0, 100.0, 110.0, 2.0)
+        assert events[1].payload == BarPayload(120.0, 120.0, 120.0, 120.0, 1.0)
+
     async def test_boundary_and_shutdown_emit_exact_completed_bars(self) -> None:
         start = datetime(2024, 1, 1, 10, tzinfo=UTC)
         events = await collect(

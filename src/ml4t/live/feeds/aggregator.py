@@ -323,7 +323,7 @@ class BarAggregator:
         self._queue.finish(discard=False)
 
     def _truncate_to_bar(self, dt: datetime) -> datetime:
-        """Truncate datetime to bar boundary.
+        """Truncate datetime to a fixed UTC epoch-aligned bar boundary.
 
         Args:
             dt: Datetime to truncate
@@ -331,10 +331,8 @@ class BarAggregator:
         Returns:
             Datetime truncated to bar boundary (e.g., 10:35:42 -> 10:35:00 for 1-min bars)
         """
-        bar_seconds = int(self.bar_size.total_seconds())
-        midnight = dt.replace(hour=0, minute=0, second=0, microsecond=0)
-        elapsed = int((dt - midnight).total_seconds())
-        return midnight + timedelta(seconds=(elapsed // bar_seconds) * bar_seconds)
+        epoch = datetime(1970, 1, 1, tzinfo=UTC)
+        return epoch + ((dt - epoch) // self.bar_size) * self.bar_size
 
     async def _emit_asset_bar(
         self,
