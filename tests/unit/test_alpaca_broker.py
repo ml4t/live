@@ -1570,10 +1570,12 @@ async def test_disconnect_stops_the_stream_after_a_provider_order_fault(
         await callback(AlpacaTradeUpdate(event="fill", order=invalid_fill, timestamp=now))
         assert broker.is_connected is False
 
+        stream_task = broker._stream_task
         await broker.disconnect()
 
         stream.stop.assert_called_once()
         assert stopped.is_set()
+        assert stream_task.done()
         await broker.disconnect()
         stream.stop.assert_called_once()
     finally:
