@@ -38,7 +38,7 @@ dependencies = [
     "ib-async==2.1.0",
     "alpaca-py==0.44.0",
     "httpx==0.28.1",
-    "ccxt>=4.5.31,<=4.5.78",
+    "ccxt>=4.5.31,<=4.5.88",
 ]
 
 [project.scripts]
