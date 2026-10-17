@@ -226,8 +226,17 @@ def test_tampered_reported_contract_fails_closed(
     assert classification.reason == "reported contract does not match its evidence commit"
 
 
-@pytest.mark.parametrize("provider", ["ib", "alpaca"])
-def test_safety_changes_require_fresh_broker_evidence(provider: str) -> None:
+@pytest.mark.parametrize(
+    ("provider", "changed_input"),
+    [
+        ("ib", "src/ml4t/live/brokers/ib.py"),
+        ("ib", "src/ml4t/live/safety.py"),
+        ("alpaca", "src/ml4t/live/safety.py"),
+    ],
+)
+def test_changed_broker_inputs_require_fresh_provider_evidence(
+    provider: str, changed_input: str
+) -> None:
     repository = Path(__file__).resolve().parents[2]
     tag = subprocess.run(
         ["git", "cat-file", "-e", "v0.1.2^{commit}"],
@@ -240,4 +249,4 @@ def test_safety_changes_require_fresh_broker_evidence(provider: str) -> None:
     classification = _classification(repository, provider, "v0.1.2", "HEAD")
 
     assert classification.reusable is False
-    assert "src/ml4t/live/safety.py" in classification.changed_inputs
+    assert changed_input in classification.changed_inputs
