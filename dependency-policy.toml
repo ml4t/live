@@ -59,10 +59,10 @@ license = "BSD-3-Clause"
 support = "active upstream; exact pre-1.0 transport API"
 
 [dependencies.ccxt]
-requirement = "ccxt>=4.5.31,<=4.5.78"
+requirement = "ccxt>=4.5.31,<=4.5.88"
 minimum = "ccxt==4.5.31"
-locked = "ccxt==4.5.78"
-maximum = "ccxt==4.5.78"
+locked = "ccxt==4.5.88"
+maximum = "ccxt==4.5.88"
 license = "MIT"
 support = "active upstream; accepted patch interval is exercised at both endpoints"
 
