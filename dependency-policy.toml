@@ -59,18 +59,18 @@ license = "BSD-3-Clause"
 support = "active upstream; exact pre-1.0 transport API"
 
 [dependencies.ccxt]
-requirement = "ccxt>=4.5.31,<=4.5.78"
+requirement = "ccxt>=4.5.31,<=4.5.88"
 minimum = "ccxt==4.5.31"
-locked = "ccxt==4.5.78"
-maximum = "ccxt==4.5.78"
+locked = "ccxt==4.5.88"
+maximum = "ccxt==4.5.88"
 license = "MIT"
 support = "active upstream; accepted patch interval is exercised at both endpoints"
 
 [dependencies.databento]
-requirement = "databento==0.86.0"
-minimum = "databento==0.86.0"
-locked = "databento==0.86.0"
-maximum = "databento==0.86.0"
+requirement = "databento==0.87.0"
+minimum = "databento==0.87.0"
+locked = "databento==0.87.0"
+maximum = "databento==0.87.0"
 license = "Apache-2.0"
 support = "experimental optional adapter; exact SDK version"
 matrix = false
@@ -85,7 +85,7 @@ ib_async = "ib-async"
 "ml4t.specs" = "ml4t-specs"
 
 [build-dependencies.hatchling]
-requirement = "hatchling==1.32.0"
+requirement = "hatchling==1.32.4"
 license = "MIT"
 support = "active upstream; exact isolated-build backend"
 
