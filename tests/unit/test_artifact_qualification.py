@@ -266,12 +266,14 @@ def test_installed_example_runner_requires_each_expected_output(
             "risk_guard_demo.py": (
                 "fresh_data_order: accepted\nstale_data_block: rejected\nkill_switch_active: True\n"
             ),
-            "shadow_mode_demo.py": "Starting shadow mode demo\nFinished shadow mode demo\n",
+            "shadow_mode_demo.py": (
+                "Starting shadow mode demo\nFinished shadow mode demo. final_positions=DEMO:10\n"
+            ),
             "startup_reconciliation_demo.py": (
                 'Startup reconciliation report:\n{"clean": false}\n'
             ),
         }[name]
-        return type("Result", (), {"stdout": output})()
+        return type("Result", (), {"stdout": output, "stderr": ""})()
 
     monkeypatch.setattr(qualify_artifacts, "_run", fake_run)
     run_installed_examples(python, tmp_path / "profile")

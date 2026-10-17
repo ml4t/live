@@ -88,11 +88,18 @@ failure can therefore identify the first boundary whose trace differs.
 
 ## See It In The Book
 
-The maintained chapter material uses both engine dispatch paths and compares lifecycle plus
-canonical intent:
+The [unified framework notebook](https://github.com/stefan-jansen/machine-learning-for-trading/blob/d2edec54b1c7a6a9d7a97d8129eb05db4491e1eb/25_live_trading/01_unified_framework_demo.ipynb)
+calls both Live and Backtest to compare lifecycle and intent traces. The
+[pipeline verification notebook](https://github.com/stefan-jansen/machine-learning-for-trading/blob/d2edec54b1c7a6a9d7a97d8129eb05db4491e1eb/25_live_trading/08_pipeline_verification.ipynb)
+calls Live to check the research-to-deployment handoff. The
+[crypto funding backtest](https://github.com/stefan-jansen/machine-learning-for-trading/blob/d2edec54b1c7a6a9d7a97d8129eb05db4491e1eb/case_studies/crypto_perps_funding/13_backtest.ipynb)
+is a related manual case study; its simulation is not a Live run. See the
+[Book Guide](../book-guide/index.md) for input and venue differences.
 
-- Chapter 25.1 and `code/25_live_trading/01_unified_framework_demo.py`
-- Chapter 25.6 and `code/25_live_trading/08_pipeline_verification.py`
-- Chapter 25.7 and `code/25_live_trading/10_safety_risk_demo.py`
+## Verify the first port
 
-Use the [Book Guide](../book-guide/index.md) for the broader chapter map.
+Run the [synthetic shadow quickstart](../getting-started/quickstart.md) to check callback dispatch,
+virtual positions, and orderly shutdown without a venue. Then compare the same strategy's lifecycle
+and canonical intents in Backtest and Live on equivalent input. Record data cutoffs, execution
+policy, starting positions, fees, and venue capabilities before interpreting outcome differences.
+The [API reference](../api/index.md#engine) gives the Live engine signature.

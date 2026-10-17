@@ -21,6 +21,7 @@ That exercises `LiveEngine`, `SafeBroker`, `VirtualPortfolio`, and shadow-mode o
 | Example | What it shows | Requirements | Run |
 | --- | --- | --- | --- |
 | `shadow_mode_demo.py` | shadow mode, synthetic feed, virtual fills | none | `uv run python examples/shadow_mode_demo.py` |
+| `okx_shadow_strategy.py` | public OKX bars through the CLI shadow runtime, no orders | outbound HTTPS to `okx.com` | `uv run ml4t-live shadow examples/okx_shadow_strategy.py --feed okx --duration 60` |
 | `okx_funding_paper.py` | public OKX funding feed on 1-minute bars | outbound HTTPS to `okx.com` | `uv run python examples/okx_funding_paper.py` |
 | `alpaca_paper_equity.py` | Alpaca paper broker + Alpaca feed + small MA strategy | `ALPACA_API_KEY`, `ALPACA_SECRET_KEY` | `uv run python examples/alpaca_paper_equity.py` |
 | `ib_paper_equity.py` | IB paper broker + IB feed + small momentum strategy | TWS or IB Gateway on `127.0.0.1:7497` | `uv run python examples/ib_paper_equity.py` |

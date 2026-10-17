@@ -349,7 +349,10 @@ def run_installed_examples(python: Path, root: Path) -> None:
             "stale_data_block:",
             "kill_switch_active: True",
         ),
-        "shadow_mode_demo.py": ("Starting shadow mode demo", "Finished shadow mode demo"),
+        "shadow_mode_demo.py": (
+            "Starting shadow mode demo",
+            "Finished shadow mode demo. final_positions=DEMO:10",
+        ),
         "startup_reconciliation_demo.py": ("Startup reconciliation report:", '"clean": false'),
     }
     environment = {
@@ -364,6 +367,8 @@ def run_installed_examples(python: Path, root: Path) -> None:
         missing = [marker for marker in expected_output[name] if marker not in result.stdout]
         if missing:
             raise QualificationError(f"installed example {name} omitted output markers: {missing}")
+        if name == "shadow_mode_demo.py" and "Runtime degraded" in result.stderr:
+            raise QualificationError("shadow example ended in a degraded runtime state")
 
 
 def install_profile(artifact: Path, python_version: str, expected_version: str, root: Path) -> None:

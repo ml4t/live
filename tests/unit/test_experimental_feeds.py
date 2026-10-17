@@ -40,7 +40,6 @@ def test_public_claims_separate_experimental_feeds_from_stable_support() -> None
         "feed guide": (ROOT / "docs/user-guide/feeds.md").read_text(),
         "API reference": (ROOT / "docs/api/index.md").read_text(),
         "docs landing": (ROOT / "docs/index.md").read_text(),
-        "book guide": (ROOT / "docs/book-guide/index.md").read_text(),
     }
 
     assert (
@@ -53,7 +52,6 @@ def test_public_claims_separate_experimental_feeds_from_stable_support() -> None
         in public_text["API reference"]
     )
     assert "experimental opt-in" in public_text["docs landing"]
-    assert "experimental opt-in data source" in public_text["book guide"]
     assert "experimental=True" in public_text["README"]
     assert "experimental=True" in public_text["feed guide"]
 

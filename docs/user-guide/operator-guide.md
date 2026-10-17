@@ -23,7 +23,7 @@ If you only want a descriptive dump and not a pass/fail check, use `status` inst
 Shadow mode is the correct first deployment step because it exercises the live engine and strategy path without routing a real order.
 
 ```bash
-uv run ml4t-live shadow examples/shadow_mode_demo.py --feed okx --duration 60
+uv run ml4t-live shadow examples/okx_shadow_strategy.py --feed okx --duration 60
 ```
 
 What to watch during the run:
@@ -186,3 +186,18 @@ changes, recovery, reconciliation, and order events remain journaled. Exhausted 
 `RuntimeFailureError` and leaves `runtime_state=failed`. A resource release failure raises
 `RuntimeCleanupError`; call `stop()` again after correcting a transient provider failure to retry
 release.
+
+## Book example
+
+The [runtime safety notebook](https://github.com/stefan-jansen/machine-learning-for-trading/blob/d2edec54b1c7a6a9d7a97d8129eb05db4491e1eb/25_live_trading/13_runtime_safety_showcase.ipynb)
+calls Live to show kill-switch persistence, startup reconciliation, and engine health. The
+[safe rollout notebook](https://github.com/stefan-jansen/machine-learning-for-trading/blob/d2edec54b1c7a6a9d7a97d8129eb05db4491e1eb/26_mlops_governance/03_safe_model_rollout.ipynb)
+teaches promotion decisions manually and does not call Live.
+
+## Verify restart reporting locally
+
+Run `uv run python examples/startup_reconciliation_demo.py`. The synthetic persisted snapshot and
+broker snapshot deliberately differ; the report prints `"clean": false` and lists missing and
+unexpected positions and pending orders. This checks mismatch reporting without connecting a
+provider. On a real account, treat any mismatch as a stop point and reconcile before sending a new
+order. See the [API reference](../api/index.md#safety-and-rollout) for `SafeBroker`.
