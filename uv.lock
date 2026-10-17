@@ -1312,7 +1312,7 @@ test = [
 [package.metadata]
 requires-dist = [
     { name = "alpaca-py", specifier = "==0.44.0" },
-    { name = "ccxt", specifier = ">=4.5.31,<=4.5.88" },
+    { name = "ccxt", specifier = "==4.5.88" },
     { name = "databento", marker = "extra == 'experimental'", specifier = "==0.86.0" },
     { name = "httpx", specifier = "==0.28.1" },
     { name = "ib-async", specifier = "==2.1.0" },
