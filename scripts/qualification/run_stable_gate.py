@@ -21,7 +21,7 @@ STAGE_GROUPS = {
     "source": frozenset(
         {"ruff-format", "ruff", "types", "pre-commit", "workflow-policy", "release-recovery"}
     ),
-    "dependency": frozenset({"dependency-audit", "dependency-compatibility"}),
+    "dependency": frozenset({"dependency-audit", "dependency-compatibility", "dependency-upgrade"}),
     "artifact": frozenset({"build", "distribution-metadata", "artifact-qualification"}),
     "security": frozenset({"build", "distribution-metadata", "security-qualification"}),
     "deterministic": frozenset(
@@ -92,6 +92,10 @@ def qualification_stages(temporary_directory: Path, repetitions: int = 5) -> lis
             "dependency-compatibility",
             ("uv", "run", "python", "scripts/qualification/check_dependency_matrix.py"),
             CANDIDATE_ENVIRONMENT,
+        ),
+        Stage(
+            "dependency-upgrade",
+            ("uv", "run", "python", "-m", "scripts.qualification.check_dependency_upgrade"),
         ),
         Stage(
             "deterministic-tests-and-branch-coverage",
