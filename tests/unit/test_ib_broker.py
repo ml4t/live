@@ -499,6 +499,8 @@ class TestOrderSubmission:
         assert order.quantity == 50
         assert order.order_type == OrderType.LIMIT
         assert order.limit_price == 150.0
+        _, ib_order = mock_ib.placeOrder.call_args.args
+        assert ib_order.tif == "DAY"
 
     @pytest.mark.asyncio
     @patch("ml4t.live.brokers.ib.IB")
@@ -713,6 +715,7 @@ class TestOrderSubmission:
 
         _, ib_order = mock_ib.placeOrder.call_args.args
         assert ib_order.outsideRth is False
+        assert ib_order.tif == "DAY"
 
     @pytest.mark.asyncio
     @patch("ml4t.live.brokers.ib.IB")
