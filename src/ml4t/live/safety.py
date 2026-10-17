@@ -24,6 +24,7 @@ from datetime import UTC, date, datetime
 from enum import StrEnum
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 from ml4t.backtest.types import Order, OrderSide, OrderStatus, OrderType, Position
 from ml4t.specs import ExecutionCapability
@@ -839,7 +840,6 @@ class SafeBroker:
         # Rate limiting
         self._order_timestamps: list[float] = []
         self._order_operation_lock = asyncio.Lock()
-        self._shadow_order_sequence = 0
 
         # Duplicate detection
         self._recent_orders: list[tuple[float, str, float]] = []  # (time, asset, qty)
@@ -1512,9 +1512,8 @@ class SafeBroker:
         return order
 
     def _new_shadow_order_id(self, prefix: str) -> str:
-        """Return an id that stays unique even when several orders share one clock reading."""
-        self._shadow_order_sequence += 1
-        return f"{prefix}-{self._shadow_order_sequence}"
+        """Keep shadow identities distinct across clock ticks and process restarts."""
+        return f"{prefix}-{uuid4().hex}"
 
     def _commit_accepted_order(self, request: CanonicalOrderRequest) -> None:
         """Commit counters and histories only after an order is accepted."""
