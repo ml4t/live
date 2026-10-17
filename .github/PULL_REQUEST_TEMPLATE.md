@@ -1,4 +1,4 @@
-Follow the [local contribution guide](../CONTRIBUTING.md) and shared policy linked there.
+Follow the [local contribution guide](https://github.com/ml4t/live/blob/main/CONTRIBUTING.md) and shared policy linked there.
 Keep this PR focused on one problem or coherent change.
 
 ## Owning issue
