@@ -50,7 +50,7 @@ def test_gate_has_explicit_topology_and_rotates_critical_fault_order(tmp_path: P
     critical = [stage for stage in stages if stage.name.startswith("critical-faults-")]
     candidate_version = os.environ.get("SETUPTOOLS_SCM_PRETEND_VERSION", "0.1.1")
 
-    assert names[:12] == [
+    assert names[:13] == [
         "ruff-format",
         "ruff",
         "types",
@@ -59,6 +59,7 @@ def test_gate_has_explicit_topology_and_rotates_critical_fault_order(tmp_path: P
         "release-recovery",
         "dependency-audit",
         "dependency-compatibility",
+        "dependency-upgrade",
         "deterministic-tests-and-branch-coverage",
         "stable-coverage-policy",
         "stress",
