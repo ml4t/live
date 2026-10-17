@@ -226,7 +226,8 @@ def test_tampered_reported_contract_fails_closed(
     assert classification.reason == "reported contract does not match its evidence commit"
 
 
-def test_pending_candidate_preserves_v012_ib_contract() -> None:
+@pytest.mark.parametrize("provider", ["ib", "alpaca"])
+def test_safety_changes_require_fresh_broker_evidence(provider: str) -> None:
     repository = Path(__file__).resolve().parents[2]
     tag = subprocess.run(
         ["git", "cat-file", "-e", "v0.1.2^{commit}"],
@@ -236,6 +237,7 @@ def test_pending_candidate_preserves_v012_ib_contract() -> None:
     )
     if tag.returncode != 0:
         pytest.skip("v0.1.2 history is required")
-    classification = _classification(repository, "ib", "v0.1.2", "HEAD")
+    classification = _classification(repository, provider, "v0.1.2", "HEAD")
 
-    assert classification.reusable is True
+    assert classification.reusable is False
+    assert "src/ml4t/live/safety.py" in classification.changed_inputs
