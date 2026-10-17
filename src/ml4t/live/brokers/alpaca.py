@@ -201,9 +201,6 @@ class AlpacaBroker:
 
     async def disconnect(self) -> None:
         """Disconnect from Alpaca."""
-        if not self._connected:
-            return
-
         stream_task = self._stream_task
         if self._trading_stream:
             try:
