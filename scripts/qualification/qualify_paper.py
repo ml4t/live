@@ -443,7 +443,10 @@ async def _wait_for_tag_count(
 ) -> None:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        if len(_raw_tagged_orders(provider, broker, tags)) == expected:
+        matches = _raw_tagged_orders(provider, broker, tags)
+        if len(matches) == expected and (
+            provider != "ib" or all(trade.order.permId > 0 for trade in matches)
+        ):
             return
         await asyncio.sleep(0.25)
     raise PaperQualificationError("provider did not reach the expected tagged-order state")

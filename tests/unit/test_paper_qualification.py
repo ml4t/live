@@ -1,3 +1,4 @@
+import asyncio
 import json
 import zipfile
 from copy import deepcopy
@@ -9,6 +10,7 @@ from ml4t.backtest.types import OrderSide, OrderStatus, OrderType
 from ml4t.specs import ExecutionCapability
 
 from ml4t.live import CanonicalOrderRequest
+from ml4t.live.brokers.ib import IBBroker
 from scripts.qualification import qualify_paper as paper_qualification
 from scripts.qualification.qualify_paper import (
     EXERCISE_STEPS,
@@ -171,6 +173,59 @@ def test_ib_validation_warning_remains_a_tagged_working_order() -> None:
     matches = _raw_tagged_orders("ib", broker, {"ml4tq-12345678-a"})
 
     assert matches == [trade]
+
+
+@pytest.mark.asyncio
+async def test_ib_working_acknowledgement_waits_for_native_open_order(monkeypatch) -> None:
+    from ib_async import OrderState
+
+    broker = IBBroker()
+    broker._connected = True
+    broker.ib.client._apiReady = True
+    broker.ib.client._reqIdSeq = 1
+    monkeypatch.setattr(broker.ib.client, "placeOrder", MagicMock())
+    tag = "ml4tq-12345678-a"
+
+    await broker.submit_order_async(
+        "AAPL", 1, order_type=OrderType.LIMIT, limit_price=1, order_ref=tag
+    )
+    trade = broker.ib.openTrades()[0]
+    assert trade.orderStatus.status == "PendingSubmit"
+    assert trade.order.permId == 0
+    waiting = asyncio.create_task(
+        paper_qualification._wait_for_tag_count("ib", broker, {tag}, 1, timeout=1)
+    )
+    try:
+        await asyncio.sleep(0)
+        assert not waiting.done(), "Local SDK submission is not a Gateway acknowledgement"
+        native_order = deepcopy(trade.order)
+        native_order.permId = 42
+        broker.ib.wrapper.openOrder(
+            trade.order.orderId, trade.contract, native_order, OrderState(status="PreSubmitted")
+        )
+        await asyncio.wait_for(waiting, timeout=1)
+        assert _raw_tagged_orders("ib", broker, {tag}) == [trade]
+    finally:
+        waiting.cancel()
+        await asyncio.gather(waiting, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+async def test_ib_unacknowledged_order_remains_visible_for_cleanup(monkeypatch) -> None:
+    broker = IBBroker()
+    broker._connected = True
+    broker.ib.client._apiReady = True
+    broker.ib.client._reqIdSeq = 1
+    monkeypatch.setattr(broker.ib.client, "placeOrder", MagicMock())
+    tag = "ml4tq-12345678-a"
+    await broker.submit_order_async(
+        "AAPL", 1, order_type=OrderType.LIMIT, limit_price=1, order_ref=tag
+    )
+
+    with pytest.raises(PaperQualificationError, match="expected tagged-order state"):
+        await paper_qualification._wait_for_tag_count("ib", broker, {tag}, 1, timeout=0.01)
+
+    assert len(_raw_tagged_orders("ib", broker, {tag})) == 1
 
 
 def test_qualification_order_is_eligible_during_ib_overnight_session() -> None:

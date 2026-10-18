@@ -47,8 +47,10 @@ Each provider must verify its official paper endpoint and paper account before s
 workflow then checks positions, all pending orders and an asset-filtered view, cash, account value,
 unsupported-capability rejection, risk-policy rejection, a tagged one-share limit order, working
 acknowledgement, reconnect reconciliation, replacement, cancellation, cleanup, and reconciliation
-from a fresh process. IB accepts only the standard paper ports and an account identified by IB as a
-paper account. Alpaca accepts only the SDK's official paper endpoint in sandbox mode.
+from a fresh process. IB working acknowledgement requires a Gateway-assigned permanent order ID;
+the SDK's locally created `PendingSubmit` trade alone does not qualify. IB accepts only the standard
+paper ports and an account identified by IB as a paper account. Alpaca accepts only the SDK's
+official paper endpoint in sandbox mode.
 
 The selected provider runs its short lifecycle or external-feed check and its six-hour soak. Other
 providers do not need to be online. A release with unchanged provider contracts does not dispatch
