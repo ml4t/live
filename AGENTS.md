@@ -38,6 +38,12 @@ shutdown.
   behavior as part of the shipped contract.
 - Treat documentation, examples, and deterministic provider-contract tests as release surfaces.
 
+## Maintenance scope
+
+Maintainer-directed maintenance may combine fixes and related documentation in one PR linked to
+all affected issues. External contribution rules do not require owner maintenance to use one PR per
+issue or edit. Preserve regression evidence and attribution, and qualify the combined result.
+
 ## Guide maintenance
 
 Update this guide when the public runtime surface, provider ownership, safety contract,

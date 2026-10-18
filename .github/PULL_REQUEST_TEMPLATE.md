@@ -1,6 +1,12 @@
+Follow the [local contribution guide](https://github.com/ml4t/live/blob/main/CONTRIBUTING.md) and shared policy linked there.
+External submissions should address one problem or coherent change. Maintainer-directed maintenance
+may batch fixes and related documentation; reference all affected issues and verify the combined result.
+
 ## Owning issue
 
 Closes #
+
+Automated dependency updates and administrative metadata changes do not require a separate issue.
 
 ## Outcome
 
@@ -13,7 +19,8 @@ Describe the user-visible or standards outcome.
 
 ## Verification
 
-- [ ] Tests reproduce the prior failure or verify the requested behavior
+- [ ] For a defect, the same public-workflow regression fails on the relevant base and passes on the fix
+- [ ] Exact base/fix revisions, commands, and results are included; documentation uses relevant checks
 - [ ] Ruff lint and format checks pass
 - [ ] `ty` passes
 - [ ] Test suite passes
@@ -24,3 +31,9 @@ Describe the user-visible or standards outcome.
 ## Documentation and release
 
 State the documentation, release notes, and patch-release work required after merge.
+
+## AI assistance and accountability
+
+State whether AI assisted with code or prose and identify its contribution.
+
+- [ ] I reviewed and tested this submission and can explain its implementation and evidence
