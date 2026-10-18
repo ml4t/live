@@ -24,6 +24,7 @@ from datetime import UTC, date, datetime
 from enum import StrEnum
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 from ml4t.backtest.types import Order, OrderSide, OrderStatus, OrderType, Position
 from ml4t.specs import ExecutionCapability
@@ -1131,7 +1132,7 @@ class SafeBroker:
                     side=request.side,
                     quantity=request.quantity,
                     order_type=OrderType.MARKET,
-                    order_id=f"SHADOW-REDUCE-{int(time.time() * 1_000_000)}",
+                    order_id=self._new_shadow_order_id("SHADOW-REDUCE"),
                     status=OrderStatus.FILLED,
                     filled_quantity=request.quantity,
                     filled_price=price,
@@ -1441,7 +1442,7 @@ class SafeBroker:
                 order_type=order_type,
                 limit_price=limit_price,
                 stop_price=stop_price,
-                order_id=f"SHADOW-{int(time.time() * 1000)}",
+                order_id=self._new_shadow_order_id("SHADOW"),
                 status=OrderStatus.FILLED,
                 filled_quantity=quantity,
                 filled_price=price,
@@ -1510,6 +1511,10 @@ class SafeBroker:
             ) from error
 
         return order
+
+    def _new_shadow_order_id(self, prefix: str) -> str:
+        """Keep shadow identities distinct across clock ticks and process restarts."""
+        return f"{prefix}-{uuid4().hex}"
 
     def _commit_accepted_order(self, request: CanonicalOrderRequest) -> None:
         """Commit counters and histories only after an order is accepted."""

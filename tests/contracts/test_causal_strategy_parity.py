@@ -452,6 +452,37 @@ async def test_lowercase_close_reduces_the_position_created_by_the_strategy(
 
 
 @pytest.mark.asyncio
+async def test_shadow_order_identities_do_not_collide_within_ticks_or_after_restart(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.setattr("ml4t.live.safety.time.time", lambda: 1_700_000_000.0)
+    orders = []
+
+    class SubmitStrategy(Strategy):
+        def on_data(self, timestamp, data, context, broker):
+            orders.append(broker.submit_order("SPY", 1))
+            orders.append(broker.submit_order("SPY", 1))
+            orders.append(broker.close_position("SPY"))
+
+    for _ in range(2):
+        safe = SafeBroker(
+            DeterministicLiveBroker(),
+            LiveRiskConfig(
+                execution_mode="shadow",
+                dedup_window_seconds=0,
+                state_file=str(tmp_path / "state.json"),
+            ),
+        )
+        engine = LiveEngine(SubmitStrategy(), safe, DeterministicLiveFeed(market_events()[:1]))
+        await engine.connect()
+        await engine.run()
+        assert safe.positions == {}
+
+    assert len(orders) == 6
+    assert len({order.order_id for order in orders}) == 6
+
+
+@pytest.mark.asyncio
 async def test_late_same_session_target_is_rejected_without_submission_in_both_engines(
     tmp_path,
 ) -> None:
