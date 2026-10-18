@@ -10,6 +10,7 @@ import pytest
 from alpaca.common.enums import BaseURL
 from alpaca.trading.enums import OrderStatus as AlpacaOrderStatus
 from alpaca.trading.enums import TimeInForce
+from alpaca.trading.models import Position as AlpacaPosition
 from alpaca.trading.requests import MarketOrderRequest
 from ml4t.backtest.types import Order, OrderSide, OrderStatus, OrderType, Position
 
@@ -214,6 +215,59 @@ class TestAlpacaBrokerSetup:
 
         assert broker.positions["AAPL"].entry_price == 0.0
         assert broker.positions["AAPL"].current_price == 0.0
+
+    @pytest.mark.asyncio
+    async def test_sync_positions_signs_short_holdings(self):
+        """Alpaca reports an unsigned qty plus a long/short side."""
+        client = MagicMock()
+        client.get_all_positions.return_value = [
+            MockAlpacaPosition("AAPL", "50", "160.00", side="short", current_price="155.00"),
+        ]
+        broker = AlpacaBroker(api_key="PKTEST", secret_key="SECRET")
+        broker._trading_client = client
+
+        await broker._sync_positions()
+
+        assert broker.positions["AAPL"].quantity == -50.0
+        assert broker.get_position("AAPL").quantity == -50.0
+
+    @patch("ml4t.live.brokers.alpaca.TradingClient")
+    @patch("ml4t.live.brokers.alpaca.TradingStream")
+    async def test_connected_short_is_closed_with_a_buy_to_cover(
+        self, mock_stream_class, mock_client_class
+    ):
+        client = mock_client_class.return_value
+        client.get_account.return_value = MockAlpacaAccount()
+        client.get_orders.return_value = []
+        client.get_all_positions.return_value = [
+            AlpacaPosition.model_validate(
+                {
+                    "asset_id": "00000000-0000-0000-0000-000000000001",
+                    "symbol": "AAPL",
+                    "exchange": "NASDAQ",
+                    "asset_class": "us_equity",
+                    "avg_entry_price": "160",
+                    "qty": "50",
+                    "side": "short",
+                    "cost_basis": "8000",
+                    "current_price": "155",
+                }
+            )
+        ]
+        client.submit_order.return_value = MockAlpacaOrder(qty="50")
+        broker = AlpacaBroker(api_key="PKTEST", secret_key="TEST")
+        await broker.connect()
+        try:
+            assert (await broker.get_position_async("AAPL")).quantity == -50
+            order = await broker.close_position_async("AAPL")
+
+            assert order.side is OrderSide.BUY
+            assert order.quantity == 50
+            request = client.submit_order.call_args.args[0]
+            assert request.side.value == "buy"
+            assert request.qty == 50
+        finally:
+            await broker.disconnect()
 
     @pytest.mark.asyncio
     @patch("ml4t.live.brokers.alpaca.TradingClient")
