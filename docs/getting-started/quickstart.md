@@ -11,8 +11,11 @@ Get the maintained example from the public repository, then run it with the publ
 ```bash
 git clone https://github.com/ml4t/live.git
 cd live
-uv run --no-project --with ml4t-live python examples/shadow_mode_demo.py
+uv run --isolated --no-project --with ml4t-live python examples/shadow_mode_demo.py
 ```
+
+`--isolated` keeps an existing checkout environment from substituting an editable development
+package for the published package.
 
 The script defines a synthetic feed that emits one `DEMO` bar per second for 65 seconds. A moving
 average strategy submits a buy or sell when its signal changes. `SafeBroker` records virtual fills

@@ -188,6 +188,46 @@ async def test_get_account_value_shadow_mode(mock_broker, config):
     assert value == safe._virtual_portfolio.account_value
 
 
+async def test_position_lookup_and_close_ignore_symbol_case(mock_broker, config):
+    """Venue adapters key positions in uppercase; the safety facade must too."""
+    config.shadow_mode = True
+    config.execution_mode = "shadow"
+    safe = SafeBroker(mock_broker, config)
+    safe._virtual_portfolio._positions["AAPL"] = Position(
+        asset="AAPL",
+        quantity=10,
+        entry_price=150.0,
+        entry_time=datetime.now(UTC),
+        current_price=150.0,
+    )
+
+    assert safe.get_position("aapl") is not None
+    assert (await safe.get_position_async("aapl")).quantity == 10
+
+    order = await safe.close_position_async("aapl")
+
+    assert order is not None
+    assert order.side == OrderSide.SELL
+    assert order.quantity == 10
+    assert "AAPL" not in safe.positions
+    mock_broker.submit_order_async.assert_not_called()
+
+
+def test_external_position_lookup_ignores_symbol_case(mock_broker, config):
+    """Paper and live lookups use the same uppercase position keys as the adapters."""
+    mock_broker.positions = {
+        "AAPL": Position(
+            asset="AAPL",
+            quantity=10,
+            entry_price=150.0,
+            entry_time=datetime.now(UTC),
+        )
+    }
+    safe = SafeBroker(mock_broker, config)
+
+    assert safe.get_position("aapl").quantity == 10
+
+
 async def test_get_cash_shadow_mode(mock_broker, config):
     """Test get_cash_async returns virtual cash in shadow mode."""
     config.shadow_mode = True
@@ -784,6 +824,29 @@ def test_prune_history_removes_old_recent_orders(mock_broker, config):
 
 
 # === Submit Order Integration Tests ===
+
+
+async def test_shadow_order_ids_stay_unique_when_the_clock_does_not_advance(
+    mock_broker, config, monkeypatch
+):
+    """Millisecond shadow ids collide when two orders are accepted in the same tick."""
+    config.shadow_mode = True
+    config.execution_mode = "shadow"
+    config.dedup_window_seconds = 0
+    safe = SafeBroker(mock_broker, config)
+    monkeypatch.setattr("ml4t.live.safety.time.time", lambda: 1_700_000_000.0)
+    safe._record_market_data(
+        datetime.now(UTC),
+        {"AAPL": {"close": 150.0}, "MSFT": {"close": 300.0}},
+        {},
+    )
+
+    first = await safe.submit_order_async("AAPL", 1, OrderSide.BUY)
+    second = await safe.submit_order_async("MSFT", 1, OrderSide.BUY)
+
+    assert first.order_id != second.order_id
+    assert first.order_id.startswith("SHADOW-")
+    assert second.order_id.startswith("SHADOW-")
 
 
 async def test_submit_order_shadow_mode(mock_broker, config):

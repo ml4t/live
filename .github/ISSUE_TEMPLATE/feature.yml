@@ -7,6 +7,12 @@ labels:
   - "status: needs-triage"
   - "compatibility: affected"
 body:
+  - type: markdown
+    attributes:
+      value: |
+        Follow the [contribution guide](https://github.com/ml4t/live/blob/main/CONTRIBUTING.md).
+        Search existing issues and describe one problem or coherent change per issue.
+        Report suspected vulnerabilities privately, not in this form.
   - type: input
     id: version
     attributes:
@@ -47,5 +53,13 @@ body:
     id: acceptance
     attributes:
       label: Acceptance criteria
+    validations:
+      required: true
+  - type: textarea
+    id: ai-assistance
+    attributes:
+      label: AI assistance and accountability
+      description: State whether AI helped with this report and how. Confirm you checked the facts and can explain the reproduction or requested outcome.
+      placeholder: "None, or describe the assistance and your verification."
     validations:
       required: true

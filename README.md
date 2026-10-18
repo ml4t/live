@@ -94,6 +94,8 @@ shared lifecycle and canonical intent contracts. See the
 
 ## Development
 
+Read the [contribution guide](CONTRIBUTING.md) before opening an issue or pull request.
+
 ```bash
 git clone https://github.com/ml4t/live.git
 cd live

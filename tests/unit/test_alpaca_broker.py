@@ -1,5 +1,7 @@
 """Unit tests for AlpacaBroker connection and setup."""
 
+import asyncio
+import threading
 import time
 from datetime import UTC, datetime
 from types import SimpleNamespace
@@ -10,6 +12,9 @@ import pytest
 from alpaca.common.enums import BaseURL
 from alpaca.trading.enums import OrderStatus as AlpacaOrderStatus
 from alpaca.trading.enums import TimeInForce
+from alpaca.trading.models import Order as AlpacaOrder
+from alpaca.trading.models import Position as AlpacaPosition
+from alpaca.trading.models import TradeUpdate as AlpacaTradeUpdate
 from alpaca.trading.requests import MarketOrderRequest
 from ml4t.backtest.types import Order, OrderSide, OrderStatus, OrderType, Position
 
@@ -214,6 +219,59 @@ class TestAlpacaBrokerSetup:
 
         assert broker.positions["AAPL"].entry_price == 0.0
         assert broker.positions["AAPL"].current_price == 0.0
+
+    @pytest.mark.asyncio
+    async def test_sync_positions_signs_short_holdings(self):
+        """Alpaca reports an unsigned qty plus a long/short side."""
+        client = MagicMock()
+        client.get_all_positions.return_value = [
+            MockAlpacaPosition("AAPL", "50", "160.00", side="short", current_price="155.00"),
+        ]
+        broker = AlpacaBroker(api_key="PKTEST", secret_key="SECRET")
+        broker._trading_client = client
+
+        await broker._sync_positions()
+
+        assert broker.positions["AAPL"].quantity == -50.0
+        assert broker.get_position("AAPL").quantity == -50.0
+
+    @patch("ml4t.live.brokers.alpaca.TradingClient")
+    @patch("ml4t.live.brokers.alpaca.TradingStream")
+    async def test_connected_short_is_closed_with_a_buy_to_cover(
+        self, mock_stream_class, mock_client_class
+    ):
+        client = mock_client_class.return_value
+        client.get_account.return_value = MockAlpacaAccount()
+        client.get_orders.return_value = []
+        client.get_all_positions.return_value = [
+            AlpacaPosition.model_validate(
+                {
+                    "asset_id": "00000000-0000-0000-0000-000000000001",
+                    "symbol": "AAPL",
+                    "exchange": "NASDAQ",
+                    "asset_class": "us_equity",
+                    "avg_entry_price": "160",
+                    "qty": "50",
+                    "side": "short",
+                    "cost_basis": "8000",
+                    "current_price": "155",
+                }
+            )
+        ]
+        client.submit_order.return_value = MockAlpacaOrder(qty="50")
+        broker = AlpacaBroker(api_key="PKTEST", secret_key="TEST")
+        await broker.connect()
+        try:
+            assert (await broker.get_position_async("AAPL")).quantity == -50
+            order = await broker.close_position_async("AAPL")
+
+            assert order.side is OrderSide.BUY
+            assert order.quantity == 50
+            request = client.submit_order.call_args.args[0]
+            assert request.side.value == "buy"
+            assert request.qty == 50
+        finally:
+            await broker.disconnect()
 
     @pytest.mark.asyncio
     @patch("ml4t.live.brokers.alpaca.TradingClient")
@@ -1513,6 +1571,77 @@ async def test_trade_update_faults_poison_the_snapshot(
 
 
 @pytest.mark.asyncio
+async def test_fill_event_does_not_invent_a_quantity():
+    """A fill with no reported size must not be rewritten into a full fill."""
+    broker = tracked_order_broker()
+    vendor_order = MockAlpacaOrder(id="venue-1", filled_qty="0")
+    vendor_order.filled_avg_price = "10"
+
+    await broker._on_trade_update(MockTradeUpdate("fill", vendor_order))
+
+    assert broker.is_connected is False
+    assert "incomplete or invalid" in str(broker._snapshot_error)
+    assert broker._pending_orders["ML4T-1"].status is OrderStatus.PENDING
+    assert broker._pending_orders["ML4T-1"].filled_quantity == 0
+
+
+@pytest.mark.parametrize("quantity", ["0", None, "100"])
+@patch("ml4t.live.brokers.alpaca.TradingClient")
+@patch("ml4t.live.brokers.alpaca.TradingStream")
+async def test_registered_sdk_fill_preserves_order_when_quantity_is_missing(
+    mock_stream_class, mock_client_class, quantity
+):
+    client = mock_client_class.return_value
+    client.get_account.return_value = MockAlpacaAccount()
+    client.get_all_positions.return_value = []
+    client.get_orders.return_value = []
+    now = datetime.now(UTC)
+    venue_order = AlpacaOrder.model_validate(
+        {
+            **vars(MockAlpacaOrder(id="00000000-0000-0000-0000-000000000001")),
+            "client_order_id": "fill-regression",
+            "updated_at": now,
+            "submitted_at": now,
+            "order_class": "simple",
+            "extended_hours": False,
+        }
+    )
+    client.submit_order.return_value = venue_order
+    broker = AlpacaBroker(api_key="PKTEST", secret_key="TEST")
+    await broker.connect()
+    try:
+        order = await broker.submit_order_async("AAPL", 100, OrderSide.BUY)
+        original_fill = (order.status, order.filled_quantity, order.filled_price, order.filled_at)
+        callback = mock_stream_class.return_value.subscribe_trade_updates.call_args.args[0]
+        filled = AlpacaOrder.model_validate(
+            venue_order.model_dump()
+            | {"status": "filled", "filled_qty": quantity, "filled_avg_price": "10"}
+        )
+        snapshots_before = client.get_all_positions.call_count
+        await callback(AlpacaTradeUpdate(event="fill", order=filled, timestamp=now))
+
+        if quantity == "100":
+            assert order.status is OrderStatus.FILLED
+            assert order.filled_quantity == 100
+            assert broker.pending_orders == []
+            assert broker.is_connected is True
+            assert client.get_all_positions.call_count == snapshots_before + 1
+        else:
+            assert (
+                order.status,
+                order.filled_quantity,
+                order.filled_price,
+                order.filled_at,
+            ) == original_fill
+            assert broker.is_connected is False
+            assert client.get_all_positions.call_count == snapshots_before
+            with pytest.raises(RuntimeError, match="unavailable"):
+                _ = broker.positions
+    finally:
+        await broker.disconnect()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("event", ["replaced", "done_for_day"])
 async def test_terminal_trade_updates_remove_all_tracking(event):
     broker = tracked_order_broker()
@@ -1520,3 +1649,61 @@ async def test_terminal_trade_updates_remove_all_tracking(event):
 
     assert broker.pending_orders == []
     assert broker._alpaca_order_map == {}
+
+
+@patch("ml4t.live.brokers.alpaca.TradingClient")
+@patch("ml4t.live.brokers.alpaca.TradingStream")
+async def test_disconnect_stops_the_stream_after_a_provider_order_fault(
+    mock_stream_class, mock_client_class
+):
+    client = mock_client_class.return_value
+    client.get_account.return_value = MockAlpacaAccount()
+    client.get_all_positions.return_value = []
+    client.get_orders.return_value = []
+    now = datetime.now(UTC)
+    venue_order = AlpacaOrder.model_validate(
+        {
+            **vars(MockAlpacaOrder(id="00000000-0000-0000-0000-000000000001")),
+            "client_order_id": "disconnect-regression",
+            "updated_at": now,
+            "submitted_at": now,
+            "order_class": "simple",
+            "extended_hours": False,
+        }
+    )
+    client.submit_order.return_value = venue_order
+    started = threading.Event()
+    stopped = threading.Event()
+    stream = mock_stream_class.return_value
+
+    def run_stream():
+        started.set()
+        stopped.wait(5)
+
+    stream.run.side_effect = run_stream
+    stream.stop.side_effect = stopped.set
+    broker = AlpacaBroker(api_key="PKTEST", secret_key="TEST")
+    await broker.connect()
+    try:
+        assert await asyncio.to_thread(started.wait, 2)
+        await broker.submit_order_async("AAPL", 100, OrderSide.BUY)
+        callback = stream.subscribe_trade_updates.call_args.args[0]
+        invalid_fill = AlpacaOrder.model_validate(
+            venue_order.model_dump()
+            | {"status": "filled", "filled_qty": "101", "filled_avg_price": "10"}
+        )
+        await callback(AlpacaTradeUpdate(event="fill", order=invalid_fill, timestamp=now))
+        assert broker.is_connected is False
+
+        stream_task = broker._stream_task
+        await broker.disconnect()
+
+        stream.stop.assert_called_once()
+        assert stopped.is_set()
+        assert stream_task.done()
+        await broker.disconnect()
+        stream.stop.assert_called_once()
+    finally:
+        stopped.set()
+        if broker._stream_task is not None:
+            await asyncio.wait_for(broker._stream_task, timeout=2)

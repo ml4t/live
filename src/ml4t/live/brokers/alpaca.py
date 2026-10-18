@@ -21,6 +21,7 @@ from alpaca.common.enums import BaseURL
 from alpaca.trading.client import TradingClient
 from alpaca.trading.enums import OrderSide as AlpacaOrderSide
 from alpaca.trading.enums import OrderStatus as AlpacaOrderStatus
+from alpaca.trading.enums import PositionSide as AlpacaPositionSide
 from alpaca.trading.enums import QueryOrderStatus, TimeInForce
 from alpaca.trading.requests import (
     GetOrdersRequest,
@@ -201,9 +202,6 @@ class AlpacaBroker:
 
     async def disconnect(self) -> None:
         """Disconnect from Alpaca."""
-        if not self._connected:
-            return
-
         stream_task = self._stream_task
         if self._trading_stream:
             try:
@@ -769,8 +767,6 @@ class AlpacaBroker:
                 return
 
             if event == "fill":
-                if filled_quantity == 0:
-                    filled_quantity = order.quantity
                 if (
                     filled_quantity != order.quantity
                     or not math.isfinite(filled_price)
@@ -906,6 +902,12 @@ class AlpacaBroker:
                 raise RuntimeError("Alpaca positions snapshot contains an empty symbol")
             if not math.isfinite(quantity) or quantity == 0:
                 raise RuntimeError("Alpaca positions snapshot contains an invalid quantity")
+            if pos.side == AlpacaPositionSide.SHORT:
+                quantity = -abs(quantity)
+            elif pos.side != AlpacaPositionSide.LONG:
+                raise RuntimeError("Alpaca positions snapshot contains an invalid side")
+            else:
+                quantity = abs(quantity)
             if not math.isfinite(entry_price) or entry_price < 0:
                 raise RuntimeError("Alpaca positions snapshot contains an invalid entry price")
             if not math.isfinite(current_price) or current_price < 0:
