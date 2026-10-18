@@ -1,5 +1,7 @@
 """Unit tests for AlpacaBroker connection and setup."""
 
+import asyncio
+import threading
 import time
 from datetime import UTC, datetime
 from types import SimpleNamespace
@@ -1647,3 +1649,61 @@ async def test_terminal_trade_updates_remove_all_tracking(event):
 
     assert broker.pending_orders == []
     assert broker._alpaca_order_map == {}
+
+
+@patch("ml4t.live.brokers.alpaca.TradingClient")
+@patch("ml4t.live.brokers.alpaca.TradingStream")
+async def test_disconnect_stops_the_stream_after_a_provider_order_fault(
+    mock_stream_class, mock_client_class
+):
+    client = mock_client_class.return_value
+    client.get_account.return_value = MockAlpacaAccount()
+    client.get_all_positions.return_value = []
+    client.get_orders.return_value = []
+    now = datetime.now(UTC)
+    venue_order = AlpacaOrder.model_validate(
+        {
+            **vars(MockAlpacaOrder(id="00000000-0000-0000-0000-000000000001")),
+            "client_order_id": "disconnect-regression",
+            "updated_at": now,
+            "submitted_at": now,
+            "order_class": "simple",
+            "extended_hours": False,
+        }
+    )
+    client.submit_order.return_value = venue_order
+    started = threading.Event()
+    stopped = threading.Event()
+    stream = mock_stream_class.return_value
+
+    def run_stream():
+        started.set()
+        stopped.wait(5)
+
+    stream.run.side_effect = run_stream
+    stream.stop.side_effect = stopped.set
+    broker = AlpacaBroker(api_key="PKTEST", secret_key="TEST")
+    await broker.connect()
+    try:
+        assert await asyncio.to_thread(started.wait, 2)
+        await broker.submit_order_async("AAPL", 100, OrderSide.BUY)
+        callback = stream.subscribe_trade_updates.call_args.args[0]
+        invalid_fill = AlpacaOrder.model_validate(
+            venue_order.model_dump()
+            | {"status": "filled", "filled_qty": "101", "filled_avg_price": "10"}
+        )
+        await callback(AlpacaTradeUpdate(event="fill", order=invalid_fill, timestamp=now))
+        assert broker.is_connected is False
+
+        stream_task = broker._stream_task
+        await broker.disconnect()
+
+        stream.stop.assert_called_once()
+        assert stopped.is_set()
+        assert stream_task.done()
+        await broker.disconnect()
+        stream.stop.assert_called_once()
+    finally:
+        stopped.set()
+        if broker._stream_task is not None:
+            await asyncio.wait_for(broker._stream_task, timeout=2)
