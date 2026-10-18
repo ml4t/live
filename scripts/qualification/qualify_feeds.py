@@ -112,18 +112,23 @@ def _native_matches(events: list[Any], native: dict[str, Any]) -> bool:
     bars = [event for event in events if event.kind is MarketEventKind.BAR]
     funding = [event for event in events if event.kind is MarketEventKind.FUNDING]
     candle_sequences = {int(row[0]) for row in native["candles"] if len(row) > 8}
-    funding_sequences = {
-        int(row["fundingTime"]) for row in native["funding"] if row.get("fundingTime")
+    funding_observations = {
+        (int(row["ts"]), float(row["fundingRate"])) for row in native["funding"] if row.get("ts")
     }
     return (
         bool(bars and funding)
         and all(_event_sequence(event) in candle_sequences for event in bars)
-        and all(_event_sequence(event) in funding_sequences for event in funding)
+        and all(
+            (_event_sequence(event), event.payload.rate) in funding_observations
+            for event in funding
+        )
     )
 
 
-async def _collect_initial(feed: Any) -> list[Any]:
+async def _collect_initial(feed: Any, continuity: Any) -> list[Any]:
     from ml4t.specs import EventCompletion, MarketEventKind
+
+    from ml4t.live.feeds.events import ContinuityDisposition
 
     events: list[Any] = []
     async with asyncio.timeout(120):
@@ -136,17 +141,23 @@ async def _collect_initial(feed: Any) -> list[Any]:
         ):
             event = await anext(feed)
             _validate_okx_event(event)
+            if continuity.validate(event) is ContinuityDisposition.DUPLICATE:
+                continue
             events.append(event)
     return events
 
 
-async def _collect_next_complete(feed: Any, previous_sequence: int) -> Any:
+async def _collect_next_complete(feed: Any, previous_sequence: int, continuity: Any) -> Any:
     from ml4t.specs import EventCompletion, MarketEventKind
+
+    from ml4t.live.feeds.events import ContinuityDisposition
 
     async with asyncio.timeout(150):
         while True:
             event = await anext(feed)
             _validate_okx_event(event)
+            if continuity.validate(event) is ContinuityDisposition.DUPLICATE:
+                continue
             if (
                 event.kind is MarketEventKind.BAR
                 and event.completion is EventCompletion.COMPLETE
@@ -204,12 +215,17 @@ async def qualify_okx(candidate: dict[str, Any], checkout_root: Path) -> dict[st
     from ml4t.specs import EventCompletion, MarketEventKind
 
     from ml4t.live import OKXFundingFeed
-    from ml4t.live.feeds.events import FeedContractError, validate_event_timing
+    from ml4t.live.feeds.events import (
+        EventContinuityTracker,
+        FeedContractError,
+        validate_event_timing,
+    )
 
     identity = _candidate_identity(candidate)
     _verify_installed_candidate(identity, checkout_root)
     started_at = datetime.now(UTC)
     steps = ["installed_candidate"]
+    continuity = EventContinuityTracker()
 
     async with httpx.AsyncClient(timeout=30) as client:
         native_before = await _native_snapshot(client)
@@ -220,7 +236,7 @@ async def qualify_okx(candidate: dict[str, Any], checkout_root: Path) -> dict[st
         )
         await feed.start()
         steps.append("connect")
-        initial_events = await _collect_initial(feed)
+        initial_events = await _collect_initial(feed, continuity)
         steps.extend(["event_validation", "utc_timing", "completion"])
         native_after = await _native_snapshot(client)
         if not (
@@ -238,7 +254,7 @@ async def qualify_okx(candidate: dict[str, Any], checkout_root: Path) -> dict[st
         shutdown_seconds = await _close_within_limit(feed)
         await feed.start()
         previous_sequence = _event_sequence(previous)
-        reconnected = await _collect_next_complete(feed, previous_sequence)
+        reconnected = await _collect_next_complete(feed, previous_sequence, continuity)
         expected_sequence = previous_sequence + 60_000
         if _event_sequence(reconnected) != expected_sequence:
             raise FeedQualificationError("OKX reconnect missed a complete candle interval")
@@ -378,7 +394,11 @@ async def qualify_okx_soak(candidate: dict[str, Any], checkout_root: Path) -> di
     from ml4t.specs import EventCompletion, MarketEventKind
 
     from ml4t.live import OKXFundingFeed
-    from ml4t.live.feeds.events import validate_event_timing
+    from ml4t.live.feeds.events import (
+        ContinuityDisposition,
+        EventContinuityTracker,
+        validate_event_timing,
+    )
 
     identity = _candidate_identity(candidate)
     _verify_installed_candidate(identity, checkout_root)
@@ -391,6 +411,7 @@ async def qualify_okx_soak(candidate: dict[str, Any], checkout_root: Path) -> di
     last_complete_sequence: int | None = None
     shutdown_seconds = 0.0
     checksum = hashlib.sha256()
+    continuity = EventContinuityTracker()
     event_state = {"event_count": 0, "complete_bar_count": 0, "funding_count": 0}
     snapshots: list[dict[str, int]] = []
     feed = OKXFundingFeed([OKX_SYMBOL], timeframe="1m", poll_interval_seconds=5, queue_capacity=256)
@@ -424,6 +445,8 @@ async def qualify_okx_soak(candidate: dict[str, Any], checkout_root: Path) -> di
                 processing_time=datetime.now(UTC),
                 max_age_seconds=feed.max_event_age_seconds,
             )
+            if continuity.validate(event) is ContinuityDisposition.DUPLICATE:
+                continue
             event_state["event_count"] += 1
             checksum.update(
                 f"{event.kind.value}|{event.completion.value}|{_event_sequence(event)}\n".encode()

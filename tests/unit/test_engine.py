@@ -8,6 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
+import httpx
 import pytest
 from ml4t.backtest import BacktestConfig, Strategy
 from ml4t.backtest.types import Order, OrderSide, OrderStatus, OrderType, Position
@@ -30,6 +31,7 @@ from ml4t.specs import (
 from ml4t.live import StrategyCallbackTimeoutError
 from ml4t.live.engine import LiveEngine
 from ml4t.live.feeds.events import FeedContinuityError
+from ml4t.live.feeds.okx_feed import OKXFundingFeed
 from ml4t.live.feeds.queue import BoundedEventQueue, FeedOverflowError
 from ml4t.live.lifecycle import LiveLifecycleDispatcher
 from ml4t.live.orders import CanonicalOrderRequest
@@ -547,6 +549,64 @@ async def test_run_with_data():
     assert engine.stats["bar_count"] == 3
     assert engine.stats["error_count"] == 0
     assert engine.stats["last_bar_time"] == datetime(2024, 1, 1, 9, 32, tzinfo=UTC)
+
+
+@pytest.mark.asyncio
+async def test_okx_funding_revisions_in_one_settlement_period_reach_strategy(monkeypatch) -> None:
+    now = datetime.now(UTC)
+    observation_times = [
+        int((now - timedelta(seconds=10 - index)).timestamp() * 1_000) for index in range(2)
+    ]
+    settlement = str(int((now + timedelta(hours=4)).timestamp() * 1_000))
+    rates = ["0.0000746859297357", "0.0000756859297357"]
+    funding_requests = 0
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        nonlocal funding_requests
+        if request.url.path.endswith("/market/candles"):
+            return httpx.Response(200, json={"code": "0", "data": []})
+        index = min(funding_requests, 1)
+        funding_requests += 1
+        return httpx.Response(
+            200,
+            json={
+                "code": "0",
+                "data": [
+                    {
+                        "instId": "BTC-USDT-SWAP",
+                        "fundingRate": rates[index],
+                        "fundingTime": settlement,
+                        "ts": str(observation_times[index]),
+                    }
+                ],
+            },
+        )
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(respond))
+    monkeypatch.setattr("ml4t.live.feeds.okx_feed.httpx.AsyncClient", lambda **kwargs: client)
+    feed = OKXFundingFeed(["BTC-USDT-SWAP"], timeframe="1m", poll_interval_seconds=0.01)
+    strategy = RecordingStrategy()
+    broker = MockAsyncBroker()
+    engine = LiveEngine(strategy, broker, feed)
+    await engine.connect()
+    run = asyncio.create_task(engine.run())
+    try:
+        async with asyncio.timeout(3):
+            while len(strategy.on_data_calls) < 2:
+                if run.done():
+                    await run
+                await asyncio.sleep(0.01)
+        assert [call[1]["BTC-USDT-SWAP"]["funding_rate"] for call in strategy.on_data_calls] == [
+            float(rate) for rate in rates
+        ]
+        assert [
+            call[2]["_market_event"]["provider_sequence"] for call in strategy.on_data_calls
+        ] == observation_times
+        assert all(call[0] < now for call in strategy.on_data_calls)
+        assert broker.submit_calls == 0
+    finally:
+        await engine.stop()
+        await run
 
 
 @pytest.mark.asyncio

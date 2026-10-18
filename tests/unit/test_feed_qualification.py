@@ -1,7 +1,9 @@
 """Tests for candidate-bound external feed qualification evidence."""
 
 from copy import deepcopy
+from datetime import UTC, datetime
 
+import httpx
 import pytest
 
 from scripts.qualification.qualify_feeds import (
@@ -14,6 +16,35 @@ from scripts.qualification.qualify_feeds import (
 
 COMMIT = "a" * 40
 WHEEL_HASH = "b" * 64
+
+
+@pytest.mark.asyncio
+async def test_native_funding_comparison_uses_observation_identity_and_rate() -> None:
+    from ml4t.live import OKXFundingFeed
+    from scripts.qualification.qualify_feeds import _native_matches
+
+    now_ms = int(datetime.now(UTC).timestamp() * 1_000)
+    candle = [str(now_ms - 60_000), "100", "102", "99", "101", "12", "0", "0", "1"]
+    native = {
+        "candles": [candle],
+        "funding": [
+            {"fundingTime": str(now_ms + 3_600_000), "ts": str(now_ms), "fundingRate": "0.0001"}
+        ],
+    }
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        records = native["candles"] if request.url.path.endswith("/candles") else native["funding"]
+        return httpx.Response(200, json={"code": "0", "data": records})
+
+    feed = OKXFundingFeed(["BTC-USDT-SWAP"], timeframe="1m")
+    async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
+        feed._client = client
+        await feed._fetch_and_emit()
+        events = [await anext(feed), await anext(feed)]
+    assert _native_matches(events, native)
+    incorrect = deepcopy(native)
+    incorrect["funding"][0]["fundingRate"] = "0.01"
+    assert not _native_matches(events, incorrect)
 
 
 def _candidate() -> dict:
