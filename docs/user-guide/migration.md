@@ -72,6 +72,10 @@ or different target policy is a migration failure even when both strategies emit
 See [Backtest to Live](backtest-to-live.md) for the portability boundary and
 [Candidate Qualification](../qualification.md) for the complete package gate.
 
+Run the [installed-candidate comparison](backtest-to-live.md#run-the-installed-candidate-comparison)
+to exercise both engine dispatch paths and record the resolved dependency versions. The same
+section names the published shadow reference stack; record separate versions for a new parity run.
+
 ## Migrate From The Published Beta
 
 The published `0.1.0b3` package remains the prerelease API migration baseline. The first stable

@@ -103,3 +103,29 @@ virtual positions, and orderly shutdown without a venue. Then compare the same s
 and canonical intents in Backtest and Live on equivalent input. Record data cutoffs, execution
 policy, starting positions, fees, and venue capabilities before interpreting outcome differences.
 The [API reference](../api/index.md#engine) gives the Live engine signature.
+
+## Run the installed-candidate comparison
+
+From a Linux checkout of this repository with `uv` installed, run:
+
+```bash
+uv run --locked python scripts/qualification/check_dependency_matrix.py
+```
+
+The verifier builds the checkout's Live wheel, installs it into separate minimum, locked, and
+maximum dependency environments, and runs the shared strategy through the real `Engine` and
+`LiveEngine` contract tests. It also checks canonical order and broker contracts. The output names
+the installed package versions for each profile; a failed contract or installation returns a
+nonzero exit status. No provider credentials or venue orders are required.
+
+The published shadow quickstart stack checked on 2026-10-17 was:
+
+| Package | Version |
+| --- | --- |
+| `ml4t-live` | `0.1.2` |
+| `ml4t-backtest` | `0.1.12` |
+| `ml4t-specs` | `0.1.5` |
+
+The complete shadow quickstart passed on that stack. The command above builds the current
+checkout instead; use its reported versions when recording a new parity or migration result.
+Neither result establishes equal venue execution or qualifies a later dependency release.
