@@ -770,8 +770,6 @@ class AlpacaBroker:
                 return
 
             if event == "fill":
-                if filled_quantity == 0:
-                    filled_quantity = order.quantity
                 if (
                     filled_quantity != order.quantity
                     or not math.isfinite(filled_price)
