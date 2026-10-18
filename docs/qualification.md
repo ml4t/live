@@ -70,9 +70,13 @@ provider's result. Documentation, metadata, workflows, generic build tools, and 
 the provider's reachable contract do not invalidate it. Missing inputs or an unsupported identity
 schema fail closed.
 
-The workflow stores redacted evidence as a 90-day Actions artifact and as a durable prerelease
-asset named `provider-evidence-RUN_ID/provider-evidence.zip`. The release gate takes wheel and
-source-distribution hashes from the exact candidate artifacts. It then selects complete lifecycle,
+The workflow stores redacted evidence as a 90-day Actions artifact. Leave `publish-evidence` at
+its default `false` to qualify without creating a GitHub release. Publishing a durable prerelease
+asset named `provider-evidence-RUN_ID/provider-evidence.zip` requires separate maintainer
+authorization and an explicit `publish-evidence: true` request. Retained, validated evidence can
+also be archived after qualification once publication is authorized, without repeating the soak.
+The release gate takes artifact hashes from the exact candidate wheel and source distribution.
+It then selects complete lifecycle,
 restart, and soak evidence independently for each matching provider contract. Provider evidence may
 come from different current or earlier runs. Evidence has no time-based expiry. Missing, malformed,
 mismatched, or unclassifiable evidence fails closed before publication. The Aug 10 run at

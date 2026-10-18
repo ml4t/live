@@ -17,6 +17,11 @@ on:
         default: all
         type: choice
         options: [alpaca, ib, okx, all]
+      publish-evidence:
+        description: Publish a durable evidence prerelease (requires separate maintainer authorization)
+        required: false
+        default: false
+        type: boolean
 
 permissions: {}
 
@@ -305,6 +310,7 @@ jobs:
   archive:
     name: Retain provider evidence
     needs: paper
+    if: ${{ inputs.publish-evidence }}
     runs-on: ubuntu-latest
     permissions:
       actions: read

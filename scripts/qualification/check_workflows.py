@@ -659,6 +659,16 @@ def validate_workflows(root: Path = WORKFLOW_ROOT) -> list[str]:
         failures.append("paper qualification does not retain its evidence bundle")
 
     archive_job = paper.get("jobs", {}).get("archive", {})
+    publication_input = (
+        paper.get("on", {})
+        .get("workflow_dispatch", {})
+        .get("inputs", {})
+        .get("publish-evidence", {})
+    )
+    if publication_input.get("type") != "boolean" or publication_input.get("default") != "false":
+        failures.append("provider evidence publication is not an explicit opt-in")
+    if archive_job.get("if") != "${{ inputs.publish-evidence }}":
+        failures.append("provider evidence can publish without an explicit request")
     if _needs(archive_job) != {"paper"} or archive_job.get("runs-on") != "ubuntu-latest":
         failures.append("provider evidence is not archived by a hosted job after qualification")
     archive_text = json.dumps(archive_job, sort_keys=True)
