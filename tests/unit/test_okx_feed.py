@@ -352,7 +352,7 @@ class TestOKXFundingFeedFetchFundingRate:
         assert result.metadata["next_funding_rate"] is None
         assert result.metadata["next_funding_time"] is None
 
-    async def test_scheduled_funding_time_is_identity_not_future_event_time(self):
+    async def test_missing_observation_time_does_not_use_settlement_as_sequence(self):
         feed = OKXFundingFeed(symbols=["BTC-USDT-SWAP"])
         scheduled = datetime.now(UTC) + timedelta(hours=4)
         scheduled_ms = int(scheduled.timestamp() * 1_000)
@@ -377,7 +377,9 @@ class TestOKXFundingFeedFetchFundingRate:
         assert event is not None
         assert event.event_time == event.receipt_time
         assert event.event_time < scheduled
-        assert event.provider_sequence == scheduled_ms
+        assert event.provider_sequence is None
+        assert event.gap is not None
+        assert "observation ts missing" in event.gap.reason
         assert (
             event.metadata["funding_time"]
             == datetime.fromtimestamp(scheduled_ms / 1_000, tz=UTC).isoformat()

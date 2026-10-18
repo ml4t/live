@@ -9,7 +9,7 @@ and DataBento feeds remain experimental and require explicit opt-in.
 | --- | --- | --- | --- | --- | --- | --- |
 | `AlpacaDataFeed` | bar, quote, trade | provider UTC timestamp | bars complete; quotes and trades evolving | provider sequence or explicit unavailable evidence | 120s bars; 30s quotes/trades | 1,024 |
 | `IBDataFeed` | quote, trade | provider UTC time when present; otherwise receipt time | evolving snapshot | explicit unavailable evidence | 5s | 1,024 |
-| `OKXFundingFeed` | bar, funding | candle open time; local receipt time for observed funding | provider candle flag; funding complete | candle/funding schedule identity or explicit unavailable evidence | two intervals plus poll delay | 256 |
+| `OKXFundingFeed` | bar, funding | candle open time; provider response timestamp for funding | provider candle flag; funding complete | candle timestamp/funding response timestamp or explicit unavailable evidence | two intervals plus poll delay | 256 |
 | `BarAggregator` | bar | UTC interval start | complete after interval end; evolving when shutdown flushes the current interval | propagated gap or explicit unavailable evidence | engine setting | 256 |
 
 Every event has separate `event_time` and `receipt_time`. The engine adds `processing_time` under
@@ -164,7 +164,11 @@ feed = OKXFundingFeed(
 
 `OKXFundingFeed` emits candle and funding records as separate events. `fundingTime` identifies the
 scheduled settlement and appears in metadata; it is not used as the occurrence time of a rate that
-was observed earlier. Minute granularity is supported, and candle timestamps align to UTC minute
+was observed earlier. The provider's `ts` identifies and timestamps each funding observation, so
+rate revisions within one settlement period remain distinct. When `ts` is missing, the event uses
+local receipt time and explicitly reports unavailable sequence evidence. See the
+[OKX funding-rate response fields](https://www.okx.com/docs-v5/en/#public-data-rest-api-get-funding-rate).
+Minute granularity is supported, and candle timestamps align to UTC minute
 boundaries. Identical complete candles and identical evolving revisions emit once.
 
 ## BarAggregator

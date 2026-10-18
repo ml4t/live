@@ -357,18 +357,25 @@ class OKXFundingFeed(DataFeedProtocol):
             data = result.get("data", [{}])[0]
             receipt_time = datetime.now(UTC)
             funding_time = data.get("fundingTime")
+            observation_time = data.get("ts")
             event = MarketEvent(
                 version=LifecycleVersion.V1,
-                event_time=receipt_time,
+                event_time=(
+                    datetime.fromtimestamp(int(observation_time) / 1000, tz=UTC)
+                    if observation_time
+                    else receipt_time
+                ),
                 receipt_time=receipt_time,
                 kind=MarketEventKind.FUNDING,
                 completion=EventCompletion.COMPLETE,
                 source="okx",
                 asset=symbol,
                 payload=FundingPayload(float(data["fundingRate"])),
-                provider_sequence=int(funding_time) if funding_time else None,
+                provider_sequence=int(observation_time) if observation_time else None,
                 gap=(
-                    sequence_unavailable("OKX", "fundingTime missing") if not funding_time else None
+                    sequence_unavailable("OKX", "funding observation ts missing")
+                    if not observation_time
+                    else None
                 ),
                 metadata={
                     "funding_time": (
