@@ -53,6 +53,7 @@ def test_okx_soak_cli_retains_report_when_native_request_failure_blocks_qualific
     )
     monkeypatch.setattr(qualify_feeds, "SOAK_DURATION_SECONDS", 2)
     monkeypatch.setattr(qualify_feeds, "SOAK_SNAPSHOT_INTERVAL_SECONDS", 0.5)
+    monkeypatch.setattr(qualify_feeds, "_rss_bytes", lambda: 100_000_000)
     monkeypatch.setattr(qualify_feeds, "_verify_installed_candidate", lambda *args: None)
     monkeypatch.setattr(qualify_feeds, "provider_contract", lambda *args, **kwargs: {})
     candidate = tmp_path / "candidate.json"
