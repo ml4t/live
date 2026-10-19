@@ -503,7 +503,10 @@ async def qualify_okx_soak(candidate: dict[str, Any], checkout_root: Path) -> di
         "overflow_count": final_stats["queue"]["overflow_count"],
         "passed": True,
     }
-    validate_soak_report(report, candidate)
+    try:
+        validate_soak_report(report, candidate)
+    except FeedQualificationError:
+        report["passed"] = False
     return report
 
 

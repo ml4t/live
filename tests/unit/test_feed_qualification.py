@@ -1,5 +1,7 @@
 """Tests for candidate-bound external feed qualification evidence."""
 
+import json
+import sys
 from copy import deepcopy
 from datetime import UTC, datetime
 
@@ -16,6 +18,83 @@ from scripts.qualification.qualify_feeds import (
 
 COMMIT = "a" * 40
 WHEEL_HASH = "b" * 64
+
+
+@pytest.mark.parametrize("connection_failure", [False, True])
+def test_okx_soak_cli_retains_report_when_native_request_failure_blocks_qualification(
+    monkeypatch, tmp_path, connection_failure: bool
+) -> None:
+    from scripts.qualification import qualify_feeds, qualify_provider_soaks
+
+    now_ms = int(datetime.now(UTC).timestamp() * 1_000)
+    candle_ms = now_ms // 60_000 * 60_000 - 60_000
+    failed_requests = 0
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        nonlocal failed_requests
+        if request.url.path.endswith("/candles"):
+            if connection_failure and failed_requests == 0:
+                failed_requests += 1
+                raise httpx.ConnectError("All connection attempts failed", request=request)
+            records = [[str(candle_ms), "100", "102", "99", "101", "12", "0", "0", "1"]]
+        elif request.url.path.endswith("/funding-rate"):
+            records = [
+                {"fundingTime": str(now_ms + 3_600_000), "ts": str(now_ms), "fundingRate": "0.0001"}
+            ]
+        else:
+            records = [{"instId": "BTC-USDT-SWAP", "instType": "SWAP"}]
+        return httpx.Response(200, json={"code": "0", "data": records})
+
+    client_type = httpx.AsyncClient
+    monkeypatch.setattr(
+        httpx,
+        "AsyncClient",
+        lambda **kwargs: client_type(transport=httpx.MockTransport(respond), **kwargs),
+    )
+    monkeypatch.setattr(qualify_feeds, "SOAK_DURATION_SECONDS", 2)
+    monkeypatch.setattr(qualify_feeds, "SOAK_SNAPSHOT_INTERVAL_SECONDS", 0.5)
+    monkeypatch.setattr(qualify_feeds, "_verify_installed_candidate", lambda *args: None)
+    monkeypatch.setattr(qualify_feeds, "provider_contract", lambda *args, **kwargs: {})
+    candidate = tmp_path / "candidate.json"
+    candidate.write_text(json.dumps(_candidate()))
+    output = tmp_path / "okx-soak.json"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "qualify_provider_soaks",
+            "--candidate",
+            str(candidate),
+            "--checkout-root",
+            str(tmp_path),
+            "--provider",
+            "okx",
+            "--alpaca-output",
+            str(tmp_path / "alpaca.json"),
+            "--ib-output",
+            str(tmp_path / "ib.json"),
+            "--okx-output",
+            str(output),
+        ],
+    )
+
+    result = qualify_provider_soaks.main()
+
+    assert failed_requests == int(connection_failure)
+    assert result == int(connection_failure)
+    assert output.exists(), "A rejected native feed session must retain its actual soak metrics"
+    report = json.loads(output.read_text())
+    assert report["passed"] is (not connection_failure)
+    assert report["error_count"] == int(connection_failure)
+    assert report["reconnect_count"] == 1
+    assert report["native_final_reconciliation"] is True
+    assert report["complete_bar_count"] >= 1
+    assert report["funding_count"] >= 1
+    if connection_failure:
+        with pytest.raises(FeedQualificationError, match="stable provider contract"):
+            validate_soak_report(report, _candidate())
+    else:
+        validate_soak_report(report, _candidate())
 
 
 @pytest.mark.asyncio
