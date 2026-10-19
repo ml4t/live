@@ -92,7 +92,9 @@ input, forces fail-closed overload, and requires shutdown within five seconds. T
 then continues for at least six hours with five-minute event, queue, and RSS snapshots and one
 retained-state restart. Every complete minute must remain contiguous, final state must match a
 native OKX observation, RSS growth must remain below 25 MiB, and errors, rejections, or overflows
-fail the run. The retained feed bundle also proves that Alpaca, IB, DataBento, and generic CCXT feed
+fail the run. A completed session rejected by the final checks retains its metrics with
+`passed: false`; it cannot satisfy release qualification. The retained feed bundle also proves that
+Alpaca, IB, DataBento, and generic CCXT feed
 construction requires `experimental=True` and records each adapter's missing guarantees.
 
 The `Monthly provider health` workflow runs the external IB, Alpaca, and OKX integration suites on
