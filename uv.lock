@@ -1294,6 +1294,7 @@ wheels = [
 name = "ml4t-live"
 source = { editable = "." }
 dependencies = [
+    { name = "aiohttp" },
     { name = "alpaca-py" },
     { name = "ccxt" },
     { name = "certifi" },
@@ -1354,6 +1355,7 @@ test = [
 
 [package.metadata]
 requires-dist = [
+    { name = "aiohttp", specifier = "==3.14.4" },
     { name = "alpaca-py", specifier = "==0.44.0" },
     { name = "ccxt", specifier = "==4.5.88" },
     { name = "certifi", specifier = "==2026.10.19" },

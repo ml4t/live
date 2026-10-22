@@ -83,6 +83,14 @@ maximum = "certifi==2026.10.19"
 license = "MPL-2.0"
 support = "patched trust bundle; upgrades must replace roots affected by GHSA-6q48-6c7w-9gw2"
 
+[dependencies.aiohttp]
+requirement = "aiohttp==3.14.4"
+minimum = "aiohttp==3.14.4"
+locked = "aiohttp==3.14.4"
+maximum = "aiohttp==3.14.4"
+license = "Apache-2.0"
+support = "patched SDK transport; existing environments must replace vulnerable 3.14.3"
+
 [imports]
 alpaca = "alpaca-py"
 ccxt = "ccxt"
