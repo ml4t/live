@@ -1,4 +1,4 @@
-"""Reject candidate upgrades that retain known-vulnerable SDK dependencies."""
+"""Reject upgrades that retain vulnerable SDK or certificate dependencies."""
 
 from __future__ import annotations
 
@@ -33,6 +33,7 @@ def check_upgrade() -> tuple[dict[str, str], dict[str, list[str]]]:
                 str(python),
                 "ml4t-live==0.1.2",
                 "ccxt==4.5.74",
+                "aiohttp==3.14.3",
             ]
         )
         environment = os.environ.copy()
@@ -71,8 +72,7 @@ def check_upgrade() -> tuple[dict[str, str], dict[str, list[str]]]:
                     "-I",
                     "-c",
                     "import json,importlib.metadata as m; "
-                    "print(json.dumps({n:m.version(n) for n in "
-                    "('ml4t-live','ccxt','urllib3','multidict')}))",
+                    "print(json.dumps({d.metadata['Name']:d.version for d in m.distributions()}))",
                 ],
                 cwd=root,
                 env=environment,

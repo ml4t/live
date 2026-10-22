@@ -352,9 +352,10 @@ def audit(
         )
     )
     declared_runtime = {canonical_name(name) for name in policy["dependencies"]}
-    unused_direct = declared_runtime - imported
+    used_dependencies = dependency_closure(packages, sorted(imported))
+    unused_direct = declared_runtime - used_dependencies
     if unused_direct:
-        failures.append(f"direct runtime dependencies are not imported: {sorted(unused_direct)}")
+        failures.append(f"runtime dependencies are not used: {sorted(unused_direct)}")
     registry_packages = sorted(
         (
             name,
