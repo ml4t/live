@@ -75,6 +75,14 @@ license = "Apache-2.0"
 support = "experimental optional adapter; exact SDK version"
 matrix = false
 
+[dependencies.certifi]
+requirement = "certifi==2026.10.19"
+minimum = "certifi==2026.10.19"
+locked = "certifi==2026.10.19"
+maximum = "certifi==2026.10.19"
+license = "MPL-2.0"
+support = "patched trust bundle; upgrades must replace roots affected by GHSA-6q48-6c7w-9gw2"
+
 [imports]
 alpaca = "alpaca-py"
 ccxt = "ccxt"

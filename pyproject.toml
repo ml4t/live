@@ -39,6 +39,7 @@ dependencies = [
     "alpaca-py==0.44.0",
     "httpx==0.28.1",
     "ccxt==4.5.88",
+    "certifi==2026.10.19",
 ]
 
 [project.scripts]

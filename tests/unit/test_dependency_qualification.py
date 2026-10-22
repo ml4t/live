@@ -5,8 +5,11 @@ from __future__ import annotations
 import runpy
 import tomllib
 from collections.abc import Callable
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
+
+import pytest
 
 ROOT = Path(__file__).parents[2]
 QUALIFICATION = ROOT / "scripts" / "qualification"
@@ -26,6 +29,38 @@ def test_dependency_closure_is_transitive() -> None:
     }
 
     assert dependency_closure(packages, ["root"]) == {"root", "middle", "leaf"}
+
+
+@pytest.mark.parametrize("add_unused_dependency", [False, True])
+def test_audit_allows_used_transitive_constraints_but_rejects_unused_packages(
+    monkeypatch: pytest.MonkeyPatch, add_unused_dependency: bool
+) -> None:
+    audit = cast(Callable[..., tuple[dict[str, Any], list[str]]], AUDIT["audit"])
+    project = tomllib.loads((ROOT / "pyproject.toml").read_text())
+    lock = tomllib.loads((ROOT / "uv.lock").read_text())
+    policy = tomllib.loads((ROOT / "dependency-policy.toml").read_text())
+    if add_unused_dependency:
+        package = next(p for p in lock["package"] if p["name"] == "ruff")
+        requirement = f"ruff=={package['version']}"
+        project["project"]["dependencies"].append(requirement)
+        next(p for p in lock["package"] if p["name"] == "ml4t-live")["dependencies"].append(
+            {"name": "ruff"}
+        )
+        policy["dependencies"]["ruff"] = {"requirement": requirement, "locked": requirement}
+    metadata = {
+        "info": {"license_expression": "MIT", "version": "1.0"},
+        "releases": {"1.0": [{"upload_time_iso_8601": datetime.now(UTC).isoformat()}]},
+    }
+    monkeypatch.setitem(audit.__globals__, "project_metadata", lambda name: metadata)
+    monkeypatch.setitem(
+        audit.__globals__, "osv_advisories", lambda packages: {name: [] for name, _ in packages}
+    )
+
+    report, failures = audit(project, lock, policy)
+
+    expected = ["ruff"] if add_unused_dependency else []
+    assert report["unused_direct_dependencies"] == expected
+    assert failures == (["runtime dependencies are not used: ['ruff']"] if expected else [])
 
 
 def test_import_scan_requires_an_explicit_distribution_map(tmp_path: Path) -> None:
