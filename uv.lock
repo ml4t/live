@@ -1896,7 +1896,7 @@ name = "pip-system-certs"
 version = "5.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "pip", marker = "sys_platform == 'win32'" },
+    { name = "pip" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/7d/6a/563b05a4f6c9ddc205c98bb413e74221368efb98b8fb9cca96b578b8930c/pip_system_certs-5.3.tar.gz", hash = "sha256:19c8bf9957bcce7d69c4dbc2d0b2ef13de1984d53f50a59012e6dbbad0af67c6", size = 6395, upload-time = "2025-10-16T06:14:55.217Z" }
 wheels = [
@@ -2501,8 +2501,8 @@ name = "secretstorage"
 version = "3.5.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "cryptography", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
-    { name = "jeepney", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "cryptography" },
+    { name = "jeepney" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/1c/03/e834bcd866f2f8a49a85eaff47340affa3bfa391ee9912a952a1faa68c7b/secretstorage-3.5.0.tar.gz", hash = "sha256:f04b8e4689cbce351744d5537bf6b1329c6fc68f91fa666f60a380edddcd11be", size = 19884, upload-time = "2025-11-23T19:02:53.191Z" }
 wheels = [
@@ -2706,17 +2706,18 @@ wheels = [
 
 [[package]]
 name = "virtualenv"
-version = "21.7.13"
+version = "21.14.9"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "distlib" },
     { name = "filelock" },
+    { name = "packaging" },
     { name = "platformdirs" },
     { name = "python-discovery" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/13/50/c9b84eb106d0db420b9878dac0a386c5791726f127ce20b06897f6e3a1e9/virtualenv-21.7.13.tar.gz", hash = "sha256:0355558b6f33619aab31347e43643b0ebc97f61ea3acf617b2b69e1f8a843d11", size = 5360306, upload-time = "2026-09-18T04:35:49.354Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/d0/04/2f69ba1207ce59630ecea8ebfdaf5c8f9a14726f2408ccd145a18d1ef619/virtualenv-21.14.9.tar.gz", hash = "sha256:4d1bee354cd81c820da3bee56e38be3426490f8d1fc54e10ea5b2072ebad8ef8", size = 5500672, upload-time = "2026-10-17T16:09:42.345Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/9a/ce/e74453531b0c49a58d0e8a4f9bab4495705859fee4a4f7de27d58f4a791a/virtualenv-21.7.13-py3-none-any.whl", hash = "sha256:1bea5af7463f59c4719db48fe739579a2a4f569c96f26c086edda85c96da9f59", size = 5328680, upload-time = "2026-09-18T04:35:47.194Z" },
+    { url = "https://files.pythonhosted.org/packages/64/e5/9a3918219745e8bdd64fe0fd9a2d7ce4fffde9268fbc791634b7d4779de9/virtualenv-21.14.9-py3-none-any.whl", hash = "sha256:ac51744da66ae56ff814b087d65096c94de698ec520adc624b108b679655809b", size = 5494452, upload-time = "2026-10-17T16:09:40.584Z" },
 ]
 
 [[package]]
