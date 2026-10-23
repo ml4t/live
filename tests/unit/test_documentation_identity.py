@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import json
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from io import BytesIO
 from pathlib import Path
+from threading import Thread
+from urllib.request import Request
 
 import pytest
 
@@ -55,14 +58,64 @@ def test_site_identity_checks_every_page_and_manifest(tmp_path: Path) -> None:
     assert any("api/index.html: ml4t-commit" in failure for failure in failures)
 
 
+@pytest.mark.parametrize("served_version", ["1.2.3", "1.2.4"])
+def test_deployed_identity_identifies_client_without_accepting_stale_pages(
+    served_version: str,
+) -> None:
+    requests: list[tuple[str, str]] = []
+
+    class Edge(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:
+            agent = self.headers.get("User-Agent", "")
+            requests.append((self.path, agent))
+            if not agent or agent.startswith("Python-urllib/"):
+                self.send_error(403, "Browser signature rejected")
+                return
+            body = rendered_page(version=served_version).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, format: str, *args: object) -> None:
+            pass
+
+    with ThreadingHTTPServer(("127.0.0.1", 0), Edge) as server:
+        thread = Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        base_url = f"http://127.0.0.1:{server.server_port}/docs/live/"
+        try:
+            failures = deployed_identity_failures(
+                base_url, library="live", version="1.2.3", commit=COMMIT, attempts=1
+            )
+        finally:
+            server.shutdown()
+            thread.join()
+
+    paths = ["/docs/live/", "/docs/live/getting-started/quickstart/", "/docs/live/api/"]
+    expected = (
+        []
+        if served_version == "1.2.3"
+        else [
+            f"{base_url}{path.removeprefix('/docs/live/')}: "
+            "ml4t-version is '1.2.4', expected '1.2.3'"
+            for path in paths
+        ]
+    )
+    assert failures == expected
+    assert [path for path, _ in requests] == paths
+    assert all(agent.startswith("ml4t-live-release-verifier/") for _, agent in requests)
+
+
 def test_deployed_identity_default_allows_four_minutes_for_propagation(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     requests: list[str] = []
     sleeps: list[float] = []
 
-    def open_url(url: str, *, timeout: int) -> BytesIO:
-        requests.append(url)
+    def open_url(request: Request, *, timeout: int) -> BytesIO:
+        requests.append(request.full_url)
         assert timeout == 20
         version = "1.2.3" if len(requests) <= 23 * 3 else "1.2.4"
         return BytesIO(rendered_page(version=version).encode())
