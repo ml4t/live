@@ -90,7 +90,15 @@ def deployed_identity_failures(
         for relative in REPRESENTATIVE_PATHS:
             url = urllib.parse.urljoin(base_url, relative)
             try:
-                with urllib.request.urlopen(url, timeout=20) as response:
+                request = urllib.request.Request(
+                    url,
+                    headers={
+                        "User-Agent": (
+                            f"ml4t-live-release-verifier/{version} (+https://github.com/ml4t/live)"
+                        )
+                    },
+                )
+                with urllib.request.urlopen(request, timeout=20) as response:
                     html = response.read().decode("utf-8")
             except Exception as error:
                 failures.append(f"{url}: {error}")
