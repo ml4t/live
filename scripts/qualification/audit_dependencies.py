@@ -1,4 +1,4 @@
-"""Audit the exact runtime and build dependency closures."""
+"""Audit the exact runtime, build, and development dependency closures."""
 
 from __future__ import annotations
 
@@ -103,6 +103,18 @@ def scoped_closures(lock: dict[str, Any]) -> dict[str, set[str]]:
             [
                 dependency["name"]
                 for dependency in project.get("dev-dependencies", {}).get("build", [])
+            ],
+        ),
+        "development": dependency_closure(
+            packages,
+            [
+                dependency["name"]
+                for dependency in project.get("optional-dependencies", {}).get("dev", [])
+            ]
+            + [
+                dependency["name"]
+                for group in project.get("dev-dependencies", {}).values()
+                for dependency in group
             ],
         ),
     }
