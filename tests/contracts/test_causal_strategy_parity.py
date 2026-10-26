@@ -408,6 +408,53 @@ async def test_same_strategy_matches_lifecycle_target_rule_and_reconciliation_co
 
 
 @pytest.mark.asyncio
+async def test_overnight_same_session_target_is_rejected_before_persisting_or_submitting(
+    tmp_path,
+) -> None:
+    spec = FeedSpec(
+        time_contract_version=2,
+        calendar="CME_Equity",
+        timezone="UTC",
+        data_frequency=DataFrequency.HOURLY,
+        timestamp_semantics=TimestampSemantics.EVENT_TIME,
+    )
+    timestamp = datetime(2025, 7, 6, 23, 30, tzinfo=UTC)
+    events = [(timestamp, market_events()[0][1], {})]
+    late = target_intent(
+        session=date(2025, 7, 7), decision_time=timestamp, position_rule_policy_id=None
+    )
+
+    class LateOvernightStrategy(Strategy):
+        def on_data(self, timestamp, data, context, broker) -> None:
+            broker.register_target_intent(late)
+
+    backtest = Engine(
+        backtest_feed(events, feed_spec=spec), LateOvernightStrategy(), execution_policy=policy()
+    )
+    with pytest.raises(Exception, match="market_event|future effective session"):
+        backtest.run()
+    assert not backtest.broker.orders
+    assert not backtest.broker.get_target_intents()
+
+    raw = DeterministicLiveBroker()
+    safe = SafeBroker(
+        raw,
+        LiveRiskConfig(shadow_mode=True, state_file=str(tmp_path / "late-overnight-state.json")),
+    )
+    live = LiveEngine(
+        LateOvernightStrategy(),
+        safe,
+        DeterministicLiveFeed(events, feed_spec=spec),
+        execution_policy=policy(),
+    )
+    await live.connect()
+    with pytest.raises(Exception, match="future effective session"):
+        await live.run()
+    assert not live.strategy_runtime.targets
+    assert not safe.positions
+
+
+@pytest.mark.asyncio
 async def test_scheduled_target_matches_when_observable_state_is_equivalent(tmp_path) -> None:
     events = market_events()
     execution_policy = policy()
