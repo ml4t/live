@@ -34,6 +34,22 @@ maximum = "ml4t-specs>=0.2.0,<0.3"
 license = "MIT"
 support = "versioned calendar declarations and shared lifecycle contracts"
 
+[dependencies.numpy]
+requirement = "numpy>=2.3.2,<2.5"
+minimum = "numpy==2.3.2"
+locked = "numpy==2.4.6"
+maximum = "numpy>=2.3.2,<2.5"
+license = "BSD-3-Clause"
+support = "calendar provider datetime arithmetic requires the qualified pre-2.5 API"
+
+[dependencies.pandas]
+requirement = "pandas>=2.3.3,<3.1"
+minimum = "pandas==2.3.3"
+locked = "pandas==3.0.5"
+maximum = "pandas>=2.3.3,<3.1"
+license = "BSD-3-Clause"
+support = "calendar provider holiday construction requires the qualified pre-3.1 API"
+
 [dependencies.ib-async]
 requirement = "ib-async==2.1.0"
 minimum = "ib-async==2.1.0"

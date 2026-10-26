@@ -10,7 +10,9 @@ from ml4t.backtest import IntentOutcome, IntentReconciliation
 from ml4t.backtest.risk.types import ActionType, PositionState
 from ml4t.backtest.types import Order, OrderSide, OrderStatus, OrderType
 from ml4t.specs import (
+    UNSET_CALENDAR,
     BarPathPolicy,
+    CalendarUnset,
     CanonicalChildOrderIntent,
     CanonicalTargetIntent,
     EvaluationMode,
@@ -18,6 +20,7 @@ from ml4t.specs import (
     ExecutionCapability,
     ExecutionPolicy,
     ExitReason,
+    FeedSpec,
     FillEligibility,
     LifecyclePhase,
     LifecycleVersion,
@@ -30,6 +33,7 @@ from ml4t.specs import (
     SessionPolicy,
     TargetMeasure,
     TimeInForce,
+    TimestampSemantics,
 )
 from ml4t.specs import OrderSide as SpecOrderSide
 from ml4t.specs import OrderType as SpecOrderType
@@ -39,6 +43,7 @@ from .state_migration import (
     PORTABLE_STRATEGY_STATE_SCHEMA_VERSION,
     migrate_portable_strategy_state,
 )
+from .temporal import LiveCalendar
 
 if TYPE_CHECKING:
     from ml4t.backtest.risk.position import PositionRule
@@ -96,7 +101,20 @@ class LiveStrategyRuntime:
         broker: AsyncBrokerProtocol,
         policy: ExecutionPolicy,
         lifecycle_version: LifecycleVersion,
+        *,
+        feed_spec: Any | None = None,
+        calendar: str | None | CalendarUnset = UNSET_CALENDAR,
     ) -> None:
+        spec = (
+            FeedSpec.from_any(feed_spec)
+            if feed_spec is not None
+            else FeedSpec(time_contract_version=2)
+        )
+        if spec.timestamp_semantics is None:
+            spec = spec.with_overrides(timestamp_semantics=TimestampSemantics.EVENT_TIME)
+        self.feed_spec = spec
+        self.calendar = spec.resolve_calendar(calendar=calendar)
+        self._temporal = LiveCalendar(spec, self.calendar)
         self.broker = broker
         self.policy = policy
         self.lifecycle_version = lifecycle_version
@@ -163,10 +181,12 @@ class LiveStrategyRuntime:
             LifecyclePhase.MARKET_EVENT,
         }:
             raise LiveIntentError("target intents require causal initialization or a market event")
+        if not self._temporal.is_session(intent.effective_session):
+            raise LiveIntentError("target effective session is not in the declared calendar")
         if (
             self.active_phase is LifecyclePhase.MARKET_EVENT
             and self.current_event_time is not None
-            and intent.effective_session <= self.current_event_time.date()
+            and intent.effective_session <= self._temporal.session_date(self.current_event_time)
         ):
             raise LiveIntentError("a market-event target must use a future effective session")
         policy_id = intent.position_rule_policy_id
@@ -321,12 +341,18 @@ class LiveStrategyRuntime:
         )
 
     async def _process_targets(self, timestamp: datetime, data: dict[str, dict[str, Any]]) -> None:
-        for intent in self._targets.values():
-            if intent.intent_id in self._processed_targets:
+        pending = [
+            intent
+            for intent in self._targets.values()
+            if intent.intent_id not in self._processed_targets
+        ]
+        if not pending or not self._temporal.allows_event(timestamp):
+            return
+        session = self._temporal.session_date(timestamp)
+        for intent in pending:
+            if intent.effective_session > session:
                 continue
-            if intent.effective_session > timestamp.date():
-                continue
-            if intent.effective_session < timestamp.date():
+            if intent.effective_session < session:
                 raise LiveIntentError(f"target {intent.intent_id!r} missed its effective session")
             if intent.decision_time >= timestamp or intent.information_cutoff >= timestamp:
                 raise LiveIntentError(
