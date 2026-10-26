@@ -169,7 +169,6 @@ class BarAggregator:
         self.feed_spec = source_spec.with_overrides(
             time_contract_version=2,
             calendar=source_spec.resolve_calendar(),
-            timezone="UTC",
             data_frequency=frequency,
             timestamp_semantics=TimestampSemantics.EVENT_TIME,
             bar_label=BarLabel.LEFT,

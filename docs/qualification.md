@@ -34,6 +34,11 @@ host load, Python and dependency identity, latency distribution, throughput, RSS
 shutdown, recovery, and checksum evidence. These limits measure credential-free framework behavior
 on Linux; they do not state venue latency or capacity.
 
+The unforced VCS wheel must follow the latest published stable GitHub release series. This check
+uses the published release independently of the candidate version: an unpublished minor candidate
+can be built explicitly while Git still derives a development version from the preceding release
+tag. Candidate artifact metadata must separately match the explicit candidate version.
+
 ## Qualify Paper Accounts And External Feeds Separately
 
 Credentialed IB and Alpaca checks run only through the manually dispatched `Paper Qualification`

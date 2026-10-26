@@ -1122,3 +1122,47 @@ async def test_explicit_daily_semantics_match_backtest_across_holiday(semantics)
     await engine.connect()
     await engine.run()
     assert live.timestamps == historical.timestamps
+
+
+@pytest.mark.asyncio
+async def test_aggregation_preserves_declared_timezone_for_calendar_free_session_targets(tmp_path):
+    from ml4t.live.feeds import BarAggregator
+
+    timestamp = datetime(2025, 7, 6, 19, 30, tzinfo=UTC)
+    spec = FeedSpec(
+        time_contract_version=2,
+        calendar=None,
+        timezone="America/New_York",
+        session_start_time="17:00",
+        data_frequency=DataFrequency.MINUTE_1,
+        timestamp_semantics=TimestampSemantics.EVENT_TIME,
+    )
+    data = {"SPY": {"open": 100.0, "high": 100.0, "low": 100.0, "close": 100.0, "volume": 1000.0}}
+    events = [(timestamp, data, {})]
+    intent = target_intent(
+        session=date(2025, 7, 7), decision_time=timestamp, position_rule_policy_id=None
+    )
+
+    class ScheduleNextSession(Strategy):
+        def __init__(self):
+            self.accepted = []
+
+        def on_data(self, timestamp, data, context, broker):
+            self.accepted.append(broker.register_target_intent(intent).intent_id)
+
+    historical = ScheduleNextSession()
+    Engine(backtest_feed(events, feed_spec=spec), historical, execution_policy=policy()).run()
+    assert historical.accepted == [intent.intent_id]
+    for name in ("direct", "aggregated"):
+        feed = DeterministicLiveFeed(list(events), feed_spec=spec)
+        if name == "aggregated":
+            feed = BarAggregator(feed)
+        safe = SafeBroker(
+            DeterministicLiveBroker(),
+            LiveRiskConfig(execution_mode="shadow", state_file=str(tmp_path / f"{name}.json")),
+        )
+        strategy = ScheduleNextSession()
+        engine = LiveEngine(strategy, safe, feed, execution_policy=policy())
+        await engine.connect()
+        await engine.run()
+        assert strategy.accepted == historical.accepted
