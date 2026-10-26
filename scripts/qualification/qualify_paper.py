@@ -233,6 +233,10 @@ def _verify_installed_candidate(candidate: dict[str, Any], checkout_root: Path) 
     checkout = checkout_root.resolve()
     if package_path == checkout or checkout in package_path.parents:
         raise PaperQualificationError("paper qualification imported ml4t-live from the checkout")
+    try:
+        _contracts.verify_installed_runtime(checkout_root=checkout_root, ref=candidate["commit"])
+    except _contracts.ProviderContractError as error:
+        raise PaperQualificationError(str(error)) from error
 
 
 def _require_environment(name: str) -> str:

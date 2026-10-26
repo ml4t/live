@@ -12,6 +12,7 @@ from scripts.qualification.provider_contract import (
 )
 
 PROVIDER_PATHS = {
+    ".github/workflows/paper.yml",
     "src/ml4t/live/__init__.py",
     "src/ml4t/live/engine.py",
     "src/ml4t/live/runtime.py",
@@ -29,6 +30,7 @@ PROVIDER_PATHS = {
     "src/ml4t/live/state_migration.py",
     "scripts/qualification/qualify_feeds.py",
     "scripts/qualification/qualify_paper.py",
+    "scripts/qualification/provider_contract.py",
 }
 
 

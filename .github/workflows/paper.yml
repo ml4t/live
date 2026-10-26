@@ -76,7 +76,10 @@ jobs:
       - name: Install only the candidate ML4T wheel outside the checkout
         id: candidate-install
         run: |
-          uv pip install --python "${{ runner.temp }}/paper-venv/bin/python" dist/*.whl
+          uv export --locked --no-default-groups --no-emit-project --no-hashes \
+            --output-file "${{ runner.temp }}/paper-runtime-constraints.txt"
+          uv pip install --python "${{ runner.temp }}/paper-venv/bin/python" \
+            --constraints "${{ runner.temp }}/paper-runtime-constraints.txt" dist/*.whl
           mkdir -p "${{ runner.temp }}/paper-run" "${{ runner.temp }}/paper-state"
       - name: Exercise Alpaca paper order lifecycle
         id: alpaca-exercise

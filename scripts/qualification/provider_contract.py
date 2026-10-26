@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import importlib.metadata
 import json
 import subprocess
 import tomllib
@@ -58,8 +59,14 @@ _CALENDAR_RUNTIME_PATHS = (
     "src/ml4t/live/runtime.py",
     "src/ml4t/live/lifecycle.py",
     "src/ml4t/live/temporal.py",
+    "scripts/qualification/provider_contract.py",
+    "scripts/qualification/qualify_paper.py",
+    ".github/workflows/paper.yml",
 )
-_V4_PATHS = {provider: (*paths, *_CALENDAR_RUNTIME_PATHS) for provider, paths in _V3_PATHS.items()}
+_V4_PATHS = {
+    provider: tuple(dict.fromkeys((*paths, *_CALENDAR_RUNTIME_PATHS)))
+    for provider, paths in _V3_PATHS.items()
+}
 _SHARED_DEPENDENCIES = (
     "ml4t-backtest",
     "ml4t-specs",
@@ -151,6 +158,25 @@ def _supported_runtime(pyproject_text: str) -> dict[str, Any]:
         "requires_python": requires_python,
         "classifiers": python_classifiers,
     }
+
+
+def verify_installed_runtime(*, checkout_root: Path, ref: str) -> dict[str, str]:
+    """Reject provider evidence whose installed inputs differ from its source lock."""
+    lock_text = _git_text(checkout_root, ref, "uv.lock")
+    installed = {}
+    for name in (*_SHARED_DEPENDENCIES, *_DEPENDENCIES.values()):
+        expected = _dependency_version(lock_text, name)
+        try:
+            actual = importlib.metadata.version(name)
+        except importlib.metadata.PackageNotFoundError as error:
+            raise ProviderContractError(f"installed provider runtime is missing {name}") from error
+        if actual != expected:
+            raise ProviderContractError(
+                f"installed provider runtime differs from candidate lock: {name} "
+                f"expected {expected}, found {actual}"
+            )
+        installed[name] = actual
+    return installed
 
 
 def provider_contract(

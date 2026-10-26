@@ -652,3 +652,32 @@ async def test_alpaca_snapshot_accepts_negative_margin_cash() -> None:
     assert snapshot["cash_valid"] is True
     broker._sync_positions.assert_awaited_once()
     broker._sync_orders.assert_awaited_once()
+
+
+def test_provider_preflight_rejects_real_unlocked_calendar_runtime(tmp_path, monkeypatch):
+    import importlib.metadata
+    import subprocess
+
+    root = Path(__file__).resolve().parents[2]
+    fixture = root / "tests/fixtures/dependency-qualification/provider-runtime-unlocked.json"
+    emitted = json.loads(fixture.read_text())
+    (tmp_path / "uv.lock").write_bytes((root / "uv.lock").read_bytes())
+    for args in [
+        ("init", "-b", "main"),
+        ("config", "user.name", "Runtime Test"),
+        ("config", "user.email", "runtime@example.test"),
+        ("add", "uv.lock"),
+        ("commit", "-m", "candidate lock"),
+    ]:
+        subprocess.run(["git", *args], cwd=tmp_path, check=True, capture_output=True)
+    commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=tmp_path, text=True).strip()
+    original = importlib.metadata.version
+    monkeypatch.setattr(
+        importlib.metadata,
+        "version",
+        lambda name: emitted[name] if name in emitted else original(name),
+    )
+    with pytest.raises(PaperQualificationError, match="pandas"):
+        paper_qualification._verify_installed_candidate(
+            {"commit": commit, "version": emitted["ml4t-live"]}, tmp_path
+        )
