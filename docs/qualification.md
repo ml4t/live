@@ -41,7 +41,9 @@ workflow in the protected `paper` environment. Run it when a provider contract c
 exact candidate commit, the successful qualification run that retained `dist-CANDIDATE_SHA`, and
 the changed provider. Use `all` only for initial qualification or when shared changes invalidate all
 three providers. The workflow downloads the candidate artifact instead of rebuilding it, installs
-its wheel outside the checkout, and rejects a run whose commit or status does not match.
+its wheel outside the checkout with runtime constraints exported from the candidate lock, and rejects
+a run whose commit or status does not match. Installed shared-contract, numerical/calendar and
+provider-SDK versions must match the recorded lock before a broker or external feed is created.
 
 Each provider must verify its official paper endpoint and paper account before submission. The
 workflow then checks positions, all pending orders and an asset-filtered view, cash, account value,
@@ -67,8 +69,10 @@ Every extended report records a provider-contract identity. The identity hashes 
 adapter, the qualification logic reached by the check, the resolved provider dependency, the
 supported Python runtime, and the shared behavior that the provider reaches. IB and Alpaca include
 canonical orders, safety policy, reconciliation, persistence, protocols, and state migration. OKX
-includes event, queue, persistence, and protocol behavior. A changed identity invalidates only that
-provider's result. Documentation, metadata, workflows, generic build tools, and source code outside
+includes event, queue, persistence, and protocol behavior. Schema 4 also covers the shared engine,
+strategy runtime, calendar adapter, shared-contract/numerical/calendar dependency versions, and
+provider installer/verifier inputs. A changed identity invalidates only that provider's result.
+Documentation, metadata, unrelated workflows, generic build tools, and source code outside
 the provider's reachable contract do not invalidate it. Missing inputs or an unsupported identity
 schema fail closed.
 

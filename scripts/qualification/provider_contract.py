@@ -123,7 +123,7 @@ def _input_digest(checkout_root: Path, ref: str, path: str) -> str | None:
     try:
         return hashlib.sha256(_git_text(checkout_root, ref, path).encode()).hexdigest()
     except ProviderContractError:
-        if path != "src/ml4t/live/temporal.py":
+        if path not in _CALENDAR_RUNTIME_PATHS:
             raise
         tree = subprocess.run(
             ["git", "ls-tree", ref, "--", path],
