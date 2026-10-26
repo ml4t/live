@@ -4,6 +4,25 @@ Use this guide when a prerelease strategy relies on historical initialization, i
 callbacks, or implicit opening execution. Complete the migration in backtest before connecting a
 live broker.
 
+## Adopt the current calendar cohort
+
+The current source requires Backtest and Specs `>=0.2.0,<0.3`; published Live `0.1.3` remains
+restricted to their `0.1.x` versions. Lifecycle version stays `1`. The candidate runtime adds
+keyword-only `feed_spec` and `calendar` inputs to `LiveEngine` and `LiveStrategyRuntime`; existing
+positional arguments remain valid. The installed API inventory records these additive signatures.
+
+A custom feed without metadata now inherits the shared NYSE default. If it represents continuous
+or synthetic row data, declare temporal-version-2 `calendar=None`, or choose `24/7` for a named
+continuous calendar. Do not rely on feed class names or symbol guessing to select a session.
+Provide an explicit calendar for a non-NYSE venue. The [shared calendar guide](backtest-to-live.md#shared-calendar-declarations)
+explains serialized declarations, clock interpretation and event interval conventions.
+
+Holiday, early-close and break handling replaces the former weekday/fixed-clock approximation.
+Feed silence excludes declared closures, and scheduled targets use exchange session labels rather
+than UTC civil dates. These corrections can change health/recovery timing and opening-target
+eligibility. Compare the same event tape before enabling paper routing; an already-observed
+same-session target must be rejected instead of being treated as a later-day decision.
+
 ## Replace Removed Callbacks
 
 Lifecycle version 1 supports `on_start`, causal initialization through `on_prepare`, market events

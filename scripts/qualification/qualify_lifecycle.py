@@ -27,9 +27,9 @@ QUALIFICATION_TESTS = (
     Path("tests/unit/test_strategy_runtime.py"),
 )
 EXPECTED_DISTRIBUTIONS = {
-    "ml4t-backtest": "0.1.0",
-    "ml4t-live": os.environ.get("SETUPTOOLS_SCM_PRETEND_VERSION", "0.1.1"),
-    "ml4t-specs": "0.1.1",
+    "ml4t-backtest": "0.2.0",
+    "ml4t-live": os.environ.get("SETUPTOOLS_SCM_PRETEND_VERSION", "0.2.0"),
+    "ml4t-specs": "0.2.0",
 }
 BASELINE_REQUIREMENTS = tuple(
     f"{name}=={version}" for name, version in EXPECTED_DISTRIBUTIONS.items() if name != "ml4t-live"

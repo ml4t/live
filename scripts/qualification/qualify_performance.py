@@ -25,6 +25,7 @@ from ml4t.specs import (
     CanonicalTargetIntent,
     EventCompletion,
     ExecutionBehavior,
+    FeedSpec,
     GapEvidence,
     IntentReason,
     LifecyclePhase,
@@ -339,6 +340,8 @@ class QueueFeed:
 
 
 class ReconnectFeed:
+    feed_spec = FeedSpec(time_contract_version=2, calendar=None)
+
     def __init__(self) -> None:
         self.start_count = 0
         self.stop_count = 0

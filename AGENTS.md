@@ -23,6 +23,7 @@ shutdown.
 | `src/ml4t/live/engine.py` | Engine orchestration and runtime transitions |
 | `src/ml4t/live/lifecycle.py` | Synchronous callback dispatch on the live runtime |
 | `src/ml4t/live/runtime.py` | Strategy intents and execution-policy validation |
+| `src/ml4t/live/temporal.py` | Shared feed/config calendars, session labels and trading-time health |
 | `src/ml4t/live/safety.py` | Execution modes, limits, reconciliation, and virtual portfolios |
 | `src/ml4t/live/persistence.py` | Risk state and execution-journal integrity |
 | `src/ml4t/live/brokers/` | Interactive Brokers and Alpaca adapters |

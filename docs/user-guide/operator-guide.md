@@ -30,7 +30,7 @@ What to watch during the run:
 
 - `health=ok` when data is flowing normally
 - `health=feed_silent` when the feed is running but no fresh data has arrived within the configured silence window
-- `health=idle_market_closed` for US equity feeds outside regular market hours
+- `health=idle_market_closed` outside the declared calendar session or during its scheduled breaks
 - `recent_intents` to confirm the strategy is attempting the trades you expect
 - `positions` to confirm `VirtualPortfolio` state changes line up with those intents
 
@@ -99,11 +99,18 @@ The runtime status values are intentionally narrow:
 - `ok`: engine running, broker reachable when known, and bars arriving within the silence threshold
 - `waiting_for_data`: engine running but no bar has been seen yet
 - `feed_silent`: engine running, market session appears open or continuous, but the feed has gone quiet too long
-- `idle_market_closed`: no fresh equity data is expected because the market session is closed
+- `idle_market_closed`: the declared calendar is closed or in a scheduled break
 - `broker_disconnected`: engine running but the broker connection is known to be down
 - `ready`: broker reconciliation and feed startup completed; the strategy has not started
 - `failed`: startup, recovery, callback finalization, or resource cleanup failed
 - `stopped`: engine is not running
+
+`calendar`, `session_label`, `feed_spec` and `next_session_boundary` expose the resolved session
+context. `last_bar_age_seconds` is elapsed wall-clock time since the last accepted feed event;
+`last_bar_trading_age_seconds` excludes scheduled calendar closures and breaks. Feed silence and
+watchdog recovery use the trading-time age, so a lunch break or holiday does not cause an immediate
+restart when trading resumes. Explicit `calendar=None` and the `24/7` calendar count elapsed time.
+Provider-event age validation remains a separate wall-clock check and still rejects stale events.
 
 `runtime_state` reports the transactional phase separately: `preflight`, `connecting_broker`,
 `reconciling`, `starting_feed`, `ready`, `starting_strategy`, `running`, `degraded`, `recovering`,

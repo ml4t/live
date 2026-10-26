@@ -15,7 +15,7 @@ concurrency:
 
 env:
   CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-  CANDIDATE_VERSION: "0.1.3"
+  CANDIDATE_VERSION: "0.2.0"
 
 jobs:
   build:

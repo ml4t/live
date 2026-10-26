@@ -285,7 +285,8 @@ class LiveEngine:
             broker: Async broker implementation.
             feed: Data feed providing timestamp, data, context tuples.
             on_error: Custom error handler callback.
-            feed_silence_seconds: Optional threshold for degraded feed reporting.
+            feed_silence_seconds: Optional trading-time threshold for degraded feed reporting;
+                scheduled calendar closures and breaks do not count.
             watchdog_poll_seconds: Poll interval for runtime health monitoring.
             halt_on_unhealthy: Stop the engine when watchdog detects a degraded state.
             auto_recover: Attempt reconnect/restart when watchdog detects a recoverable state.
@@ -538,13 +539,18 @@ class LiveEngine:
                         event_kind = MarketEventKind.BAR
 
                     self._event_count += 1
-                    self._run_event_count += 1
                     self._event_kind_counts[event_kind] += 1
                     self._last_event_time = timestamp
                     if event_kind is MarketEventKind.BAR:
                         self._bar_count += 1
                         self._last_bar_time = timestamp
                     self._last_bar_received_at = processing_time
+
+                    if self.strategy_config.enforce_sessions and not self._temporal.allows_event(
+                        timestamp
+                    ):
+                        continue
+                    self._run_event_count += 1
 
                     complete_or_non_bar = (
                         typed_event is None

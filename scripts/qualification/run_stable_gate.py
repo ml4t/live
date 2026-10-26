@@ -15,7 +15,7 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 SOURCE_SCOPES = ("src", "tests", "examples", "scripts")
 COVERAGE_MINIMUM = "85"
 CANDIDATE_ENVIRONMENT = {
-    "SETUPTOOLS_SCM_PRETEND_VERSION": os.environ.get("SETUPTOOLS_SCM_PRETEND_VERSION", "0.1.1")
+    "SETUPTOOLS_SCM_PRETEND_VERSION": os.environ.get("SETUPTOOLS_SCM_PRETEND_VERSION", "0.2.0")
 }
 STAGE_GROUPS = {
     "source": frozenset(

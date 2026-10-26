@@ -53,7 +53,22 @@ _V3_PATHS = {
     ),
 }
 _DEPENDENCIES = {"alpaca": "alpaca-py", "ib": "ib-async", "okx": "ccxt"}
-CURRENT_SCHEMA_VERSION = 3
+_CALENDAR_RUNTIME_PATHS = (
+    "src/ml4t/live/engine.py",
+    "src/ml4t/live/runtime.py",
+    "src/ml4t/live/lifecycle.py",
+    "src/ml4t/live/temporal.py",
+)
+_V4_PATHS = {provider: (*paths, *_CALENDAR_RUNTIME_PATHS) for provider, paths in _V3_PATHS.items()}
+_SHARED_DEPENDENCIES = (
+    "ml4t-backtest",
+    "ml4t-specs",
+    "numpy",
+    "pandas",
+    "pandas-market-calendars",
+    "exchange-calendars",
+)
+CURRENT_SCHEMA_VERSION = 4
 
 
 class ProviderContractError(RuntimeError):
@@ -97,6 +112,24 @@ def _dependency_version(lock_text: str, dependency: str) -> str:
     return str(matches.pop())
 
 
+def _input_digest(checkout_root: Path, ref: str, path: str) -> str | None:
+    try:
+        return hashlib.sha256(_git_text(checkout_root, ref, path).encode()).hexdigest()
+    except ProviderContractError:
+        if path != "src/ml4t/live/temporal.py":
+            raise
+        tree = subprocess.run(
+            ["git", "ls-tree", ref, "--", path],
+            cwd=checkout_root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if tree.returncode == 0 and not tree.stdout.strip():
+            return None
+        raise
+
+
 def _supported_runtime(pyproject_text: str) -> dict[str, Any]:
     project = tomllib.loads(pyproject_text).get("project")
     if not isinstance(project, dict):
@@ -130,7 +163,7 @@ def provider_contract(
     """Return a deterministic provider contract at a Git revision."""
     if provider not in PROVIDERS:
         raise ProviderContractError(f"unsupported provider: {provider}")
-    if schema_version not in {1, 2, CURRENT_SCHEMA_VERSION}:
+    if schema_version not in {1, 2, 3, CURRENT_SCHEMA_VERSION}:
         raise ProviderContractError(f"unsupported provider contract schema: {schema_version}")
     paths = (
         _V1_PATHS[provider]
@@ -138,11 +171,10 @@ def provider_contract(
         else _V2_PATHS[provider]
         if schema_version == 2
         else _V3_PATHS[provider]
+        if schema_version == 3
+        else _V4_PATHS[provider]
     )
-    inputs = {
-        path: hashlib.sha256(_git_text(checkout_root, ref, path).encode()).hexdigest()
-        for path in paths
-    }
+    inputs = {path: _input_digest(checkout_root, ref, path) for path in paths}
     dependency = _DEPENDENCIES[provider]
     payload = {
         "schema_version": schema_version,
@@ -154,10 +186,15 @@ def provider_contract(
         },
         "runtime": (
             RUNTIME_CONTRACT
-            if schema_version < CURRENT_SCHEMA_VERSION
+            if schema_version < 3
             else _supported_runtime(_git_text(checkout_root, ref, "pyproject.toml"))
         ),
     }
+    if schema_version >= 4:
+        lock_text = _git_text(checkout_root, ref, "uv.lock")
+        payload["shared_dependencies"] = {
+            name: _dependency_version(lock_text, name) for name in _SHARED_DEPENDENCIES
+        }
     digest = hashlib.sha256(
         json.dumps(payload, separators=(",", ":"), sort_keys=True).encode()
     ).hexdigest()
@@ -174,6 +211,13 @@ def _contract_changes(evidence: dict[str, Any], candidate: dict[str, Any]) -> tu
         changed.append(f"dependency:{candidate['dependency']['name']}")
     if evidence["runtime"] != candidate["runtime"]:
         changed.append("supported-runtime")
+    for name in sorted(
+        set(evidence.get("shared_dependencies", {})) | set(candidate.get("shared_dependencies", {}))
+    ):
+        if evidence.get("shared_dependencies", {}).get(name) != candidate.get(
+            "shared_dependencies", {}
+        ).get(name):
+            changed.append(f"dependency:{name}")
     return tuple(changed)
 
 
@@ -198,6 +242,7 @@ def classify_provider_contract(
         reported_schema = reported_contract.get("schema_version")
         if not isinstance(reported_schema, int) or reported_schema not in {
             2,
+            3,
             CURRENT_SCHEMA_VERSION,
         }:
             return ProviderContractClassification(

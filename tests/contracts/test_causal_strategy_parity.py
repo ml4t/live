@@ -1048,3 +1048,72 @@ async def test_session_enforcement_matches_actual_backtest_at_early_close(
     await engine.connect()
     await engine.run()
     assert live.timestamps == backtest.timestamps
+
+
+@pytest.mark.parametrize(
+    ("clock", "expected"),
+    [(datetime(2025, 7, 3, 12), "open"), (datetime(2025, 7, 3, 14), "closed")],
+)
+def test_status_naive_clock_uses_declared_timezone_across_early_close(clock, expected):
+    spec = FeedSpec(time_contract_version=2, calendar="NYSE", timezone="America/New_York")
+    engine = LiveEngine(
+        ContractStrategy(StrategyTrace(), target_intent()),
+        DeterministicLiveBroker(),
+        DeterministicLiveFeed([], feed_spec=spec),
+    )
+    assert engine.runtime_status(clock)["session_state"] == expected
+
+
+@pytest.mark.parametrize("clock", [datetime(2025, 3, 9, 2, 30), datetime(2025, 11, 2, 1, 30)])
+def test_status_rejects_nonexistent_or_ambiguous_local_clock_before_connection(clock):
+    raw = DeterministicLiveBroker()
+    spec = FeedSpec(time_contract_version=2, calendar="NYSE", timezone="America/New_York")
+    engine = LiveEngine(
+        ContractStrategy(StrategyTrace(), target_intent()),
+        raw,
+        DeterministicLiveFeed([], feed_spec=spec),
+    )
+    with pytest.raises(ValueError, match="ambiguous or nonexistent"):
+        engine.runtime_status(clock)
+    assert raw.connect_calls == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "semantics", [TimestampSemantics.SESSION_LABEL, TimestampSemantics.EVENT_TIME]
+)
+async def test_explicit_daily_semantics_match_backtest_across_holiday(semantics):
+    class Observer(Strategy):
+        def __init__(self):
+            self.timestamps = []
+
+        def on_data(self, timestamp, data, context, broker):
+            self.timestamps.append(_utc(timestamp))
+
+    timestamps = [datetime(2025, 7, day, tzinfo=UTC) for day in (3, 4, 7)]
+    data = {"SPY": {"open": 100.0, "high": 100.0, "low": 100.0, "close": 100.0, "volume": 1000.0}}
+    events = [(timestamp, data, {}) for timestamp in timestamps]
+    spec = FeedSpec(
+        time_contract_version=2,
+        calendar="NYSE",
+        data_frequency=DataFrequency.DAILY,
+        timestamp_semantics=semantics,
+    )
+    historical = Observer()
+    Engine(
+        backtest_feed(events, feed_spec=spec), historical, BacktestConfig(enforce_sessions=True)
+    ).run()
+    expected = (
+        [timestamps[0], timestamps[2]] if semantics is TimestampSemantics.SESSION_LABEL else []
+    )
+    assert historical.timestamps == expected
+    live = Observer()
+    engine = LiveEngine(
+        live,
+        DeterministicLiveBroker(),
+        DeterministicLiveFeed(events, feed_spec=spec),
+        strategy_config=BacktestConfig(enforce_sessions=True),
+    )
+    await engine.connect()
+    await engine.run()
+    assert live.timestamps == historical.timestamps

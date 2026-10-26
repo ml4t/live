@@ -90,6 +90,22 @@ version = "0.2.0"
 [[package]]
 name = "ml4t-specs"
 version = "0.2.0"
+
+[[package]]
+name = "numpy"
+version = "2.4.6"
+
+[[package]]
+name = "pandas"
+version = "3.0.5"
+
+[[package]]
+name = "pandas-market-calendars"
+version = "5.5.0"
+
+[[package]]
+name = "exchange-calendars"
+version = "4.13.2"
 """
     )
     return tmp_path, _commit(tmp_path, "initial contract")
@@ -173,8 +189,10 @@ def test_supported_runtime_change_invalidates_every_provider(
         assert classification.changed_inputs == ("supported-runtime",)
 
 
+@pytest.mark.parametrize("reported_schema", [2, 3])
 def test_older_report_schema_is_upgraded_before_comparison(
     contract_repository: tuple[Path, str],
+    reported_schema: int,
 ) -> None:
     repository, evidence_commit = contract_repository
     path = repository / "src/ml4t/live/persistence.py"
@@ -186,7 +204,7 @@ def test_older_report_schema_is_upgraded_before_comparison(
         "ib",
         evidence_commit,
         candidate_commit,
-        reported_schema=2,
+        reported_schema=reported_schema,
     )
 
     assert classification.reusable is False

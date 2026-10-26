@@ -45,6 +45,57 @@ The strategy class may remain the same. Verify callback traces and canonical int
 causal tape. Equal signals alone are insufficient because two runtimes can observe different phases,
 construct different orders, or apply different position rules after producing the same signal label.
 
+## Shared calendar declarations
+
+The current source targets Backtest `0.2.0` and Specs `0.2.0`; lifecycle version remains `1`.
+Published Live `0.1.3` requires the older `0.1.x` cohort and cannot be installed with these `0.2.0`
+packages. Do not override its dependency resolver to combine them. The runtime integration in this
+source requires its own qualified release.
+
+Pass the same `FeedSpec` to the historical feed and the Live engine:
+
+```python
+from ml4t.backtest import BacktestConfig, DataFeed, Engine
+from ml4t.backtest.config import DataFrequency
+from ml4t.specs import FeedSpec, TimestampSemantics
+
+spec = FeedSpec(
+    time_contract_version=2,
+    calendar="CME_Equity",
+    timezone="UTC",
+    data_frequency=DataFrequency.HOURLY,
+    timestamp_semantics=TimestampSemantics.EVENT_TIME,
+)
+config = BacktestConfig(enforce_sessions=True)
+historical_feed = DataFeed(prices_df=prices, feed_spec=spec)
+backtest = Engine(historical_feed, historical_strategy, config)
+live = LiveEngine(
+    live_strategy, safe_broker, live_feed, strategy_config=config, feed_spec=spec
+)
+```
+
+Calendar selection uses an explicit `LiveEngine(calendar=...)` override, then the shared config/feed
+resolution, then NYSE. An omitted declaration inherits; explicit `calendar=None` disables exchange
+session handling and keeps row-based operation. `calendar="24/7"` names a continuous calendar and
+retains calendar session labels. These are distinct declarations in temporal contract version 2.
+The engine passes a resolved copy to `on_prepare` without mutating the caller's config or metadata.
+
+Session health and scheduled targets use authoritative exchange sessions, including holidays,
+early closes, lunch breaks and overnight session labels. A Sunday CME event can belong to Monday's
+session before UTC midnight. `enforce_sessions=True` filters strategy events using the same calendar
+interval convention as Backtest: event-time/left labels include the open and exclude the close;
+bar-close/right labels exclude the open and include the close. Session-label timestamps select
+session dates rather than intraday instants. The default remains `enforce_sessions=False`.
+
+Provider events must still carry aware UTC timestamps. For explicit status-clock arguments, naive
+timestamps use the declared feed timezone; ambiguous or nonexistent DST times require an aware
+argument. Unknown calendars fail during construction, before broker connection or feed startup.
+
+The installed comparison below executes the causal strategy, CME overnight target, early-close
+filter and calendar-health regressions with the actual installed Backtest/Specs versions. Provider
+order and extended-session qualification remain separate from this offline comparison. This
+three-library workflow does not establish coinstallation of all seven libraries or venue fill parity.
+
 ## Portability And Outcome Parity
 
 Lifecycle portability means both engines invoke the same versioned callbacks with the information
