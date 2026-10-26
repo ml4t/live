@@ -21,6 +21,7 @@ from ml4t.backtest.execution import RebalanceSchedule
 from ml4t.backtest.strategies import LongShortStrategy
 from ml4t.specs import (
     AssetTarget,
+    BarLabel,
     CanonicalTargetIntent,
     ExecutionBehavior,
     ExecutionPolicy,
@@ -891,3 +892,110 @@ async def test_cme_overnight_target_has_the_same_session_and_observable_position
     assert live.targets == backtest.targets
     assert live.callback_trace == backtest.callback_trace
     assert live.strategy_trace == backtest.strategy_trace
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("calendar", ["HKEX", None, "24/7"])
+async def test_feed_freshness_excludes_only_declared_calendar_closures(
+    monkeypatch, calendar: str | None
+) -> None:
+    import ml4t.live.engine as engine_module
+
+    loop = asyncio.get_running_loop()
+    observed = asyncio.Event()
+    clock = [datetime(2025, 7, 7, 4, tzinfo=UTC)]
+
+    class Clock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return clock[0].astimezone(tz)
+
+    class WaitingFeed:
+        feed_spec = FeedSpec(
+            time_contract_version=2,
+            calendar=calendar,
+            timestamp_semantics=TimestampSemantics.BAR_CLOSE,
+            bar_label=BarLabel.RIGHT,
+        )
+
+        def __init__(self):
+            self.queue = asyncio.Queue()
+
+        async def start(self):
+            self.queue.put_nowait((clock[0], {"0005.HK": {"close": 100.0}}, {}))
+
+        def stop(self):
+            self.queue.put_nowait(None)
+
+        def __aiter__(self):
+            return self
+
+        async def __anext__(self):
+            item = await self.queue.get()
+            if item is None:
+                raise StopAsyncIteration
+            return item
+
+    class Observer(Strategy):
+        def on_data(self, timestamp, data, context, broker):
+            loop.call_soon_threadsafe(observed.set)
+
+    monkeypatch.setattr(engine_module, "datetime", Clock)
+    engine = LiveEngine(
+        Observer(),
+        DeterministicLiveBroker(),
+        WaitingFeed(),
+        feed_silence_seconds=5,
+        watchdog_poll_seconds=60,
+    )
+    await engine.connect()
+    task = asyncio.create_task(engine.run())
+    try:
+        await asyncio.wait_for(observed.wait(), timeout=5)
+        clock[0] = datetime(2025, 7, 7, 5, 0, 2, tzinfo=UTC)
+        status = engine.runtime_status()
+        assert status["health"] == ("ok" if calendar == "HKEX" else "feed_silent")
+        assert status["last_bar_age_seconds"] == 3602
+        assert status["last_bar_trading_age_seconds"] == (2 if calendar == "HKEX" else 3602)
+        clock[0] = datetime(2025, 7, 7, 5, 0, 6, tzinfo=UTC)
+        assert engine.runtime_status()["health"] == "feed_silent"
+    finally:
+        await engine.stop()
+        await task
+
+
+@pytest.mark.parametrize("provider", ["okx", "alpaca"])
+def test_actual_crypto_feed_declares_weekend_calendar_to_engine(provider: str) -> None:
+    from ml4t.live.feeds import OKXFundingFeed
+
+    feed = OKXFundingFeed(["BTC-USDT-SWAP"]) if provider == "okx" else _offline_alpaca_crypto_feed()
+    engine = LiveEngine(
+        ContractStrategy(StrategyTrace(), target_intent()), DeterministicLiveBroker(), feed
+    )
+    status = engine.runtime_status(datetime(2025, 7, 6, 15, tzinfo=UTC))
+    assert status["session_state"] == "continuous"
+    assert status["calendar"] == "24/7"
+
+
+def _offline_alpaca_crypto_feed():
+    from ml4t.live.feeds import AlpacaDataFeed
+    from ml4t.live.feeds.experimental import ExperimentalFeedWarning
+
+    with pytest.warns(ExperimentalFeedWarning):
+        return AlpacaDataFeed("offline", "offline", ["BTC/USD"], experimental=True)
+
+
+@pytest.mark.parametrize("calendar", [None, "CME_Equity"])
+def test_aggregated_feed_preserves_the_source_calendar_in_engine_health(calendar):
+    from ml4t.live.feeds import BarAggregator
+
+    source = DeterministicLiveFeed(
+        [], feed_spec=FeedSpec(time_contract_version=2, calendar=calendar)
+    )
+    feed = BarAggregator(source)
+    engine = LiveEngine(
+        ContractStrategy(StrategyTrace(), target_intent()), DeterministicLiveBroker(), feed
+    )
+    status = engine.runtime_status(datetime(2025, 7, 6, 23, 30, tzinfo=UTC))
+    assert status["session_state"] == ("continuous" if calendar is None else "open")
+    assert status["calendar"] == calendar
