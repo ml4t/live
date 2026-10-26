@@ -171,7 +171,7 @@ class BarAggregator:
             calendar=source_spec.resolve_calendar(),
             timezone="UTC",
             data_frequency=frequency,
-            timestamp_semantics=TimestampSemantics.BAR_OPEN,
+            timestamp_semantics=TimestampSemantics.EVENT_TIME,
             bar_label=BarLabel.LEFT,
             bar_grid_anchor=None,
             partial_bar_policy=None,

@@ -999,3 +999,52 @@ def test_aggregated_feed_preserves_the_source_calendar_in_engine_health(calendar
     status = engine.runtime_status(datetime(2025, 7, 6, 23, 30, tzinfo=UTC))
     assert status["session_state"] == ("continuous" if calendar is None else "open")
     assert status["calendar"] == calendar
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("calendar", "semantics", "expected_indices"),
+    [
+        ("NYSE", TimestampSemantics.EVENT_TIME, [1]),
+        ("NYSE", TimestampSemantics.BAR_CLOSE, [2]),
+        (None, TimestampSemantics.EVENT_TIME, [0, 1, 2, 3]),
+    ],
+)
+async def test_session_enforcement_matches_actual_backtest_at_early_close(
+    calendar, semantics, expected_indices
+):
+    class Observer(Strategy):
+        def __init__(self):
+            self.timestamps = []
+
+        def on_data(self, timestamp, data, context, broker):
+            self.timestamps.append(_utc(timestamp))
+
+    timestamps = [
+        datetime(2025, 7, 3, hour, minute, tzinfo=UTC)
+        for hour, minute in [(13, 0), (13, 30), (17, 0), (17, 1)]
+    ]
+    data = {"SPY": {"open": 100.0, "high": 100.0, "low": 100.0, "close": 100.0, "volume": 1000.0}}
+    events = [(timestamp, data, {}) for timestamp in timestamps]
+    spec = FeedSpec(
+        time_contract_version=2,
+        calendar=calendar,
+        data_frequency=DataFrequency.MINUTE_1,
+        timestamp_semantics=semantics,
+    )
+    backtest = Observer()
+    Engine(
+        backtest_feed(events, feed_spec=spec), backtest, BacktestConfig(enforce_sessions=True)
+    ).run()
+    expected = [timestamps[index] for index in expected_indices]
+    assert backtest.timestamps == expected
+    live = Observer()
+    engine = LiveEngine(
+        live,
+        DeterministicLiveBroker(),
+        DeterministicLiveFeed(events, feed_spec=spec),
+        strategy_config=BacktestConfig(enforce_sessions=True),
+    )
+    await engine.connect()
+    await engine.run()
+    assert live.timestamps == backtest.timestamps
