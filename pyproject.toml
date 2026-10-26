@@ -33,8 +33,8 @@ classifiers = [
 ]
 requires-python = ">=3.12"
 dependencies = [
-    "ml4t-backtest>=0.1.0,<0.2",
-    "ml4t-specs>=0.1.1,<0.2",
+    "ml4t-backtest>=0.2.0,<0.3",
+    "ml4t-specs>=0.2.0,<0.3",
     "ib-async==2.1.0",
     "alpaca-py==0.44.0",
     "httpx==0.28.1",

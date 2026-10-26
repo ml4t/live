@@ -1275,7 +1275,7 @@ wheels = [
 
 [[package]]
 name = "ml4t-backtest"
-version = "0.1.12"
+version = "0.2.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "ml4t-specs" },
@@ -1285,9 +1285,9 @@ dependencies = [
     { name = "polars" },
     { name = "pyyaml" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/10/9f/21195e6abe97e812e149af10c1d6ec46ae34bf74615f9f9d80a6f2553a0e/ml4t_backtest-0.1.12.tar.gz", hash = "sha256:4a5ce7f4f9c10e0fb56cc9ca61b763c897a694a8d94e0f054abbbe2cdc5cff36", size = 512833, upload-time = "2026-09-24T19:28:54.465Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/a6/d0/3faa433e0c06267def27d3698056ff431917756e0e35b712f7855b88d807/ml4t_backtest-0.2.0.tar.gz", hash = "sha256:0ccd265cf85796d1e6cf3e4717317feb68eb93cc7efb44e941092cf91edf11d6", size = 1260028, upload-time = "2026-10-22T19:55:08.446Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/5e/7b/2afd61a2de57c3318302590fa1d8c457678313ae736880b563b4386ba5f8/ml4t_backtest-0.1.12-py3-none-any.whl", hash = "sha256:8f5dfe7c2ab96c497136934448bb3211d0d3bf8ec24e71b34229ca5cf53e393b", size = 240551, upload-time = "2026-09-24T19:28:52.538Z" },
+    { url = "https://files.pythonhosted.org/packages/c2/d7/6dab7643af1f43152cbe0e046ea722b0eb41c8ff5bcc34c09a152f0f5cff/ml4t_backtest-0.2.0-py3-none-any.whl", hash = "sha256:64ae01c91c98a349b23b0fca50d75ade9d3d1a3fb8641f95799870e979e0c08e", size = 392374, upload-time = "2026-10-22T19:55:06.312Z" },
 ]
 
 [[package]]
@@ -1365,8 +1365,8 @@ requires-dist = [
     { name = "mkdocs", marker = "extra == 'docs'", specifier = ">=1.6,<2" },
     { name = "mkdocs-material", marker = "extra == 'docs'", specifier = ">=9.5.0" },
     { name = "mkdocstrings", extras = ["python"], marker = "extra == 'docs'", specifier = ">=0.24.0" },
-    { name = "ml4t-backtest", specifier = ">=0.1.0,<0.2" },
-    { name = "ml4t-specs", specifier = ">=0.1.1,<0.2" },
+    { name = "ml4t-backtest", specifier = ">=0.2.0,<0.3" },
+    { name = "ml4t-specs", specifier = ">=0.2.0,<0.3" },
     { name = "packaging", marker = "extra == 'dev'", specifier = "==26.3" },
     { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=3.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
@@ -1409,14 +1409,14 @@ test = [
 
 [[package]]
 name = "ml4t-specs"
-version = "0.1.5"
+version = "0.2.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pyyaml" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/d9/e3/fc4cbf67ec8bfd67fb87bcf97e17614a68e4e4d40cb90eae7b404c236ce0/ml4t_specs-0.1.5.tar.gz", hash = "sha256:cbed6b79d9992b00eef54a2e4d943ddf9c10c20d7ab89872e11cb328db682696", size = 55437, upload-time = "2026-09-19T13:46:24.128Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/2e/46/c734e5bcac1f214c83423243023b5d313bccabd25563da4e7d5e6b80f9f4/ml4t_specs-0.2.0.tar.gz", hash = "sha256:e5d5d614f71d14223341f992009d0d0bf14f30a8398c50872d2b3fb80fd33d82", size = 59749, upload-time = "2026-10-17T18:21:32.512Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/4b/4f/164cad0da76c3947ea96902a74f4d91c88da8e92cd35600d56666f0435a5/ml4t_specs-0.1.5-py3-none-any.whl", hash = "sha256:4c8315f5da52674a1132dafa53568f4e1b02bbd6da400399d61b33d459315117", size = 34347, upload-time = "2026-09-19T13:46:22.745Z" },
+    { url = "https://files.pythonhosted.org/packages/66/ff/bfc427bb71635f31cb240330aa2b1b486748999f05a5922ee5f58df721fe/ml4t_specs-0.2.0-py3-none-any.whl", hash = "sha256:cfd550d19b469f1b083d6ac3f83b235fe71aee19c28465f2ac2c8620064bae61", size = 36946, upload-time = "2026-10-17T18:21:30.964Z" },
 ]
 
 [[package]]
