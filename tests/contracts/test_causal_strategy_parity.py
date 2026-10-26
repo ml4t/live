@@ -1100,9 +1100,14 @@ async def test_explicit_daily_semantics_match_backtest_across_holiday(semantics)
         timestamp_semantics=semantics,
     )
     historical = Observer()
-    Engine(
+    historical_engine = Engine(
         backtest_feed(events, feed_spec=spec), historical, BacktestConfig(enforce_sessions=True)
-    ).run()
+    )
+    if semantics is TimestampSemantics.EVENT_TIME:
+        with pytest.warns(UserWarning, match="retained 0 of 3 intraday bars"):
+            historical_engine.run()
+    else:
+        historical_engine.run()
     expected = (
         [timestamps[0], timestamps[2]] if semantics is TimestampSemantics.SESSION_LABEL else []
     )
