@@ -63,6 +63,38 @@ def test_audit_allows_used_transitive_constraints_but_rejects_unused_packages(
     assert failures == (["runtime dependencies are not used: ['ruff']"] if expected else [])
 
 
+def test_audit_rejects_vulnerable_transitive_development_dependency(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    audit = cast(Callable[..., tuple[dict[str, Any], list[str]]], AUDIT["audit"])
+    project = tomllib.loads((ROOT / "pyproject.toml").read_text())
+    lock = tomllib.loads((ROOT / "uv.lock").read_text())
+    policy = tomllib.loads((ROOT / "dependency-policy.toml").read_text())
+    fixture = ROOT / "tests/fixtures/dependency-qualification/filelock-3.32.2.toml"
+    vulnerable = tomllib.loads(fixture.read_text())["package"][0]
+    lock["package"] = [
+        vulnerable if package["name"] == "filelock" else package for package in lock["package"]
+    ]
+    advisories = ["GHSA-567q-5qvw-pf92", "GHSA-9vhv-jxww-xfm5", "GHSA-v4x8-3wr5-3wq8"]
+    metadata = {
+        "info": {"license_expression": "MIT", "version": "1.0"},
+        "releases": {"1.0": [{"upload_time_iso_8601": datetime.now(UTC).isoformat()}]},
+    }
+    monkeypatch.setitem(audit.__globals__, "project_metadata", lambda name: metadata)
+    monkeypatch.setitem(
+        audit.__globals__,
+        "osv_advisories",
+        lambda packages: {
+            name: advisories if (name, version) == ("filelock", "3.32.2") else []
+            for name, version in packages
+        },
+    )
+
+    _, failures = audit(project, lock, policy)
+
+    assert failures == [f"dependency filelock has advisories: {advisories}"]
+
+
 def test_import_scan_requires_an_explicit_distribution_map(tmp_path: Path) -> None:
     imported_distributions = cast(
         Callable[[Path, dict[str, str]], set[str]], AUDIT["imported_distributions"]
