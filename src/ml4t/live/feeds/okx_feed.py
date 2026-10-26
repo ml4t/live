@@ -33,11 +33,13 @@ import httpx
 from ml4t.specs import (
     BarPayload,
     EventCompletion,
+    FeedSpec,
     FundingPayload,
     GapEvidence,
     LifecycleVersion,
     MarketEvent,
     MarketEventKind,
+    TimestampSemantics,
 )
 
 from ml4t.live.feeds.events import sequence_unavailable
@@ -64,6 +66,12 @@ class OKXFundingFeed(DataFeedProtocol):
     """
 
     BASE_URL = "https://www.okx.com/api/v5"
+    feed_spec = FeedSpec(
+        time_contract_version=2,
+        calendar="24/7",
+        timezone="UTC",
+        timestamp_semantics=TimestampSemantics.EVENT_TIME,
+    )
 
     def __init__(
         self,

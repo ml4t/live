@@ -32,10 +32,12 @@ from alpaca.data.live import CryptoDataStream, StockDataStream
 from ml4t.specs import (
     BarPayload,
     EventCompletion,
+    FeedSpec,
     LifecycleVersion,
     MarketEvent,
     MarketEventKind,
     QuotePayload,
+    TimestampSemantics,
     TradePayload,
 )
 
@@ -140,6 +142,12 @@ class AlpacaDataFeed(DataFeedProtocol):
         # Separate stock and crypto symbols
         self._stock_symbols = [s for s in symbols if not self._is_crypto(s)]
         self._crypto_symbols = [s for s in symbols if self._is_crypto(s)]
+        self.feed_spec = FeedSpec(
+            time_contract_version=2,
+            calendar="NYSE" if self._stock_symbols else "24/7",
+            timezone="UTC",
+            timestamp_semantics=TimestampSemantics.EVENT_TIME,
+        )
 
         # Streams (created in start())
         self._stock_stream: StockDataStream | None = None

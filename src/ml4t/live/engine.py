@@ -1435,10 +1435,14 @@ class LiveEngine:
             feed_stats = None
 
         last_bar_age_seconds: float | None = None
+        last_bar_trading_age_seconds: float | None = None
         if self._last_bar_received_at is not None:
             last_bar_age_seconds = max(
                 0.0,
                 (reference_now - self._last_bar_received_at).total_seconds(),
+            )
+            last_bar_trading_age_seconds = self._temporal.trading_seconds(
+                self._last_bar_received_at, reference_now
             )
 
         if self._runtime_state is RuntimeState.FAILED:
@@ -1455,7 +1459,8 @@ class LiveEngine:
             health = "waiting_for_data"
         elif (
             self.feed_silence_seconds is not None
-            and last_bar_age_seconds > self.feed_silence_seconds
+            and last_bar_trading_age_seconds is not None
+            and last_bar_trading_age_seconds > self.feed_silence_seconds
         ):
             health = "feed_silent"
         else:
@@ -1475,6 +1480,7 @@ class LiveEngine:
             "last_bar_time": self._last_bar_time,
             "last_bar_received_at": self._last_bar_received_at,
             "last_bar_age_seconds": last_bar_age_seconds,
+            "last_bar_trading_age_seconds": last_bar_trading_age_seconds,
             "broker_connected": broker_connected,
             "session_state": session["market"],
             "calendar": self.calendar,
