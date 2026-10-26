@@ -33,14 +33,14 @@ classifiers = [
 ]
 requires-python = ">=3.12"
 dependencies = [
-    "ml4t-backtest>=0.1.0,<0.2",
-    "ml4t-specs>=0.1.1,<0.2",
+    "ml4t-backtest>=0.1.0,<0.3",
+    "ml4t-specs>=0.1.1,<0.3",
     "ib-async==2.1.0",
     "alpaca-py==0.44.0",
     "httpx==0.28.1",
-    "ccxt==4.5.88",
+    "ccxt==4.5.90",
     "certifi==2026.10.19",
-    "aiohttp==3.14.4",
+    "aiohttp==3.14.5",
 ]
 
 [project.scripts]
@@ -70,7 +70,7 @@ docs = [
     "mkdocstrings[python]>=0.24.0",
 ]
 experimental = [
-    "databento==0.87.0",
+    "databento==0.88.0",
 ]
 
 [build-system]
