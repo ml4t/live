@@ -39,6 +39,27 @@ uses the published release independently of the candidate version: an unpublishe
 can be built explicitly while Git still derives a development version from the preceding release
 tag. Candidate artifact metadata must separately match the explicit candidate version.
 
+## Python 3.15 diagnostics during the Live 0.2 wait
+
+The [canonical compatibility decision](https://github.com/ml4t/ecosystem/blob/56d42098ff91c80c3318d4677c6dc2f178706cf7/decisions/0018-live-020-python315-calendar-wait.md)
+limits this wait to Live `>=0.2.0.dev0,<0.3` through 2026-11-26. Candidate metadata must declare
+`>=3.12,<3.15`; the shared validator builds the explicitly requested candidate version and checks
+its actual wheel identity. Python 3.12-3.14 operating-system, artifact, provider and warning gates
+remain required.
+
+The monthly `Python 3.15 dependency and calendar canary` runs on Linux, macOS and Windows.
+It resolves every mandatory Live runtime requirement separately, records the actual dependency and
+unsupported source-import environment, and exercises causal lifecycle, aggregation and retained
+state workflows. Live itself is not installed into that unsupported environment. An independent
+public Backtest 0.2.0 / Specs 0.2.0 Hong Kong schedule probe uses newer NumPy with Pandas 3.0.5 and
+keeps warnings as errors; it runs even when the declared-dependency/source probe fails. Logs,
+versions, schedule output or native failures remain available in the workflow artifact.
+
+A successful source probe is not normal installed-wheel support. An upstream-provider or NumPy
+review trigger requires a fresh compatibility review, followed by complete normal three-OS source
+and artifact qualification before removing the bound. Do not suppress warnings or substitute a
+historically different calendar provider to end the wait.
+
 ## Qualify Paper Accounts And External Feeds Separately
 
 Credentialed IB and Alpaca checks run only through the manually dispatched `Paper Qualification`

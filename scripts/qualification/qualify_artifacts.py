@@ -230,7 +230,7 @@ def validate_metadata(message: Message, project: dict[str, object]) -> str:
     failures: list[str] = []
     if message["Name"] != "ml4t-live":
         failures.append("Name")
-    if SpecifierSet(message["Requires-Python"] or "") != SpecifierSet(">=3.12"):
+    if SpecifierSet(message["Requires-Python"] or "") != SpecifierSet(">=3.12,<3.15"):
         failures.append("Requires-Python")
     if message["License-Expression"] != "MIT":
         failures.append("License-Expression")
