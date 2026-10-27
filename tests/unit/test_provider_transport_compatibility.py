@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import asyncio
 import json
+import socket
 import ssl
+import struct
+import sys
 from contextlib import suppress
 from datetime import UTC, datetime, timedelta
 from ipaddress import ip_address
@@ -251,10 +254,15 @@ async def test_actual_httpx_anyio_pool_recovers_after_bad_wire_timeout_and_cance
                     + body
                 )
                 await writer.drain()
+        except (ConnectionResetError, BrokenPipeError):
+            pass
         finally:
             writer.close()
-            await writer.wait_closed()
-            handlers.remove(task)
+            try:
+                with suppress(ConnectionResetError, BrokenPipeError):
+                    await writer.wait_closed()
+            finally:
+                handlers.remove(task)
 
     server = await asyncio.start_server(
         peer, "127.0.0.1", 0, ssl=tls_contexts[0] if secure else None
@@ -283,6 +291,21 @@ async def test_actual_httpx_anyio_pool_recovers_after_bad_wire_timeout_and_cance
             request.cancel()
             with pytest.raises(asyncio.CancelledError):
                 await request
+            stalled.clear()
+            _, reset_peer = await asyncio.open_connection(
+                "127.0.0.1", port, ssl=tls_contexts[1] if secure else None
+            )
+            reset_peer.write(b"GET /stall HTTP/1.1\r\nHost: localhost\r\n\r\n")
+            await reset_peer.drain()
+            await asyncio.wait_for(stalled.wait(), 1)
+            reset_peer.get_extra_info("socket").setsockopt(
+                socket.SOL_SOCKET,
+                socket.SO_LINGER,
+                struct.pack("HH" if sys.platform == "win32" else "ii", 1, 0),
+            )
+            reset_peer.transport.abort()
+            with suppress(ConnectionResetError, BrokenPipeError):
+                await reset_peer.wait_closed()
             assert (await client.get("/ok")).json()["code"] == "0"
         if handlers:
             await asyncio.wait_for(asyncio.gather(*handlers), 1)
