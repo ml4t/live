@@ -49,7 +49,7 @@ jobs:
     needs: preflight
     permissions:
       contents: read
-    uses: ml4t/ecosystem/.github/workflows/qualify-library.yml@5116071d19a5054bbb85e7f4ffdadc579a049ae7 # v2026.10.26 commit-bound evidence history
+    uses: ml4t/ecosystem/.github/workflows/qualify-library.yml@972fbc987d9d8ca3c311d717e7cbd3c0f59c4863 # v2026.10.26 commit-bound evidence history
     with:
       import-package: ml4t.live
       fetch-depth: 0
