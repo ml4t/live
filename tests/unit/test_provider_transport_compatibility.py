@@ -12,7 +12,7 @@ import pytest
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
-from cryptography.x509.oid import NameOID
+from cryptography.x509.oid import ExtendedKeyUsageOID, NameOID
 from websockets.asyncio.server import serve
 
 from ml4t.live.brokers.alpaca import TradingStream
@@ -33,12 +33,32 @@ def test_trading_subscription_rejects_synchronous_handlers_before_transport(retu
 
 @pytest.fixture
 def tls_contexts(tmp_path):
+    ca_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    ca_name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "Loopback test CA")])
+    authority = (
+        x509.CertificateBuilder()
+        .subject_name(ca_name)
+        .issuer_name(ca_name)
+        .public_key(ca_key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(datetime.now(UTC) - timedelta(minutes=1))
+        .not_valid_after(datetime.now(UTC) + timedelta(minutes=5))
+        .add_extension(x509.BasicConstraints(ca=True, path_length=0), critical=True)
+        .add_extension(
+            x509.KeyUsage(False, False, False, False, False, True, True, None, None),
+            critical=True,
+        )
+        .add_extension(
+            x509.SubjectKeyIdentifier.from_public_key(ca_key.public_key()), critical=False
+        )
+        .sign(ca_key, hashes.SHA256())
+    )
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "localhost")])
     certificate = (
         x509.CertificateBuilder()
         .subject_name(name)
-        .issuer_name(name)
+        .issuer_name(ca_name)
         .public_key(key.public_key())
         .serial_number(x509.random_serial_number())
         .not_valid_before(datetime.now(UTC) - timedelta(minutes=1))
@@ -46,9 +66,21 @@ def tls_contexts(tmp_path):
         .add_extension(
             x509.SubjectAlternativeName([x509.IPAddress(ip_address("127.0.0.1"))]), critical=False
         )
-        .sign(key, hashes.SHA256())
+        .add_extension(x509.BasicConstraints(ca=False, path_length=None), critical=True)
+        .add_extension(
+            x509.KeyUsage(True, False, True, False, False, False, False, None, None),
+            critical=True,
+        )
+        .add_extension(x509.ExtendedKeyUsage([ExtendedKeyUsageOID.SERVER_AUTH]), critical=False)
+        .add_extension(x509.SubjectKeyIdentifier.from_public_key(key.public_key()), critical=False)
+        .add_extension(
+            x509.AuthorityKeyIdentifier.from_issuer_public_key(ca_key.public_key()), critical=False
+        )
+        .sign(ca_key, hashes.SHA256())
     )
     cert_file, key_file = tmp_path / "loopback-cert.pem", tmp_path / "loopback-key.pem"
+    ca_file = tmp_path / "loopback-ca.pem"
+    ca_file.write_bytes(authority.public_bytes(serialization.Encoding.PEM))
     cert_file.write_bytes(certificate.public_bytes(serialization.Encoding.PEM))
     key_file.write_bytes(
         key.private_bytes(
@@ -59,7 +91,7 @@ def tls_contexts(tmp_path):
     )
     server = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     server.load_cert_chain(cert_file, key_file)
-    client = ssl.create_default_context(cafile=str(cert_file))
+    client = ssl.create_default_context(cafile=str(ca_file))
     return server, client
 
 
@@ -224,6 +256,10 @@ async def test_actual_httpx_anyio_pool_recovers_after_bad_wire_timeout_and_cance
     )
     port = server.sockets[0].getsockname()[1]
     try:
+        if secure:
+            async with httpx.AsyncClient(trust_env=False) as untrusted:
+                with pytest.raises(httpx.ConnectError, match="(?i)certificate"):
+                    await untrusted.get(f"https://127.0.0.1:{port}")
         async with httpx.AsyncClient(
             base_url=f"{'https' if secure else 'http'}://127.0.0.1:{port}",
             trust_env=False,
