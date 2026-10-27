@@ -79,11 +79,7 @@ def fetch_json(url: str, token: str) -> dict[str, Any]:
 
 def fetch_bytes(url: str, token: str) -> bytes:
     path = urllib.parse.urlsplit(url).path
-    accept = (
-        "application/vnd.github+json"
-        if "/actions/artifacts/" in path
-        else "application/octet-stream"
-    )
+    accept = "application/vnd.github+json" if "/actions/" in path else "application/octet-stream"
     request = urllib.request.Request(
         url,
         headers={
@@ -296,13 +292,14 @@ def find_reviewed_stage_evidence(
         run = fetcher(
             f"{GITHUB_API}/repos/{repository}/actions/runs/{description['run_id']}", token
         )
+        expected_outcome = (
+            "success" if baseline else description.get("parent_conclusion", "success")
+        )
         if (
             run.get("head_sha") != description["commit"]
             or run.get("status") != "completed"
-            or (
-                run.get("conclusion") != "success"
-                and (baseline or not description.get("allow_failed_parent"))
-            )
+            or expected_outcome not in {"success", "failure"}
+            or run.get("conclusion") != expected_outcome
         ):
             raise PaperQualificationError("reviewed evidence workflow identity or outcome differs")
         source = _archive_source(repository=repository, run=run, token=token, fetcher=fetcher)
@@ -346,8 +343,18 @@ def find_reviewed_stage_evidence(
                 manifest = _unique_json(archive, "candidate.json")
                 verify_candidate_manifest(manifest)
                 identity = _candidate_identity(manifest)
-                if identity["commit"] != review["compatibility"]["commit"]:
+                if (
+                    manifest["repository"] != repository
+                    or identity["commit"] != review["compatibility"]["commit"]
+                ):
                     raise PaperQualificationError("compatibility reports target another source")
+                if (
+                    stages.installer_runtime(compatibility_log)["packages"].get("ml4t-live")
+                    != identity["version"]
+                ):
+                    raise PaperQualificationError(
+                        "compatibility artifact and installed version differ"
+                    )
                 phases = {}
                 for phase in ("exercise",) if provider == "okx" else ("exercise", "restart"):
                     suffix = "okx.json" if provider == "okx" else f"{provider}-{phase}.json"

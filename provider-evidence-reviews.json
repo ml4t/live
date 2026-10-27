@@ -137,7 +137,7 @@
       "commit": "115df1faea23c734ccd00730a1aba7eba143b78d",
       "archive_sha256": "31bfabe6afef6c3fc91e3b3193a55b2284340db12d027b6472269590805fe380",
       "runtime_log_sha256": "784b9dab4254fa319f0f533929dc9041703003c2d4163112fb9b816c9c474049",
-      "allow_failed_parent": true
+      "parent_conclusion": "failure"
     },
     "dependency_changes": {
       "anyio": {
@@ -344,7 +344,7 @@
       "rationale": "Retain the original validated six-hour connection-duration baseline only with matching reviewed reached operations, actual runtime impact review and valid current compatibility. No original measurement is rewritten as current.",
       "review_evidence": [
         "tests/unit/test_provider_transport_compatibility.py",
-        "tests/unit/test_paper_evidence.py",
+        "tests/unit/test_provider_stage_evidence.py",
         "docs/qualification.md"
       ],
       "compatibility": null
@@ -360,7 +360,7 @@
       "rationale": "Retain the original validated six-hour connection-duration baseline only with matching reviewed reached operations, actual runtime impact review and valid current compatibility. No original measurement is rewritten as current.",
       "review_evidence": [
         "tests/unit/test_provider_transport_compatibility.py",
-        "tests/unit/test_paper_evidence.py",
+        "tests/unit/test_provider_stage_evidence.py",
         "docs/qualification.md"
       ]
     },
@@ -375,7 +375,7 @@
       "rationale": "Retain the original validated six-hour connection-duration baseline only with matching reviewed reached operations, actual runtime impact review and valid current compatibility. No original measurement is rewritten as current.",
       "review_evidence": [
         "tests/unit/test_provider_transport_compatibility.py",
-        "tests/unit/test_paper_evidence.py",
+        "tests/unit/test_provider_stage_evidence.py",
         "docs/qualification.md"
       ],
       "source_impact_rationale": "The OKX feed constructor only adds shared FeedSpec calendar metadata. Network polling, continuity, queue/recovery and duration helpers remain independently reviewed; fresh current short feed evidence and real HTTPX transport controls are required."

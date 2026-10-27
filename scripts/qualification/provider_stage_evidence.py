@@ -19,6 +19,29 @@ from scripts.qualification.provider_contract import (
 )
 from scripts.qualification.qualify_paper import PaperQualificationError, _verify_installed_candidate
 
+COMPATIBILITY_PACKAGES = {
+    "ib": ("ib-async", "aeventkit", "numpy", "tzdata"),
+    "alpaca": (
+        "alpaca-py",
+        "websockets",
+        "pydantic",
+        "pydantic-core",
+        "requests",
+        "urllib3",
+        "certifi",
+        "charset-normalizer",
+        "idna",
+        "python-dateutil",
+        "pytz",
+        "annotated-types",
+        "typing-extensions",
+        "typing-inspection",
+        "numpy",
+        "pandas",
+    ),
+    "okx": ("httpx", "httpcore", "anyio", "idna", "certifi", "h11", "typing-extensions"),
+}
+
 
 def digest(payload: bytes) -> str:
     return hashlib.sha256(payload).hexdigest()
@@ -40,7 +63,23 @@ def installer_runtime(payload: bytes) -> dict[str, Any]:
         packages[canonical] = version
     if (
         len(pythons) != 1
-        or not {"ml4t-live", "ml4t-backtest", "ml4t-specs", "psutil"} <= packages.keys()
+        or not {
+            "ml4t-live",
+            "ml4t-backtest",
+            "ml4t-specs",
+            "psutil",
+            "ib-async",
+            "aeventkit",
+            "numpy",
+            "pandas",
+            "alpaca-py",
+            "websockets",
+            "pydantic",
+            "httpx",
+            "httpcore",
+            "anyio",
+        }
+        <= packages.keys()
     ):
         raise PaperQualificationError("missing actual provider runtime observations")
     return {"python": pythons.pop(), "packages": packages}
@@ -53,7 +92,16 @@ def current_candidate_runtime(
     _verify_installed_candidate(candidate, checkout_root)
     import ml4t.live
 
+    if ml4t.live.__version__ != candidate["version"]:
+        raise PaperQualificationError("installed public version differs from candidate metadata")
     package_root = Path(ml4t.live.__file__).resolve().parent
+    distribution_root = Path(
+        importlib.metadata.distribution("ml4t-live").locate_file("ml4t/live")
+    ).resolve()
+    if package_root != distribution_root:
+        raise PaperQualificationError(
+            "current candidate was not imported from its installed distribution"
+        )
     wheel = artifacts_directory / candidate["wheel"]["filename"]
     if digest(wheel.read_bytes()) != candidate["wheel"]["sha256"]:
         raise PaperQualificationError("current candidate wheel digest changed")
@@ -133,15 +181,22 @@ def validate_stage_review(
     ):
         raise PaperQualificationError("duration report contract differs from its original source")
     original_runtime = installer_runtime(baseline_log)
+    if original_runtime["packages"].get("ml4t-live") != baseline_report["candidate"]["version"]:
+        raise PaperQualificationError("duration artifact and installed version differ")
+    dependency = original_contract["dependency"]
+    if original_runtime["packages"].get(dependency["name"]) != dependency["version"]:
+        raise PaperQualificationError("original installed SDK differs from embedded contract")
     compatible_runtime = installer_runtime(compatibility_log)
     if original_runtime != review.get("original_runtime"):
         raise PaperQualificationError("review is missing or misstates actual original runtime")
     if compatible_runtime != review.get("compatible_runtime"):
         raise PaperQualificationError("compatibility runtime has an unreviewed change")
     expected_packages = compatible_runtime["packages"]
+    required = (*COMPATIBILITY_PACKAGES[provider], "ml4t-backtest", "ml4t-specs", "psutil")
     if not str(current_runtime.get("python", "")).startswith("3.12.") or any(
-        current_runtime.get("packages", {}).get(name) != version
-        for name, version in expected_packages.items()
+        name not in expected_packages
+        or current_runtime.get("packages", {}).get(name) != expected_packages[name]
+        for name in required
     ):
         raise PaperQualificationError(
             "current installed runtime differs from reviewed compatibility"

@@ -391,6 +391,10 @@ def _multi_run_services(
             "application/vnd.github+json",
         ),
         (
+            "https://api.github.test/repos/ml4t/live/actions/jobs/42/logs",
+            "application/vnd.github+json",
+        ),
+        (
             "https://api.github.test/repos/ml4t/live/releases/assets/42",
             "application/octet-stream",
         ),

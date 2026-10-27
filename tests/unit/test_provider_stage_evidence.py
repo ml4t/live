@@ -56,11 +56,15 @@ def services():
             )
         else:
             name = (
-                "original-installer.log"
+                "original-installer.txt"
                 if f"/{ORIGINAL['job_id']}/" in url
-                else "current-installer.log"
+                else "current-installer.txt"
             )
-        return (FIXTURES / name).read_bytes()
+        return (
+            (FIXTURES / name).read_bytes()
+            if name.endswith(".zip")
+            else (FIXTURES / name).read_text().encode()
+        )
 
     return fetch, download
 
@@ -96,10 +100,10 @@ def commit(root, path, before, after):
 def current_review():
     review = json.loads((ROOT / "provider-evidence-reviews.json").read_text())
     review["common"]["baseline"]["runtime_log_sha256"] = digest(
-        (FIXTURES / "original-installer.log").read_bytes()
+        (FIXTURES / "original-installer.txt").read_text().encode()
     )
     review["common"]["compatibility"]["runtime_log_sha256"] = digest(
-        (FIXTURES / "current-installer.log").read_bytes()
+        (FIXTURES / "current-installer.txt").read_text().encode()
     )
     return review
 
@@ -197,7 +201,7 @@ def test_altered_duration_or_missing_provenance_never_selects_historical_stages(
 
 def test_actual_unreviewed_prior_transport_stack_does_not_satisfy_current_compatibility(repository):
     review = current_review()
-    previous_runtime = installer_runtime((FIXTURES / "original-installer.log").read_bytes())
+    previous_runtime = installer_runtime((FIXTURES / "original-installer.txt").read_text().encode())
     result = select(repository, review, runtime=previous_runtime)
     assert not result["providers"]
     assert "current installed runtime differs" in result["failures"]["alpaca"]
@@ -223,3 +227,57 @@ def test_actual_partial_native_outcomes_do_not_pass_missing_ib_or_duration():
     assert outcome_failures(outcomes, "okx", stage="compatibility") == []
     assert outcome_failures(outcomes, "all", stage="compatibility") == ["ib-exercise", "ib-restart"]
     assert outcome_failures(outcomes, "alpaca", stage="complete") == ["provider-soaks"]
+
+
+def test_changed_reached_okx_transport_timeout_rejects_retained_duration(repository):
+    commit(
+        repository,
+        "src/ml4t/live/feeds/okx_feed.py",
+        "httpx.AsyncClient(timeout=30.0)",
+        "httpx.AsyncClient(timeout=None)",
+    )
+    result = select(repository, current_review())
+    assert set(result["providers"]) == {"alpaca"}
+    assert "operations changed" in result["failures"]["okx"]
+
+
+def test_repacked_archive_cannot_relabel_a_valid_original_measurement(repository):
+    import io
+    import zipfile
+
+    review = current_review()
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(FIXTURES / "original-duration.zip") as original:
+        with zipfile.ZipFile(buffer, "w") as altered:
+            for name in original.namelist():
+                raw = original.read(name)
+                if name.endswith("alpaca-soak.json"):
+                    report = json.loads(raw)
+                    report["duration_seconds"] += 1
+                    raw = json.dumps(report).encode()
+                altered.writestr(name, raw)
+    payload = buffer.getvalue()
+    review["common"]["baseline"]["archive_sha256"] = digest(payload)
+    _, download = services()
+    result = select(
+        repository,
+        review,
+        downloader=lambda url, token: (
+            payload if url == f"fixture://archive/{ORIGINAL['run_id']}" else download(url, token)
+        ),
+    )
+    assert "alpaca" not in result["providers"]
+    assert "original report and runtime" in result["failures"]["alpaca"]
+
+
+def test_unreached_ccxt_signing_dependencies_do_not_invalidate_httpx_or_broker_stages(repository):
+    from copy import deepcopy
+
+    review = current_review()
+    observed = deepcopy(review["common"]["compatible_runtime"])
+    original = review["common"]["original_runtime"]["packages"]
+    for name in ("cryptography", "orjson"):
+        observed["packages"][name] = original[name]
+    result = select(repository, review, runtime=observed)
+    assert set(result["providers"]) == {"alpaca", "okx"}
+    assert set(result["failures"]) == {"ib"}
