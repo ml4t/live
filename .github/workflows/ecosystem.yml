@@ -17,8 +17,9 @@ jobs:
   qualification:
     permissions:
       contents: read
-    uses: ml4t/ecosystem/.github/workflows/qualify-library.yml@56d42098ff91c80c3318d4677c6dc2f178706cf7 # v2026.10.26 candidate identity and Live 0.2 wait
+    uses: ml4t/ecosystem/.github/workflows/qualify-library.yml@5116071d19a5054bbb85e7f4ffdadc579a049ae7 # v2026.10.26 commit-bound evidence history
     with:
       import-package: ml4t.live
+      fetch-depth: 0
       prerelease-exception: python-315-live-calendar-020
       candidate-version: "0.2.0"
