@@ -25,6 +25,7 @@ from ml4t.specs import (
     CanonicalTargetIntent,
     EventCompletion,
     ExecutionBehavior,
+    FeedSpec,
     GapEvidence,
     IntentReason,
     LifecyclePhase,
@@ -215,6 +216,8 @@ class PerformanceBroker:
 
 
 class StreamingFeed:
+    feed_spec = FeedSpec(time_contract_version=2, calendar=None)
+
     def __init__(self, count: int, *, source: str = "performance") -> None:
         self.count = count
         self.source = source
@@ -305,6 +308,8 @@ class CountingStrategy(Strategy):
 
 
 class QueueFeed:
+    feed_spec = FeedSpec(time_contract_version=2, calendar=None)
+
     def __init__(self, event_count: int, *, overflow: bool) -> None:
         self.event_count = event_count
         self.overflow = overflow
@@ -339,6 +344,8 @@ class QueueFeed:
 
 
 class ReconnectFeed:
+    feed_spec = FeedSpec(time_contract_version=2, calendar=None)
+
     def __init__(self) -> None:
         self.start_count = 0
         self.stop_count = 0

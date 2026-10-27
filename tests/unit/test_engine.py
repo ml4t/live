@@ -16,6 +16,7 @@ from ml4t.specs import (
     BarPayload,
     EventCompletion,
     ExecutionCapability,
+    FeedSpec,
     FundingPayload,
     GapEvidence,
     HistoricalStrategyCompatibilityError,
@@ -277,6 +278,8 @@ class OverflowDataFeed:
 
 class RecoverableFeed:
     """Mock feed that can be stopped and started again by the engine watchdog."""
+
+    feed_spec = FeedSpec(time_contract_version=2, calendar=None)
 
     def __init__(self, batches: list[list[FeedItem]], delay: float = 0.01):
         self.batches = batches

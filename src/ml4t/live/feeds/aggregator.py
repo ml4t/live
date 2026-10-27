@@ -14,12 +14,15 @@ from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
 from ml4t.specs import (
+    BarLabel,
     BarPayload,
     EventCompletion,
+    FeedSpec,
     GapEvidence,
     LifecycleVersion,
     MarketEvent,
     MarketEventKind,
+    TimestampSemantics,
     TradePayload,
 )
 
@@ -157,6 +160,21 @@ class BarAggregator:
         ):
             raise ValueError("flush_timeout_seconds must be finite and non-negative")
         self.source = source_feed
+        source_spec = FeedSpec.from_any(
+            getattr(source_feed, "feed_spec", getattr(source_feed, "metadata", None))
+        )
+        frequency = f"{bar_size_minutes}m" if bar_size_minutes in {1, 5, 15, 30} else "irregular"
+        if bar_size_minutes == 60:
+            frequency = "1h"
+        self.feed_spec = source_spec.with_overrides(
+            time_contract_version=2,
+            calendar=source_spec.resolve_calendar(),
+            data_frequency=frequency,
+            timestamp_semantics=TimestampSemantics.EVENT_TIME,
+            bar_label=BarLabel.LEFT,
+            bar_grid_anchor=None,
+            partial_bar_policy=None,
+        )
         self.bar_size = timedelta(minutes=bar_size_minutes)
         self.assets = assets or []
         self.flush_timeout = flush_timeout_seconds

@@ -20,6 +20,8 @@ DIRECT_DISTRIBUTIONS = (
     "ml4t-backtest",
     "ml4t-live",
     "ml4t-specs",
+    "numpy",
+    "pandas",
 )
 
 
@@ -46,6 +48,11 @@ def snapshot() -> dict[str, object]:
     return {
         "portable_api": portable_api,
         "versions": {name: metadata.version(name) for name in DIRECT_DISTRIBUTIONS},
+        "imports": {
+            "ml4t.live": live.__file__,
+            "ml4t.backtest": backtest.__file__,
+            "ml4t.specs": specs.__file__,
+        },
     }
 
 

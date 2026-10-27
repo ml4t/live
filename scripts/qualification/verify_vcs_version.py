@@ -4,6 +4,11 @@ from __future__ import annotations
 
 import argparse
 import email
+import json
+import os
+import re
+import urllib.error
+import urllib.request
 import zipfile
 from pathlib import Path
 
@@ -44,15 +49,46 @@ def vcs_version_failure(version_text: str, expected_version: str) -> str | None:
     return None
 
 
+def published_release_version(repository: str) -> str:
+    """Use the published stable release as the independent unforced-build baseline."""
+    if re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repository) is None:
+        raise ValueError("invalid GitHub repository")
+    headers = {"Accept": "application/vnd.github+json"}
+    if token := os.environ.get("GITHUB_TOKEN"):
+        headers["Authorization"] = f"Bearer {token}"
+    request = urllib.request.Request(
+        f"https://api.github.com/repos/{repository}/releases/latest", headers=headers
+    )
+    with urllib.request.urlopen(request, timeout=30) as response:
+        release = json.load(response)
+    tag = release.get("tag_name")
+    if (
+        not isinstance(tag, str)
+        or not tag.startswith("v")
+        or release.get("draft") is not False
+        or release.get("prerelease") is not False
+    ):
+        raise ValueError("GitHub did not return a published stable release")
+    version = Version(tag[1:])
+    if version.is_prerelease or version.is_devrelease or version.is_postrelease or version.local:
+        raise ValueError("published release tag is not a stable package version")
+    return str(version)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--artifacts-dir", type=Path, required=True)
-    parser.add_argument("--expected-version", required=True)
+    baseline = parser.add_mutually_exclusive_group(required=True)
+    baseline.add_argument("--expected-version")
+    baseline.add_argument("--repository")
     args = parser.parse_args()
     try:
         version = wheel_version(args.artifacts_dir)
-        failure = vcs_version_failure(version, args.expected_version)
-    except (ValueError, zipfile.BadZipFile) as error:
+        expected = (
+            published_release_version(args.repository) if args.repository else args.expected_version
+        )
+        failure = vcs_version_failure(version, expected)
+    except (ValueError, OSError, zipfile.BadZipFile) as error:
         version = "unavailable"
         failure = str(error)
     print(f"VCS package version: {'PASS' if failure is None else 'FAIL'} ({version})")

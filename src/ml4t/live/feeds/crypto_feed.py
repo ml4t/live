@@ -37,9 +37,11 @@ from typing import Any, ClassVar
 from ml4t.specs import (
     BarPayload,
     EventCompletion,
+    FeedSpec,
     LifecycleVersion,
     MarketEvent,
     MarketEventKind,
+    TimestampSemantics,
     TradePayload,
 )
 
@@ -119,6 +121,12 @@ class CryptoFeed(DataFeedProtocol):
     """
 
     support_status: ClassVar[str] = "experimental"
+    feed_spec = FeedSpec(
+        time_contract_version=2,
+        calendar="24/7",
+        timezone="UTC",
+        timestamp_semantics=TimestampSemantics.EVENT_TIME,
+    )
 
     def __init__(
         self,

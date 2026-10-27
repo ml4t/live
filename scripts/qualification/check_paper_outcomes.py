@@ -21,14 +21,21 @@ PROVIDER_OUTCOMES = {
 }
 
 
-def outcome_failures(outcomes: dict[str, str], extended_provider: str) -> list[str]:
+def outcome_failures(
+    outcomes: dict[str, str], extended_provider: str, *, stage: str = "complete"
+) -> list[str]:
     """Return required qualification stages whose outcomes are not successful."""
     selected = (
         tuple(name for names in PROVIDER_OUTCOMES.values() for name in names)
         if extended_provider == "all"
         else PROVIDER_OUTCOMES[extended_provider]
     )
-    required = [*selected, "paper-evidence-scan", "feed-evidence-scan", "provider-soaks"]
+    if stage not in {"compatibility", "complete"}:
+        raise ValueError("unsupported provider qualification stage")
+    required = [*selected, "paper-evidence-scan", "feed-evidence-scan"]
+    if stage == "compatibility":
+        return [name for name in required if outcomes.get(name) != "success"]
+    required.append("provider-soaks")
     if extended_provider == "all":
         required.extend(("paper-evidence", "feed-evidence"))
     elif extended_provider == "okx":
@@ -43,6 +50,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         choices=("alpaca", "ib", "okx", "all"),
         required=True,
     )
+    parser.add_argument("--stage", choices=("compatibility", "complete"), default="complete")
     for name in (*ALL_OUTCOMES, "provider-soaks", "paper-evidence", "feed-evidence"):
         parser.add_argument(f"--{name}", required=True)
     args = parser.parse_args(argv)
@@ -50,11 +58,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         name: getattr(args, name.replace("-", "_"))
         for name in (*ALL_OUTCOMES, "provider-soaks", "paper-evidence", "feed-evidence")
     }
-    failures = outcome_failures(outcomes, args.extended_provider)
+    failures = outcome_failures(outcomes, args.extended_provider, stage=args.stage)
     if failures:
         print("paper qualification failed: " + ", ".join(failures))
         return 1
-    print("paper qualification: PASS")
+    print(f"paper {args.stage} qualification: PASS")
     return 0
 
 

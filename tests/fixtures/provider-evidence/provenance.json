@@ -1,0 +1,28 @@
+{
+  "scope": "Identifier-redacted native reports and installer-only excerpts from actual GitHub provider workflows. Full native logs and source identities are retained privately; fixture excerpts omit account metrics and credentials.",
+  "original": {
+    "run_id": 39815911531,
+    "job_id": 119954346973,
+    "source": "d6897be7c0f25c667498e9b9ea5ab2ef2f0c066b",
+    "raw_log_sha256": "c33596019fdc278bfe5373cdb5b98fb63d6c3bd366657cd9c8d58fdf5f11c788"
+  },
+  "current": {
+    "run_id": 40427024014,
+    "job_id": 121935236841,
+    "source": "115df1faea23c734ccd00730a1aba7eba143b78d",
+    "raw_log_sha256": "784b9dab4254fa319f0f533929dc9041703003c2d4163112fb9b816c9c474049",
+    "scope": "Alpaca lifecycle/restart and OKX short PASS; IBfailedconnect; allsoaksskipped.",
+    "actual_outcomes": {
+      "alpaca-exercise": "success",
+      "alpaca-restart": "success",
+      "ib-exercise": "failure",
+      "ib-restart": "failure",
+      "okx-external": "success",
+      "provider-soaks": "skipped",
+      "paper-evidence": "failure",
+      "feed-evidence": "failure",
+      "paper-evidence-scan": "success",
+      "feed-evidence-scan": "success"
+    }
+  }
+}

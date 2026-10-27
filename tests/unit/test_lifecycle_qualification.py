@@ -19,8 +19,8 @@ def test_qualification_uses_only_self_contained_contract_suites() -> None:
     assert all((ROOT / path).is_file() for path in QUALIFICATION_TESTS)
     assert set(EXPECTED_DISTRIBUTIONS) == {"ml4t-live", "ml4t-backtest", "ml4t-specs"}
     assert BASELINE_REQUIREMENTS == (
-        "ml4t-backtest==0.1.0",
-        "ml4t-specs==0.1.1",
+        "ml4t-backtest==0.2.0",
+        "ml4t-specs==0.2.0",
     )
 
 

@@ -12,7 +12,12 @@ from scripts.qualification.provider_contract import (
 )
 
 PROVIDER_PATHS = {
+    ".github/workflows/paper.yml",
     "src/ml4t/live/__init__.py",
+    "src/ml4t/live/engine.py",
+    "src/ml4t/live/runtime.py",
+    "src/ml4t/live/lifecycle.py",
+    "src/ml4t/live/temporal.py",
     "src/ml4t/live/brokers/alpaca.py",
     "src/ml4t/live/brokers/ib.py",
     "src/ml4t/live/feeds/events.py",
@@ -25,6 +30,7 @@ PROVIDER_PATHS = {
     "src/ml4t/live/state_migration.py",
     "scripts/qualification/qualify_feeds.py",
     "scripts/qualification/qualify_paper.py",
+    "scripts/qualification/provider_contract.py",
 }
 
 
@@ -78,6 +84,30 @@ version = "2.1.0"
 [[package]]
 name = "ccxt"
 version = "4.5.78"
+
+[[package]]
+name = "ml4t-backtest"
+version = "0.2.0"
+
+[[package]]
+name = "ml4t-specs"
+version = "0.2.0"
+
+[[package]]
+name = "numpy"
+version = "2.4.6"
+
+[[package]]
+name = "pandas"
+version = "3.0.5"
+
+[[package]]
+name = "pandas-market-calendars"
+version = "5.5.0"
+
+[[package]]
+name = "exchange-calendars"
+version = "4.13.2"
 """
     )
     return tmp_path, _commit(tmp_path, "initial contract")
@@ -161,8 +191,10 @@ def test_supported_runtime_change_invalidates_every_provider(
         assert classification.changed_inputs == ("supported-runtime",)
 
 
+@pytest.mark.parametrize("reported_schema", [2, 3])
 def test_older_report_schema_is_upgraded_before_comparison(
     contract_repository: tuple[Path, str],
+    reported_schema: int,
 ) -> None:
     repository, evidence_commit = contract_repository
     path = repository / "src/ml4t/live/persistence.py"
@@ -174,7 +206,7 @@ def test_older_report_schema_is_upgraded_before_comparison(
         "ib",
         evidence_commit,
         candidate_commit,
-        reported_schema=2,
+        reported_schema=reported_schema,
     )
 
     assert classification.reusable is False
@@ -250,3 +282,39 @@ def test_changed_broker_inputs_require_fresh_provider_evidence(
 
     assert classification.reusable is False
     assert changed_input in classification.changed_inputs
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "src/ml4t/live/engine.py",
+        "src/ml4t/live/runtime.py",
+        "src/ml4t/live/lifecycle.py",
+        "src/ml4t/live/temporal.py",
+    ],
+)
+def test_shared_runtime_change_requires_fresh_provider_evidence(contract_repository, path):
+    repository, evidence_commit = contract_repository
+    target = repository / path
+    target.write_text(target.read_text() + "changed runtime\n")
+    candidate = _commit(repository, "change runtime calendar")
+    for provider in ("alpaca", "ib", "okx"):
+        classification = _classification(repository, provider, evidence_commit, candidate)
+        assert not classification.reusable
+        assert path in classification.changed_inputs
+
+
+@pytest.mark.parametrize("dependency", ["ml4t-backtest", "ml4t-specs"])
+def test_changed_shared_cohort_requires_fresh_provider_evidence(contract_repository, dependency):
+    repository, evidence_commit = contract_repository
+    lock = repository / "uv.lock"
+    lock.write_text(
+        lock.read_text().replace(
+            f'name = "{dependency}"\nversion = "0.2.0"', f'name = "{dependency}"\nversion = "0.2.1"'
+        )
+    )
+    candidate = _commit(repository, "change shared runtime dependency")
+    for provider in ("alpaca", "ib", "okx"):
+        classification = _classification(repository, provider, evidence_commit, candidate)
+        assert not classification.reusable
+        assert f"dependency:{dependency}" in classification.changed_inputs

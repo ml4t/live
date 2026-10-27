@@ -8,7 +8,7 @@ import importlib.util
 import os
 import sys
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from pathlib import Path
 from types import ModuleType
 from typing import Any, cast
@@ -20,7 +20,7 @@ from ml4t.specs import ExecutionCapability
 from ml4t.live import __version__
 from ml4t.live.brokers.alpaca import AlpacaBroker
 from ml4t.live.brokers.ib import IBBroker
-from ml4t.live.engine import US_EASTERN, US_EQUITY_CLOSE, US_EQUITY_OPEN, LiveEngine
+from ml4t.live.engine import LiveEngine
 from ml4t.live.feeds.alpaca_feed import AlpacaDataFeed
 from ml4t.live.feeds.okx_feed import OKXFundingFeed
 from ml4t.live.persistence import (
@@ -36,6 +36,7 @@ from ml4t.live.safety import (
     RiskState,
     SafeBroker,
 )
+from ml4t.live.temporal import LiveCalendar, resolve_live_config
 
 DEFAULT_STATE_FILE = ".ml4t_risk_state.json"
 
@@ -435,31 +436,10 @@ def _format_journal_entry(entry: dict[str, Any]) -> str:
 
 
 def _equity_session_snapshot(reference: datetime | None = None) -> tuple[str, datetime | None]:
-    now = reference or datetime.now(UTC)
-    now_et = now.astimezone(US_EASTERN)
-    open_dt = datetime.combine(now_et.date(), US_EQUITY_OPEN, tzinfo=US_EASTERN)
-    close_dt = datetime.combine(now_et.date(), US_EQUITY_CLOSE, tzinfo=US_EASTERN)
-
-    if now_et.weekday() >= 5:
-        next_date = now_et.date() + timedelta(days=1)
-        while next_date.weekday() >= 5:
-            next_date += timedelta(days=1)
-        next_open = datetime.combine(next_date, US_EQUITY_OPEN, tzinfo=US_EASTERN)
-        return "closed", next_open.astimezone(UTC)
-    if now_et < open_dt:
-        return "pre_open", open_dt.astimezone(UTC)
-    if now_et < close_dt:
-        return "open", close_dt.astimezone(UTC)
-
-    next_date = now_et.date() + timedelta(days=1)
-    next_open = datetime.combine(next_date, US_EQUITY_OPEN, tzinfo=US_EASTERN)
-    while next_open.weekday() >= 5:
-        next_open = datetime.combine(
-            next_open.date() + timedelta(days=1),
-            US_EQUITY_OPEN,
-            tzinfo=US_EASTERN,
-        )
-    return "closed", next_open.astimezone(UTC)
+    config = resolve_live_config(None, None)
+    calendar = LiveCalendar(config.resolved_feed_spec, config.resolved_calendar)
+    status = calendar.status(reference or datetime.now(UTC))
+    return status["market"], status["next_boundary"]
 
 
 def _alpaca_paper_mode() -> bool:

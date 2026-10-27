@@ -2,12 +2,18 @@
 
 from __future__ import annotations
 
+import io
+import json
 import zipfile
 from pathlib import Path
 
 import pytest
 
-from scripts.qualification.verify_vcs_version import vcs_version_failure, wheel_version
+from scripts.qualification.verify_vcs_version import (
+    published_release_version,
+    vcs_version_failure,
+    wheel_version,
+)
 
 
 def _wheel(directory: Path, version: str) -> Path:
@@ -46,3 +52,17 @@ def test_wheel_inventory_must_be_unique(tmp_path: Path) -> None:
     _wheel(tmp_path, "0.1.1.dev1")
     with pytest.raises(ValueError, match="exactly one wheel"):
         wheel_version(tmp_path)
+
+
+def test_unforced_build_uses_published_series_during_unpublished_minor_transition(monkeypatch):
+    import urllib.request
+
+    response = {"tag_name": "v0.1.3", "draft": False, "prerelease": False}
+    monkeypatch.setattr(
+        urllib.request, "urlopen", lambda *args, **kwargs: io.StringIO(json.dumps(response))
+    )
+    base = published_release_version("ml4t/live")
+    assert base == "0.1.3"
+    assert vcs_version_failure("0.1.4.dev14+g5ef02f8", base) is None
+    assert vcs_version_failure("31362844984.dev10", base) is not None
+    assert vcs_version_failure("0.2.0", base) is not None

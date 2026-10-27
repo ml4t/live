@@ -187,6 +187,8 @@ jobs:
       - run: uv python install 3.12
       - run: uv sync --python 3.12 --all-extras --dev --locked
       - name: Verify non-release tags cannot set the package version
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           env -u SETUPTOOLS_SCM_PRETEND_VERSION uv build \
             --wheel \
@@ -194,7 +196,7 @@ jobs:
             --build-constraints build-constraints.txt
           uv run python scripts/qualification/verify_vcs_version.py \
             --artifacts-dir "${RUNNER_TEMP}/vcs-version" \
-            --expected-version "${SETUPTOOLS_SCM_PRETEND_VERSION}"
+            --repository "${{ github.repository }}"
       - name: Build from the fixed commit timestamp
         run: |
           export SOURCE_DATE_EPOCH

@@ -19,20 +19,36 @@ allowed_license_identifiers = [
 ]
 
 [dependencies.ml4t-backtest]
-requirement = "ml4t-backtest>=0.1.0,<0.2"
-minimum = "ml4t-backtest==0.1.0"
-locked = "ml4t-backtest==0.1.12"
-maximum = "ml4t-backtest>=0.1.0,<0.2"
+requirement = "ml4t-backtest>=0.2.0,<0.3"
+minimum = "ml4t-backtest==0.2.0"
+locked = "ml4t-backtest==0.2.0"
+maximum = "ml4t-backtest>=0.2.0,<0.3"
 license = "MIT"
-support = "first stable release; lifecycle version 1 contract qualified across the matrix"
+support = "shared lifecycle version 1 and temporal version 2 contracts"
 
 [dependencies.ml4t-specs]
-requirement = "ml4t-specs>=0.1.1,<0.2"
-minimum = "ml4t-specs==0.1.1"
-locked = "ml4t-specs==0.1.5"
-maximum = "ml4t-specs>=0.1.1,<0.2"
+requirement = "ml4t-specs>=0.2.0,<0.3"
+minimum = "ml4t-specs==0.2.0"
+locked = "ml4t-specs==0.2.0"
+maximum = "ml4t-specs>=0.2.0,<0.3"
 license = "MIT"
-support = "stable schema and lifecycle contract release"
+support = "versioned calendar declarations and shared lifecycle contracts"
+
+[dependencies.numpy]
+requirement = "numpy>=2.3.2,<2.5"
+minimum = "numpy==2.3.2"
+locked = "numpy==2.4.6"
+maximum = "numpy>=2.3.2,<2.5"
+license = "BSD-3-Clause"
+support = "calendar provider datetime arithmetic requires the qualified pre-2.5 API"
+
+[dependencies.pandas]
+requirement = "pandas>=2.3.3,<3.1"
+minimum = "pandas==2.3.3"
+locked = "pandas==3.0.5"
+maximum = "pandas>=2.3.3,<3.1"
+license = "BSD-3-Clause"
+support = "calendar provider holiday construction requires the qualified pre-3.1 API"
 
 [dependencies.ib-async]
 requirement = "ib-async==2.1.0"

@@ -1,0 +1,384 @@
+{
+  "schema_version": 1,
+  "common": {
+    "stage": "connection-duration",
+    "original_runtime": {
+      "python": "3.12.11",
+      "packages": {
+        "psutil": "7.2.2",
+        "aeventkit": "2.1.0",
+        "aiohappyeyeballs": "2.7.1",
+        "aiohttp": "3.14.4",
+        "aiohttp-fast-zlib": "0.3.0",
+        "aiosignal": "1.4.0",
+        "alpaca-py": "0.44.0",
+        "annotated-types": "0.8.0",
+        "anyio": "4.15.1",
+        "attrs": "26.1.0",
+        "ccxt": "4.5.88",
+        "certifi": "2026.10.19",
+        "cffi": "2.0.0",
+        "charset-normalizer": "3.4.7",
+        "coincurve": "21.0.0",
+        "cryptography": "50.0.2",
+        "exchange-calendars": "4.13.2",
+        "frozenlist": "1.8.0",
+        "h11": "0.16.0",
+        "httpcore": "1.0.9",
+        "httpx": "0.28.1",
+        "ib-async": "2.1.0",
+        "idna": "3.18",
+        "korean-lunar-calendar": "0.4.0",
+        "ml4t-backtest": "0.1.12",
+        "ml4t-live": "0.1.3",
+        "ml4t-specs": "0.1.5",
+        "msgpack": "1.2.3",
+        "multidict": "6.9.1",
+        "nest-asyncio": "1.6.0",
+        "numpy": "2.5.4",
+        "orjson": "3.13.0",
+        "pandas": "3.1.0",
+        "pandas-market-calendars": "5.5.0",
+        "polars": "2.0.0",
+        "polars-runtime-32": "2.0.0",
+        "propcache": "0.5.2",
+        "pycparser": "3.0",
+        "pydantic": "2.14.1",
+        "pydantic-core": "2.50.1",
+        "pyluach": "2.3.0",
+        "python-dateutil": "3.0.0",
+        "pytz": "2026.5",
+        "pyyaml": "6.0.3",
+        "requests": "2.34.2",
+        "six": "1.17.0",
+        "sseclient-py": "1.9.0",
+        "toolz": "1.2.0",
+        "typing-extensions": "4.16.0",
+        "typing-inspection": "0.4.4",
+        "tzdata": "2025.3",
+        "urllib3": "2.8.0",
+        "uvloop": "0.22.1",
+        "websockets": "17.3",
+        "yarl": "1.25.1",
+        "zlib-ng": "1.0.0"
+      }
+    },
+    "compatible_runtime": {
+      "python": "3.12.11",
+      "packages": {
+        "psutil": "7.2.2",
+        "aeventkit": "2.1.0",
+        "aiohappyeyeballs": "2.7.1",
+        "aiohttp": "3.14.4",
+        "aiohttp-fast-zlib": "0.3.0",
+        "aiosignal": "1.4.0",
+        "alpaca-py": "0.44.0",
+        "annotated-types": "0.8.0",
+        "anyio": "4.14.2",
+        "attrs": "26.1.0",
+        "ccxt": "4.5.88",
+        "certifi": "2026.10.19",
+        "cffi": "2.0.0",
+        "charset-normalizer": "3.4.7",
+        "coincurve": "21.0.0",
+        "cryptography": "50.0.0",
+        "exchange-calendars": "4.13.2",
+        "frozenlist": "1.8.0",
+        "h11": "0.16.0",
+        "httpcore": "1.0.9",
+        "httpx": "0.28.1",
+        "ib-async": "2.1.0",
+        "idna": "3.18",
+        "korean-lunar-calendar": "0.4.0",
+        "ml4t-backtest": "0.2.0",
+        "ml4t-live": "0.2.0",
+        "ml4t-specs": "0.2.0",
+        "msgpack": "1.2.1",
+        "multidict": "6.9.1",
+        "nest-asyncio": "1.6.0",
+        "numpy": "2.4.6",
+        "orjson": "3.11.9",
+        "pandas": "3.0.5",
+        "pandas-market-calendars": "5.4.0",
+        "polars": "1.43.2",
+        "polars-runtime-32": "1.43.2",
+        "propcache": "0.5.2",
+        "pycparser": "3.0",
+        "pydantic": "2.13.4",
+        "pydantic-core": "2.46.4",
+        "pyluach": "2.3.0",
+        "python-dateutil": "2.9.0.post0",
+        "pytz": "2026.3.post1",
+        "pyyaml": "6.0.3",
+        "requests": "2.34.2",
+        "six": "1.17.0",
+        "sseclient-py": "1.9.0",
+        "toolz": "1.1.0",
+        "typing-extensions": "4.16.0",
+        "typing-inspection": "0.4.2",
+        "tzdata": "2025.3",
+        "urllib3": "2.8.0",
+        "uvloop": "0.22.1",
+        "websockets": "17.0.1",
+        "yarl": "1.25.1",
+        "zlib-ng": "1.0.0"
+      }
+    },
+    "baseline": {
+      "run_id": 39815911531,
+      "job_id": 119954346973,
+      "commit": "d6897be7c0f25c667498e9b9ea5ab2ef2f0c066b",
+      "archive_sha256": "5afe371d5c6feb8eda56a703aa6bf0283476bad0358afac6a90f93319fdf58a2",
+      "runtime_log_sha256": "c33596019fdc278bfe5373cdb5b98fb63d6c3bd366657cd9c8d58fdf5f11c788"
+    },
+    "compatibility": {
+      "run_id": 40427024014,
+      "job_id": 121935236841,
+      "commit": "115df1faea23c734ccd00730a1aba7eba143b78d",
+      "archive_sha256": "31bfabe6afef6c3fc91e3b3193a55b2284340db12d027b6472269590805fe380",
+      "runtime_log_sha256": "784b9dab4254fa319f0f533929dc9041703003c2d4163112fb9b816c9c474049",
+      "parent_conclusion": "failure"
+    },
+    "dependency_changes": {
+      "anyio": {
+        "original": "4.15.1",
+        "current": "4.14.2",
+        "rationale": "Stable OKX polling uses HTTPX/HTTPCore/AnyIO. Real TCP bad-wire, read-timeout, cancellation, pool recovery and close checks plus current native OKX short evidence cover these paths.",
+        "evidence": [
+          "tests/unit/test_provider_transport_compatibility.py",
+          "tests/contracts/test_causal_strategy_parity.py",
+          "native compatibility run40427024014 (IB connection failed; no IB compatibility pass)"
+        ]
+      },
+      "cryptography": {
+        "original": "50.0.2",
+        "current": "50.0.0",
+        "rationale": "CCXT signing is not the stable OKX HTTPX polling transport. Import compatibility is required; it is not a changed operation in these duration stages.",
+        "evidence": [
+          "tests/unit/test_provider_transport_compatibility.py",
+          "tests/contracts/test_causal_strategy_parity.py",
+          "native compatibility run40427024014 (IB connection failed; no IB compatibility pass)"
+        ]
+      },
+      "ml4t-backtest": {
+        "original": "0.1.12",
+        "current": "0.2.0",
+        "rationale": "Current shared order/types cohort requires fresh compatibility and installed causal/lifecycle contracts, not a relabeled historical duration measurement.",
+        "evidence": [
+          "tests/unit/test_provider_transport_compatibility.py",
+          "tests/contracts/test_causal_strategy_parity.py",
+          "native compatibility run40427024014 (IB connection failed; no IB compatibility pass)"
+        ]
+      },
+      "ml4t-live": {
+        "original": "0.1.3",
+        "current": "0.2.0",
+        "rationale": "Candidate runtime payload and artifact preflight are fresh; original source/version/artifact identity remains unchanged in the retained duration report.",
+        "evidence": [
+          "tests/unit/test_provider_transport_compatibility.py",
+          "tests/contracts/test_causal_strategy_parity.py",
+          "native compatibility run40427024014 (IB connection failed; no IB compatibility pass)"
+        ]
+      },
+      "ml4t-specs": {
+        "original": "0.1.5",
+        "current": "0.2.0",
+        "rationale": "Current shared types are covered by actual current compatibility and installed lifecycle/contracts; duration operations remain bound separately.",
+        "evidence": [
+          "tests/unit/test_provider_transport_compatibility.py",
+          "tests/contracts/test_causal_strategy_parity.py",
+          "native compatibility run40427024014 (IB connection failed; no IB compatibility pass)"
+        ]
+      },
+      "msgpack": {
+        "original": "1.2.3",
+        "current": "1.2.1",
+        "rationale": "Alpaca legacy TradingStream uses stdlib JSON rather than the market-data MessagePack path; actual current native lifecycle/restart and typed updates remain required.",
+        "evidence": [
+          "tests/unit/test_provider_transport_compatibility.py",
+          "tests/contracts/test_causal_strategy_parity.py",
+          "native compatibility run40427024014 (IB connection failed; no IB compatibility pass)"
+        ]
+      },
+      "numpy": {
+        "original": "2.5.4",
+        "current": "2.4.6",
+        "rationale": "Import compatibility changes; IB scalar snapshot/reconnect uses no eventkit array operators. Current actual imports and fresh short IB compatibility remain required.",
+        "evidence": [
+          "tests/unit/test_provider_transport_compatibility.py",
+          "tests/contracts/test_causal_strategy_parity.py",
+          "native compatibility run40427024014 (IB connection failed; no IB compatibility pass)"
+        ]
+      },
+      "orjson": {
+        "original": "3.13.0",
+        "current": "3.11.9",
+        "rationale": "Stable OKX polling uses HTTPX JSON, not CCXT optional orjson parsing. Alpaca legacy TradingStream uses stdlib JSON; current imports still require compatibility.",
+        "evidence": [
+          "tests/unit/test_provider_transport_compatibility.py",
+          "tests/contracts/test_causal_strategy_parity.py",
+          "native compatibility run40427024014 (IB connection failed; no IB compatibility pass)"
+        ]
+      },
+      "pandas": {
+        "original": "3.1.0",
+        "current": "3.0.5",
+        "rationale": "Not used for broker scalar snapshots or HTTPX polling. Current package imports and installed lifecycle/contracts are independently qualified.",
+        "evidence": [
+          "tests/unit/test_provider_transport_compatibility.py",
+          "tests/contracts/test_causal_strategy_parity.py",
+          "native compatibility run40427024014 (IB connection failed; no IB compatibility pass)"
+        ]
+      },
+      "pandas-market-calendars": {
+        "original": "5.5.0",
+        "current": "5.4.0",
+        "rationale": "Calendar construction is outside these provider duration stages; authoritative schedules have separate strict public-workflow qualification.",
+        "evidence": [
+          "tests/unit/test_provider_transport_compatibility.py",
+          "tests/contracts/test_causal_strategy_parity.py",
+          "native compatibility run40427024014 (IB connection failed; no IB compatibility pass)"
+        ]
+      },
+      "polars": {
+        "original": "2.0.0",
+        "current": "1.43.2",
+        "rationale": "Outside the inspected scalar broker/HTTPX polling duration operations. Preserve actual versions and require current package import/type compatibility; no claim that the old runtime equals the current runtime.",
+        "evidence": [
+          "tests/unit/test_provider_transport_compatibility.py",
+          "tests/contracts/test_causal_strategy_parity.py",
+          "native compatibility run40427024014 (IB connection failed; no IB compatibility pass)"
+        ]
+      },
+      "polars-runtime-32": {
+        "original": "2.0.0",
+        "current": "1.43.2",
+        "rationale": "Outside the inspected scalar broker/HTTPX polling duration operations. Preserve actual versions and require current package import/type compatibility; no claim that the old runtime equals the current runtime.",
+        "evidence": [
+          "tests/unit/test_provider_transport_compatibility.py",
+          "tests/contracts/test_causal_strategy_parity.py",
+          "native compatibility run40427024014 (IB connection failed; no IB compatibility pass)"
+        ]
+      },
+      "pydantic": {
+        "original": "2.14.1",
+        "current": "2.13.4",
+        "rationale": "Trading model parsing is reached. Real legacy TradingStream typed updates and current native order/snapshot compatibility cover the changed parser.",
+        "evidence": [
+          "tests/unit/test_provider_transport_compatibility.py",
+          "tests/contracts/test_causal_strategy_parity.py",
+          "native compatibility run40427024014 (IB connection failed; no IB compatibility pass)"
+        ]
+      },
+      "pydantic-core": {
+        "original": "2.50.1",
+        "current": "2.46.4",
+        "rationale": "Trading model parsing is reached. Real legacy TradingStream typed updates and current native order/snapshot compatibility cover the changed parser.",
+        "evidence": [
+          "tests/unit/test_provider_transport_compatibility.py",
+          "tests/contracts/test_causal_strategy_parity.py",
+          "native compatibility run40427024014 (IB connection failed; no IB compatibility pass)"
+        ]
+      },
+      "python-dateutil": {
+        "original": "3.0.0",
+        "current": "2.9.0.post0",
+        "rationale": "Outside the inspected scalar broker/HTTPX polling duration operations. Preserve actual versions and require current package import/type compatibility; no claim that the old runtime equals the current runtime.",
+        "evidence": [
+          "tests/unit/test_provider_transport_compatibility.py",
+          "tests/contracts/test_causal_strategy_parity.py",
+          "native compatibility run40427024014 (IB connection failed; no IB compatibility pass)"
+        ]
+      },
+      "pytz": {
+        "original": "2026.5",
+        "current": "2026.3.post1",
+        "rationale": "Outside the inspected scalar broker/HTTPX polling duration operations. Preserve actual versions and require current package import/type compatibility; no claim that the old runtime equals the current runtime.",
+        "evidence": [
+          "tests/unit/test_provider_transport_compatibility.py",
+          "tests/contracts/test_causal_strategy_parity.py",
+          "native compatibility run40427024014 (IB connection failed; no IB compatibility pass)"
+        ]
+      },
+      "toolz": {
+        "original": "1.2.0",
+        "current": "1.1.0",
+        "rationale": "Outside the inspected scalar broker/HTTPX polling duration operations. Preserve actual versions and require current package import/type compatibility; no claim that the old runtime equals the current runtime.",
+        "evidence": [
+          "tests/unit/test_provider_transport_compatibility.py",
+          "tests/contracts/test_causal_strategy_parity.py",
+          "native compatibility run40427024014 (IB connection failed; no IB compatibility pass)"
+        ]
+      },
+      "typing-inspection": {
+        "original": "0.4.4",
+        "current": "0.4.2",
+        "rationale": "Outside the inspected scalar broker/HTTPX polling duration operations. Preserve actual versions and require current package import/type compatibility; no claim that the old runtime equals the current runtime.",
+        "evidence": [
+          "tests/unit/test_provider_transport_compatibility.py",
+          "tests/contracts/test_causal_strategy_parity.py",
+          "native compatibility run40427024014 (IB connection failed; no IB compatibility pass)"
+        ]
+      },
+      "websockets": {
+        "original": "17.3",
+        "current": "17.0.1",
+        "rationale": "Alpaca uses legacy TradingStream. Real loopback authentication/reconnect/typed update/cleanup tests and current native lifecycle/restart cover the reached protocol.",
+        "evidence": [
+          "tests/unit/test_provider_transport_compatibility.py",
+          "tests/contracts/test_causal_strategy_parity.py",
+          "native compatibility run40427024014 (IB connection failed; no IB compatibility pass)"
+        ]
+      }
+    }
+  },
+  "providers": {
+    "ib": {
+      "provider": "ib",
+      "baseline": {
+        "report_sha256": "4f97014e192c7d3893a6a47fefcdd550f4d8f4cb7f9c463cf90439fdacce707f"
+      },
+      "baseline_duration_inputs_sha256": "3266df6631bc0b47ff35fdf15534091e74718b8534cd63fec7effb315fde73ec",
+      "candidate_duration_inputs_sha256": "3266df6631bc0b47ff35fdf15534091e74718b8534cd63fec7effb315fde73ec",
+      "compatibility_inputs_sha256": "e559e80a017edb933370c665ee59edd94b8b49f0981d3610575c9c5f728a5fe8",
+      "rationale": "Retain the original validated six-hour connection-duration baseline only with matching reviewed reached operations, actual runtime impact review and valid current compatibility. No original measurement is rewritten as current.",
+      "review_evidence": [
+        "tests/unit/test_provider_transport_compatibility.py",
+        "tests/unit/test_provider_stage_evidence.py",
+        "docs/qualification.md"
+      ],
+      "compatibility": null
+    },
+    "alpaca": {
+      "provider": "alpaca",
+      "baseline": {
+        "report_sha256": "e3fda5353a7fd1dc7ef35f3fa9ab52c662fde8779c86951f84066fa1f17c5dcf"
+      },
+      "baseline_duration_inputs_sha256": "be2190f5039e4c5d0fd18165e9f13a0368b5d716e174005cab5aa42bed8956ac",
+      "candidate_duration_inputs_sha256": "be2190f5039e4c5d0fd18165e9f13a0368b5d716e174005cab5aa42bed8956ac",
+      "compatibility_inputs_sha256": "f24a4b793408c82e33195227868c4af9bd407ed4e32ce299d711be0e20c22566",
+      "rationale": "Retain the original validated six-hour connection-duration baseline only with matching reviewed reached operations, actual runtime impact review and valid current compatibility. No original measurement is rewritten as current.",
+      "review_evidence": [
+        "tests/unit/test_provider_transport_compatibility.py",
+        "tests/unit/test_provider_stage_evidence.py",
+        "docs/qualification.md"
+      ]
+    },
+    "okx": {
+      "provider": "okx",
+      "baseline": {
+        "report_sha256": "ad9c5621c1669b84a4c6f512bf904c142c0bdf2926d8670291feab6dae5b137a"
+      },
+      "baseline_duration_inputs_sha256": "5018fd6e41e661f34a1dc6fbcdad620e40b902d38018e778c2af81924dec230a",
+      "candidate_duration_inputs_sha256": "6334d58ef7d39d1efa6a0bc150fa8059c15133c752f15424e6cfad31688473e8",
+      "compatibility_inputs_sha256": "1611e4a2922e7f44bc2618607f591ecec6d389fe3aa77f67f0317dbe899b2f63",
+      "rationale": "Retain the original validated six-hour connection-duration baseline only with matching reviewed reached operations, actual runtime impact review and valid current compatibility. No original measurement is rewritten as current.",
+      "review_evidence": [
+        "tests/unit/test_provider_transport_compatibility.py",
+        "tests/unit/test_provider_stage_evidence.py",
+        "docs/qualification.md"
+      ],
+      "source_impact_rationale": "The OKX feed constructor only adds shared FeedSpec calendar metadata. Network polling, continuity, queue/recovery and duration helpers remain independently reviewed; fresh current short feed evidence and real HTTPX transport controls are required."
+    }
+  }
+}

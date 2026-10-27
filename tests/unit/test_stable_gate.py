@@ -48,7 +48,7 @@ def test_gate_has_explicit_topology_and_rotates_critical_fault_order(tmp_path: P
     stages = qualification_stages(tmp_path, 5)
     names = [stage.name for stage in stages]
     critical = [stage for stage in stages if stage.name.startswith("critical-faults-")]
-    candidate_version = os.environ.get("SETUPTOOLS_SCM_PRETEND_VERSION", "0.1.1")
+    candidate_version = os.environ.get("SETUPTOOLS_SCM_PRETEND_VERSION", "0.2.0")
 
     assert names[:13] == [
         "ruff-format",

@@ -8,11 +8,13 @@ from typing import Any
 import pytest
 
 from scripts.qualification.qualify_performance import (
+    INTENT_INTERVAL,
     ORDER_EVENTS,
     QUEUE_CAPACITY,
     RSS_GROWTH_LIMIT_BYTES,
     candidate_revision,
     run_reconnect,
+    run_sustained,
     validate_report,
 )
 
@@ -123,3 +125,11 @@ def test_seeded_performance_fault_is_rejected(
     target[path[-1]] = value
 
     assert any(expected in failure for failure in validate_report(report))
+
+
+@pytest.mark.asyncio
+async def test_sustained_row_workload_registers_synthetic_future_targets() -> None:
+    result = await run_sustained(INTENT_INTERVAL, 1)
+    assert result["events"] == INTENT_INTERVAL
+    assert result["intent_count"] == 1
+    assert result["event_checksum"] == result["produced_event_checksum"]

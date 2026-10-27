@@ -31,16 +31,16 @@ import signal
 from collections import deque
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
-from datetime import time as dt_time
+from datetime import UTC, datetime
 from enum import StrEnum
 from time import monotonic
 from typing import Any, cast
-from zoneinfo import ZoneInfo
 
 from ml4t.backtest import BacktestConfig, Strategy
 from ml4t.specs import (
     LIFECYCLE_V1,
+    UNSET_CALENDAR,
+    CalendarUnset,
     EventCompletion,
     ExecutionPolicy,
     HistoricalStrategyCompatibilityError,
@@ -66,13 +66,11 @@ from .lifecycle import LiveLifecycleDispatcher
 from .persistence import redact_sensitive
 from .protocols import AsyncBrokerProtocol, DataFeedProtocol
 from .runtime import LiveStrategyRuntime, default_live_execution_policy
+from .temporal import resolve_live_config
 from .wrappers import ThreadSafeBrokerWrapper
 
 logger = logging.getLogger(__name__)
 
-US_EASTERN = ZoneInfo("America/New_York")
-US_EQUITY_OPEN = dt_time(9, 30)
-US_EQUITY_CLOSE = dt_time(16, 0)
 RECOVERABLE_HEALTH_STATES = {"feed_silent", "broker_disconnected"}
 RETAINED_OPERATIONAL_EVENT_LIMIT = 4_096
 
@@ -277,6 +275,8 @@ class LiveEngine:
         lifecycle_version: LifecycleVersion | str = LifecycleVersion.V1,
         execution_policy: ExecutionPolicy | None = None,
         strategy_config: BacktestConfig | None = None,
+        feed_spec: Any | None = None,
+        calendar: str | None | CalendarUnset = UNSET_CALENDAR,
     ) -> None:
         """Initialize LiveEngine.
 
@@ -285,7 +285,8 @@ class LiveEngine:
             broker: Async broker implementation.
             feed: Data feed providing timestamp, data, context tuples.
             on_error: Custom error handler callback.
-            feed_silence_seconds: Optional threshold for degraded feed reporting.
+            feed_silence_seconds: Optional trading-time threshold for degraded feed reporting;
+                scheduled calendar closures and breaks do not count.
             watchdog_poll_seconds: Poll interval for runtime health monitoring.
             halt_on_unhealthy: Stop the engine when watchdog detects a degraded state.
             auto_recover: Attempt reconnect/restart when watchdog detects a recoverable state.
@@ -299,6 +300,9 @@ class LiveEngine:
             lifecycle_version: Portable strategy lifecycle version.
             execution_policy: Explicit live execution capabilities and behavior.
             strategy_config: Backtest strategy configuration supplied to ``on_prepare``.
+            feed_spec: Shared feed metadata; when omitted, read the feed's declared metadata.
+            calendar: Explicit calendar override. Omission inherits feed metadata then NYSE;
+                None disables exchange-calendar handling.
         """
         negotiated_version = negotiate_lifecycle_version(lifecycle_version)
         self._validate_strategy_lifecycle(strategy)
@@ -328,12 +332,22 @@ class LiveEngine:
         self.strategy_callback_timeout_seconds = strategy_callback_timeout_seconds
         self.lifecycle_version = negotiated_version
         self.execution_policy = execution_policy or default_live_execution_policy()
-        self.strategy_config = strategy_config or BacktestConfig()
+        declared_feed_spec = feed_spec
+        if declared_feed_spec is None:
+            declared_feed_spec = getattr(feed, "feed_spec", None)
+        if declared_feed_spec is None:
+            declared_feed_spec = getattr(feed, "metadata", None)
+        self.strategy_config = resolve_live_config(strategy_config, declared_feed_spec, calendar)
+        self.feed_spec = self.strategy_config.resolved_feed_spec
+        self.calendar = self.strategy_config.resolved_calendar
         self.strategy_runtime = LiveStrategyRuntime(
             broker,
             self.execution_policy,
             negotiated_version,
+            feed_spec=self.feed_spec,
+            calendar=self.calendar,
         )
+        self._temporal = self.strategy_runtime._temporal
         self.lifecycle_dispatcher = LiveLifecycleDispatcher(
             strategy,
             LIFECYCLE_V1,
@@ -525,13 +539,18 @@ class LiveEngine:
                         event_kind = MarketEventKind.BAR
 
                     self._event_count += 1
-                    self._run_event_count += 1
                     self._event_kind_counts[event_kind] += 1
                     self._last_event_time = timestamp
                     if event_kind is MarketEventKind.BAR:
                         self._bar_count += 1
                         self._last_bar_time = timestamp
                     self._last_bar_received_at = processing_time
+
+                    if self.strategy_config.enforce_sessions and not self._temporal.allows_event(
+                        timestamp
+                    ):
+                        continue
+                    self._run_event_count += 1
 
                     complete_or_non_bar = (
                         typed_event is None
@@ -1390,9 +1409,7 @@ class LiveEngine:
             self._operational_event_forwarded_count += 1
 
     def _normalize_utc(self, timestamp: datetime) -> datetime:
-        if timestamp.tzinfo is None:
-            return timestamp.replace(tzinfo=UTC)
-        return timestamp.astimezone(UTC)
+        return self._temporal.clock(timestamp)
 
     def _current_broker_connected(self) -> bool | None:
         broker_connected = getattr(self.broker, "is_connected", None)
@@ -1400,80 +1417,38 @@ class LiveEngine:
             return broker_connected
         return None
 
-    def _equity_symbols(self) -> list[str]:
-        stock_symbols = getattr(self.feed, "_stock_symbols", None)
-        if isinstance(stock_symbols, list) and stock_symbols:
-            return [str(symbol).upper() for symbol in stock_symbols]
+    def _feed_symbols(self) -> list[str]:
+        symbols = getattr(self.feed, "symbols", None)
+        if isinstance(symbols, list):
+            return [str(symbol).upper() for symbol in symbols]
+        stock = getattr(self.feed, "_stock_symbols", [])
+        crypto = getattr(self.feed, "_crypto_symbols", [])
+        if isinstance(stock, list) and isinstance(crypto, list):
+            return list(dict.fromkeys(str(symbol).upper() for symbol in stock + crypto))
+        symbol = getattr(self.feed, "symbol", None)
+        return [symbol.upper()] if isinstance(symbol, str) else []
 
-        if self.feed.__class__.__name__ == "IBDataFeed":
-            symbols = getattr(self.feed, "symbols", None)
-            if isinstance(symbols, list):
-                return [str(symbol).upper() for symbol in symbols]
-
-        return []
-
-    def _next_trading_day(self, current_day: datetime) -> datetime:
-        candidate = current_day + timedelta(days=1)
-        while candidate.weekday() >= 5:
-            candidate += timedelta(days=1)
-        return candidate
-
-    def _equity_session_status(self, now: datetime) -> dict[str, Any]:
-        symbols = self._equity_symbols()
-        if not symbols:
-            return {
-                "market": "continuous",
-                "next_boundary": None,
-                "tracked_symbols": [],
-            }
-
-        now_et = now.astimezone(US_EASTERN)
-        open_dt = datetime.combine(now_et.date(), US_EQUITY_OPEN, tzinfo=US_EASTERN)
-        close_dt = datetime.combine(now_et.date(), US_EQUITY_CLOSE, tzinfo=US_EASTERN)
-
-        if now_et.weekday() >= 5:
-            next_open = datetime.combine(
-                self._next_trading_day(now_et).date(),
-                US_EQUITY_OPEN,
-                tzinfo=US_EASTERN,
-            )
-            market = "closed"
-            next_boundary = next_open
-        elif now_et < open_dt:
-            market = "pre_open"
-            next_boundary = open_dt
-        elif now_et < close_dt:
-            market = "open"
-            next_boundary = close_dt
-        else:
-            market = "closed"
-            next_open = datetime.combine(
-                self._next_trading_day(now_et).date(),
-                US_EQUITY_OPEN,
-                tzinfo=US_EASTERN,
-            )
-            next_boundary = next_open
-
-        return {
-            "market": market,
-            "next_boundary": next_boundary.astimezone(UTC),
-            "tracked_symbols": symbols,
-        }
+    def _session_status(self, now: datetime) -> dict[str, Any]:
+        return {**self._temporal.status(now), "tracked_symbols": self._feed_symbols()}
 
     def runtime_status(self, now: datetime | None = None) -> dict[str, Any]:
         """Return engine runtime health and session context."""
         reference_now = self._normalize_utc(now or datetime.now(UTC))
-        session = self._equity_session_status(reference_now)
+        session = self._session_status(reference_now)
         broker_connected = self._current_broker_connected()
         feed_stats = getattr(self.feed, "stats", None)
         if not isinstance(feed_stats, dict):
             feed_stats = None
 
         last_bar_age_seconds: float | None = None
+        last_bar_trading_age_seconds: float | None = None
         if self._last_bar_received_at is not None:
             last_bar_age_seconds = max(
                 0.0,
                 (reference_now - self._last_bar_received_at).total_seconds(),
+            )
+            last_bar_trading_age_seconds = self._temporal.trading_seconds(
+                self._last_bar_received_at, reference_now
             )
 
         if self._runtime_state is RuntimeState.FAILED:
@@ -1490,7 +1465,8 @@ class LiveEngine:
             health = "waiting_for_data"
         elif (
             self.feed_silence_seconds is not None
-            and last_bar_age_seconds > self.feed_silence_seconds
+            and last_bar_trading_age_seconds is not None
+            and last_bar_trading_age_seconds > self.feed_silence_seconds
         ):
             health = "feed_silent"
         else:
@@ -1510,8 +1486,14 @@ class LiveEngine:
             "last_bar_time": self._last_bar_time,
             "last_bar_received_at": self._last_bar_received_at,
             "last_bar_age_seconds": last_bar_age_seconds,
+            "last_bar_trading_age_seconds": last_bar_trading_age_seconds,
             "broker_connected": broker_connected,
             "session_state": session["market"],
+            "calendar": self.calendar,
+            "session_label": (
+                session["session_date"].isoformat() if session["session_date"] is not None else None
+            ),
+            "feed_spec": self.feed_spec.to_dict(),
             "next_session_boundary": session["next_boundary"],
             "tracked_symbols": session["tracked_symbols"],
             "health": health,

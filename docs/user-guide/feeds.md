@@ -17,6 +17,24 @@ Every event has separate `event_time` and `receipt_time`. The engine adds `proce
 evidence. Naive or non-UTC timestamps, stale events, invalid OHLC ranges, nonpositive prices,
 negative sizes, crossed quotes, and non-finite values are rejected before strategy dispatch.
 
+## Calendar metadata
+
+`LiveEngine` reads a feed's `feed_spec` (or `metadata`) when no explicit `feed_spec` is supplied.
+Custom feeds may keep the existing protocol and pass a shared `ml4t.specs.FeedSpec` directly to
+`LiveEngine`. Explicit engine calendar selection takes precedence; unspecified calendars default
+to NYSE, while temporal-version-2 `calendar=None` disables exchange sessions.
+
+`OKXFundingFeed` and `CryptoFeed` declare `24/7`. Alpaca crypto-only streams declare `24/7`;
+streams containing stocks declare NYSE. A mixed stock/crypto stream has one calendar, so use
+separate engines or choose an explicit calendar for that workflow. IB's routing exchange and a
+DataBento dataset name do not select a calendar: declare the actual venue calendar explicitly for
+non-NYSE streams. These declarations do not change experimental feed support status.
+
+`BarAggregator` carries the source calendar, including explicit `None`, into its output metadata.
+Output timestamps remain UTC interval starts with left labels; aggregation does not claim
+exchange-open alignment or a partial-bar guarantee. See [Backtest to Live](backtest-to-live.md#shared-calendar-declarations)
+for shared strategy configuration and interval conventions.
+
 ## Overload And Reconnect Safety
 
 Supported feeds halt instead of dropping, coalescing, or blocking indefinitely. Set

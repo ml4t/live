@@ -50,7 +50,7 @@ def qualify(output: Path | None = None) -> dict[str, object]:
         environment = os.environ.copy()
         environment.pop("PYTHONPATH", None)
         environment["SETUPTOOLS_SCM_PRETEND_VERSION"] = os.environ.get(
-            "SETUPTOOLS_SCM_PRETEND_VERSION", "0.1.1"
+            "SETUPTOOLS_SCM_PRETEND_VERSION", "0.2.0"
         )
         run(
             [

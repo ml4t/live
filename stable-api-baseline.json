@@ -133,7 +133,7 @@
   },
   "distribution": {
     "name": "ml4t-live",
-    "version": "0.1.0b4.dev76+gcfb09634f.d20260809"
+    "version": "0.2.0"
   },
   "entry_points": {
     "ml4t-live": "ml4t.live.cli.main:app"
@@ -1436,7 +1436,7 @@
       ],
       "module": "ml4t.live",
       "name": "LiveEngine",
-      "signature": "(strategy: ml4t.backtest.strategy.Strategy, broker: ml4t.live.protocols.AsyncBrokerProtocol, feed: ml4t.live.protocols.DataFeedProtocol, *, on_error: collections.abc.Callable[[Exception, datetime.datetime, dict], None] | None = None, feed_silence_seconds: float | None = None, watchdog_poll_seconds: float = 1.0, halt_on_unhealthy: bool = False, auto_recover: bool = False, recovery_cooldown_seconds: float = 5.0, max_recovery_attempts: int = 3, max_event_age_seconds: float | None = None, on_health_change: collections.abc.Callable[[str, dict[str, Any]], None] | None = None, strategy_callback_timeout_seconds: float = 5.0, lifecycle_version: ml4t.specs.lifecycle.LifecycleVersion | str = <LifecycleVersion.V1: '1'>, execution_policy: ml4t.specs.intents.ExecutionPolicy | None = None, strategy_config: ml4t.backtest.config.BacktestConfig | None = None) -> None"
+      "signature": "(strategy: ml4t.backtest.strategy.Strategy, broker: ml4t.live.protocols.AsyncBrokerProtocol, feed: ml4t.live.protocols.DataFeedProtocol, *, on_error: collections.abc.Callable[[Exception, datetime.datetime, dict], None] | None = None, feed_silence_seconds: float | None = None, watchdog_poll_seconds: float = 1.0, halt_on_unhealthy: bool = False, auto_recover: bool = False, recovery_cooldown_seconds: float = 5.0, max_recovery_attempts: int = 3, max_event_age_seconds: float | None = None, on_health_change: collections.abc.Callable[[str, dict[str, Any]], None] | None = None, strategy_callback_timeout_seconds: float = 5.0, lifecycle_version: ml4t.specs.lifecycle.LifecycleVersion | str = <LifecycleVersion.V1: '1'>, execution_policy: ml4t.specs.intents.ExecutionPolicy | None = None, strategy_config: ml4t.backtest.config.BacktestConfig | None = None, feed_spec: Any | None = None, calendar: str | None | ml4t.specs.time.CalendarUnset = <CalendarUnset.UNSET: 'unset'>) -> None"
     },
     {
       "bases": [
@@ -1699,7 +1699,7 @@
       ],
       "module": "ml4t.live",
       "name": "LiveStrategyRuntime",
-      "signature": "(broker: 'AsyncBrokerProtocol', policy: 'ExecutionPolicy', lifecycle_version: 'LifecycleVersion') -> 'None'"
+      "signature": "(broker: 'AsyncBrokerProtocol', policy: 'ExecutionPolicy', lifecycle_version: 'LifecycleVersion', *, feed_spec: 'Any | None' = None, calendar: 'str | None | CalendarUnset' = <CalendarUnset.UNSET: 'unset'>) -> 'None'"
     },
     {
       "bases": [
@@ -2968,7 +2968,28 @@
       "defined_in": "ml4t.live.brokers.ib",
       "kind": "constant",
       "module": "ml4t.live.brokers.ib",
+      "name": "IB_CONNECT_HANDSHAKE_TIMEOUT"
+    },
+    {
+      "classification": "internal",
+      "defined_in": "ml4t.live.brokers.ib",
+      "kind": "constant",
+      "module": "ml4t.live.brokers.ib",
+      "name": "IB_CONNECT_TIMEOUT"
+    },
+    {
+      "classification": "internal",
+      "defined_in": "ml4t.live.brokers.ib",
+      "kind": "constant",
+      "module": "ml4t.live.brokers.ib",
       "name": "IB_PENDING_ORDER_STATUSES"
+    },
+    {
+      "classification": "internal",
+      "defined_in": "ml4t.live.brokers.ib",
+      "kind": "constant",
+      "module": "ml4t.live.brokers.ib",
+      "name": "IB_SNAPSHOT_TIMEOUT"
     },
     {
       "bases": [
@@ -3320,7 +3341,7 @@
       ],
       "module": "ml4t.live.engine",
       "name": "LiveEngine",
-      "signature": "(strategy: ml4t.backtest.strategy.Strategy, broker: ml4t.live.protocols.AsyncBrokerProtocol, feed: ml4t.live.protocols.DataFeedProtocol, *, on_error: collections.abc.Callable[[Exception, datetime.datetime, dict], None] | None = None, feed_silence_seconds: float | None = None, watchdog_poll_seconds: float = 1.0, halt_on_unhealthy: bool = False, auto_recover: bool = False, recovery_cooldown_seconds: float = 5.0, max_recovery_attempts: int = 3, max_event_age_seconds: float | None = None, on_health_change: collections.abc.Callable[[str, dict[str, Any]], None] | None = None, strategy_callback_timeout_seconds: float = 5.0, lifecycle_version: ml4t.specs.lifecycle.LifecycleVersion | str = <LifecycleVersion.V1: '1'>, execution_policy: ml4t.specs.intents.ExecutionPolicy | None = None, strategy_config: ml4t.backtest.config.BacktestConfig | None = None) -> None"
+      "signature": "(strategy: ml4t.backtest.strategy.Strategy, broker: ml4t.live.protocols.AsyncBrokerProtocol, feed: ml4t.live.protocols.DataFeedProtocol, *, on_error: collections.abc.Callable[[Exception, datetime.datetime, dict], None] | None = None, feed_silence_seconds: float | None = None, watchdog_poll_seconds: float = 1.0, halt_on_unhealthy: bool = False, auto_recover: bool = False, recovery_cooldown_seconds: float = 5.0, max_recovery_attempts: int = 3, max_event_age_seconds: float | None = None, on_health_change: collections.abc.Callable[[str, dict[str, Any]], None] | None = None, strategy_callback_timeout_seconds: float = 5.0, lifecycle_version: ml4t.specs.lifecycle.LifecycleVersion | str = <LifecycleVersion.V1: '1'>, execution_policy: ml4t.specs.intents.ExecutionPolicy | None = None, strategy_config: ml4t.backtest.config.BacktestConfig | None = None, feed_spec: Any | None = None, calendar: str | None | ml4t.specs.time.CalendarUnset = <CalendarUnset.UNSET: 'unset'>) -> None"
     },
     {
       "classification": "internal",
@@ -3510,27 +3531,6 @@
       "module": "ml4t.live.engine",
       "name": "RuntimeTransition",
       "signature": "(occurred_at: datetime.datetime, previous: ml4t.live.engine.RuntimeState, current: ml4t.live.engine.RuntimeState, reason: str, attempt: int | None, last_known_sequence: int) -> None"
-    },
-    {
-      "classification": "internal",
-      "defined_in": "zoneinfo",
-      "kind": "constant",
-      "module": "ml4t.live.engine",
-      "name": "US_EASTERN"
-    },
-    {
-      "classification": "internal",
-      "defined_in": "ml4t.live.engine",
-      "kind": "constant",
-      "module": "ml4t.live.engine",
-      "name": "US_EQUITY_CLOSE"
-    },
-    {
-      "classification": "internal",
-      "defined_in": "ml4t.live.engine",
-      "kind": "constant",
-      "module": "ml4t.live.engine",
-      "name": "US_EQUITY_OPEN"
     },
     {
       "classification": "stable",
@@ -5184,7 +5184,7 @@
       ],
       "module": "ml4t.live.runtime",
       "name": "LiveStrategyRuntime",
-      "signature": "(broker: 'AsyncBrokerProtocol', policy: 'ExecutionPolicy', lifecycle_version: 'LifecycleVersion') -> 'None'"
+      "signature": "(broker: 'AsyncBrokerProtocol', policy: 'ExecutionPolicy', lifecycle_version: 'LifecycleVersion', *, feed_spec: 'Any | None' = None, calendar: 'str | None | CalendarUnset' = <CalendarUnset.UNSET: 'unset'>) -> 'None'"
     },
     {
       "bases": [
@@ -5835,6 +5835,57 @@
       "module": "ml4t.live.state_migration",
       "name": "migrate_portable_strategy_state",
       "signature": "(value: 'dict[str, Any]', *, position_quantities: 'dict[str, float]') -> 'tuple[dict[str, Any], bool]'"
+    },
+    {
+      "bases": [
+        "builtins.object"
+      ],
+      "classification": "internal",
+      "defined_in": "ml4t.live.temporal",
+      "kind": "class",
+      "methods": [
+        {
+          "kind": "method",
+          "name": "allows_event",
+          "signature": "(self, timestamp: 'datetime') -> 'bool'"
+        },
+        {
+          "kind": "method",
+          "name": "clock",
+          "signature": "(self, timestamp: 'datetime') -> 'datetime'"
+        },
+        {
+          "kind": "method",
+          "name": "is_session",
+          "signature": "(self, label: 'date') -> 'bool'"
+        },
+        {
+          "kind": "method",
+          "name": "session_date",
+          "signature": "(self, timestamp: 'datetime') -> 'date'"
+        },
+        {
+          "kind": "method",
+          "name": "status",
+          "signature": "(self, timestamp: 'datetime') -> 'dict[str, Any]'"
+        },
+        {
+          "kind": "method",
+          "name": "trading_seconds",
+          "signature": "(self, start: 'datetime', end: 'datetime') -> 'float'"
+        }
+      ],
+      "module": "ml4t.live.temporal",
+      "name": "LiveCalendar",
+      "signature": "(feed_spec: 'FeedSpec', calendar: 'str | None') -> 'None'"
+    },
+    {
+      "classification": "internal",
+      "defined_in": "ml4t.live.temporal",
+      "kind": "function",
+      "module": "ml4t.live.temporal",
+      "name": "resolve_live_config",
+      "signature": "(config: 'BacktestConfig | None', feed_spec: 'Any | None', calendar: 'str | None | CalendarUnset' = <CalendarUnset.UNSET: 'unset'>) -> 'BacktestConfig'"
     },
     {
       "bases": [

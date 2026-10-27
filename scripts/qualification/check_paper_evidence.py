@@ -79,11 +79,7 @@ def fetch_json(url: str, token: str) -> dict[str, Any]:
 
 def fetch_bytes(url: str, token: str) -> bytes:
     path = urllib.parse.urlsplit(url).path
-    accept = (
-        "application/vnd.github+json"
-        if "/actions/artifacts/" in path
-        else "application/octet-stream"
-    )
+    accept = "application/vnd.github+json" if "/actions/" in path else "application/octet-stream"
     request = urllib.request.Request(
         url,
         headers={
@@ -275,6 +271,158 @@ def find_paper_evidence(
     }
 
 
+def find_reviewed_stage_evidence(
+    *,
+    repository: str,
+    commit: str,
+    token: str,
+    checkout_root: Path,
+    candidate_artifacts: dict[str, dict[str, str]],
+    reviews: dict[str, Any],
+    current_runtime: dict[str, Any],
+    fetcher: Callable[[str, str], dict[str, Any]] = fetch_json,
+    downloader: Callable[[str, str], bytes] = fetch_bytes,
+) -> dict[str, Any]:
+    """Select original duration and independently validated compatibility stages."""
+    stages = importlib.import_module("scripts.qualification.provider_stage_evidence")
+    selected: dict[str, Any] = {}
+    failures: dict[str, str] = {}
+
+    def load_source(description: dict[str, Any], *, baseline: bool) -> tuple[bytes, bytes]:
+        run = fetcher(
+            f"{GITHUB_API}/repos/{repository}/actions/runs/{description['run_id']}", token
+        )
+        expected_outcome = (
+            "success" if baseline else description.get("parent_conclusion", "success")
+        )
+        if (
+            run.get("head_sha") != description["commit"]
+            or run.get("status") != "completed"
+            or expected_outcome not in {"success", "failure"}
+            or run.get("conclusion") != expected_outcome
+        ):
+            raise PaperQualificationError("reviewed evidence workflow identity or outcome differs")
+        source = _archive_source(repository=repository, run=run, token=token, fetcher=fetcher)
+        if source is None:
+            raise PaperQualificationError("reviewed evidence archive is unavailable")
+        payload = downloader(source[1], token)
+        if stages.digest(payload) != description["archive_sha256"]:
+            raise PaperQualificationError("reviewed evidence archive digest differs")
+        job = fetcher(
+            f"{GITHUB_API}/repos/{repository}/actions/jobs/{description['job_id']}", token
+        )
+        if (
+            job.get("run_id") != description["run_id"]
+            or job.get("head_sha") != description["commit"]
+        ):
+            raise PaperQualificationError("runtime proof belongs to another workflow or source")
+        log = downloader(
+            f"{GITHUB_API}/repos/{repository}/actions/jobs/{description['job_id']}/logs", token
+        )
+        if stages.digest(log) != description["runtime_log_sha256"]:
+            raise PaperQualificationError("actual runtime proof digest differs")
+        return payload, log
+
+    if reviews.get("schema_version") != 1:
+        raise PaperQualificationError("unsupported stage review schema")
+    for provider in ("alpaca", "ib", "okx"):
+        try:
+            common = reviews.get("common", {})
+            record = reviews["providers"][provider]
+            review = {
+                **common,
+                **record,
+                "baseline": {**common.get("baseline", {}), **record["baseline"]},
+            }
+            if not review.get("compatibility"):
+                raise PaperQualificationError("fresh current compatibility evidence is missing")
+            baseline, baseline_log = load_source(review["baseline"], baseline=True)
+            original = validate_evidence_archive(baseline, review["baseline"]["commit"])
+            compatibility, compatibility_log = load_source(review["compatibility"], baseline=False)
+            with zipfile.ZipFile(io.BytesIO(compatibility)) as archive:
+                manifest = _unique_json(archive, "candidate.json")
+                verify_candidate_manifest(manifest)
+                identity = _candidate_identity(manifest)
+                if (
+                    manifest["repository"] != repository
+                    or identity["commit"] != review["compatibility"]["commit"]
+                ):
+                    raise PaperQualificationError("compatibility reports target another source")
+                if (
+                    stages.installer_runtime(compatibility_log)["packages"].get("ml4t-live")
+                    != identity["version"]
+                ):
+                    raise PaperQualificationError(
+                        "compatibility artifact and installed version differ"
+                    )
+                phases = {}
+                for phase in ("exercise",) if provider == "okx" else ("exercise", "restart"):
+                    suffix = "okx.json" if provider == "okx" else f"{provider}-{phase}.json"
+                    report = _unique_json(archive, suffix)
+                    if provider == "okx":
+                        validate_okx_report(report, manifest)
+                    else:
+                        validate_provider_report(report, identity, provider, phase)
+                    phases[phase] = {
+                        "candidate": report["candidate"],
+                        "report_sha256": stages.digest(
+                            archive.read(
+                                next(name for name in archive.namelist() if name.endswith(suffix))
+                            )
+                        ),
+                        "completed_at": report["completed_at"],
+                    }
+            with zipfile.ZipFile(io.BytesIO(baseline)) as archive:
+                raw_report = archive.read(
+                    next(
+                        name
+                        for name in archive.namelist()
+                        if name.endswith(f"{provider}-soak.json")
+                    )
+                )
+            report = original["providers"][provider]["soak"]
+            binding = stages.validate_stage_review(
+                review,
+                provider=provider,
+                candidate_commit=commit,
+                checkout_root=checkout_root,
+                baseline_report=report,
+                baseline_report_bytes=raw_report,
+                baseline_log=baseline_log,
+                compatibility_commit=identity["commit"],
+                compatibility_log=compatibility_log,
+                current_runtime=current_runtime,
+            )
+            selected[provider] = {
+                "connection_duration": {
+                    **binding,
+                    "run_id": review["baseline"]["run_id"],
+                    "duration_seconds": report["duration_seconds"],
+                    "snapshot_count": len(report["snapshots"]),
+                },
+                "compatibility": {"run_id": review["compatibility"]["run_id"], "phases": phases},
+            }
+        except (
+            PaperQualificationError,
+            FeedQualificationError,
+            _contracts.ProviderContractError,
+            ValueError,
+            KeyError,
+            TypeError,
+            OSError,
+            zipfile.BadZipFile,
+        ) as error:
+            failures[provider] = str(error)
+    return {
+        "commit": commit,
+        "wheel_sha256": candidate_artifacts["wheel"]["sha256"],
+        "sdist_sha256": candidate_artifacts["sdist"]["sha256"],
+        "providers": selected,
+        "failures": failures,
+        "passed": not failures,
+    }
+
+
 def write_github_output(path: Path, evidence: dict[str, Any] | None) -> None:
     """Write release artifact hashes only after every provider has valid evidence."""
     if evidence is None:
@@ -291,24 +439,49 @@ def main() -> int:
     parser.add_argument("--artifacts-dir", type=Path, required=True)
     parser.add_argument("--output")
     parser.add_argument("--github-output", type=Path)
+    parser.add_argument(
+        "--stage-reviews",
+        type=Path,
+        default=REPOSITORY_ROOT / "provider-evidence-reviews.json",
+    )
     args = parser.parse_args()
     token = os.environ.get("GITHUB_TOKEN", "")
     if not token:
         raise RuntimeError("GITHUB_TOKEN is required to read workflow evidence")
-    _, candidate_artifacts = artifact_identity(args.artifacts_dir)
-    evidence = find_paper_evidence(
-        repository=args.repository,
-        commit=args.commit,
-        token=token,
-        checkout_root=REPOSITORY_ROOT,
-        candidate_artifacts=candidate_artifacts,
-    )
+    version, candidate_artifacts = artifact_identity(args.artifacts_dir)
+    selection = None
+    if args.stage_reviews.is_file():
+        stages = importlib.import_module("scripts.qualification.provider_stage_evidence")
+        runtime = stages.current_candidate_runtime(
+            {"commit": args.commit, "version": version, **candidate_artifacts},
+            args.artifacts_dir,
+            REPOSITORY_ROOT,
+        )
+        selection = find_reviewed_stage_evidence(
+            repository=args.repository,
+            commit=args.commit,
+            token=token,
+            checkout_root=REPOSITORY_ROOT,
+            candidate_artifacts=candidate_artifacts,
+            reviews=json.loads(args.stage_reviews.read_text()),
+            current_runtime=runtime,
+        )
+        evidence = selection if selection["passed"] else None
+    else:
+        evidence = find_paper_evidence(
+            repository=args.repository,
+            commit=args.commit,
+            token=token,
+            checkout_root=REPOSITORY_ROOT,
+            candidate_artifacts=candidate_artifacts,
+        )
     report = {
         "schema_version": 1,
         "repository": args.repository,
         "commit": args.commit,
         "evidence": evidence,
         "passed": evidence is not None,
+        "stage_selection": selection,
     }
     if args.output:
         output = Path(args.output)
@@ -320,10 +493,7 @@ def main() -> int:
     if evidence:
         print(f"wheel_sha256={evidence['wheel_sha256']} sdist_sha256={evidence['sdist_sha256']}")
         for provider, source in evidence["providers"].items():
-            print(
-                f"provider={provider} run_id={source['run_id']} "
-                f"commit={source['commit']} completed_at={source['completed_at']}"
-            )
+            print(f"provider={provider} evidence={json.dumps(source, sort_keys=True)}")
     return int(evidence is None)
 
 

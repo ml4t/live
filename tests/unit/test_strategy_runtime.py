@@ -13,6 +13,7 @@ from ml4t.specs import (
     AssetTarget,
     CanonicalTargetIntent,
     ExecutionBehavior,
+    FeedSpec,
     IntentReason,
     LifecyclePhase,
     LifecycleVersion,
@@ -232,6 +233,8 @@ class PartialReductionBroker(FillBroker):
 
 
 class RuntimeFeed:
+    feed_spec = FeedSpec(time_contract_version=2, calendar=None)
+
     def __init__(self, bars: list[tuple[datetime, dict[str, dict[str, float]], dict]]) -> None:
         self.bars = bars
         self.started = False
@@ -253,6 +256,8 @@ class RuntimeFeed:
 
 
 class RecoveringRuntimeFeed:
+    feed_spec = FeedSpec(time_contract_version=2, calendar=None)
+
     def __init__(
         self,
         batches: list[list[tuple[datetime, dict[str, dict[str, float]], dict]]],

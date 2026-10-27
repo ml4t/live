@@ -7,8 +7,12 @@
 - A supported broker or data source for live use
 - `ml4t-backtest` is installed automatically as a package dependency
 
-Python 3.15 prereleases run blocking core installation and non-hardware-dependent tests on Linux,
-macOS, and Windows. Prerelease support is not advertised as stable before Python 3.15 is final.
+The Live 0.2 candidate requires Python `>=3.12,<3.15`. Its calendar dependencies currently require
+NumPy `<2.5` and Pandas `<3.1` under the strict warning contract; NumPy 2.4.6 does not declare
+Python 3.15 support. Monthly three-OS diagnostic probes resolve the complete dependency set and
+exercise the public Hong Kong calendar. Those probes do not qualify normal Python 3.15 installation
+or replace the supported-version, artifact or provider gates. The [scoped compatibility decision](https://github.com/ml4t/ecosystem/blob/56d42098ff91c80c3318d4677c6dc2f178706cf7/decisions/0018-live-020-python315-calendar-wait.md)
+records the Live 0.2 boundary, expiry and upstream review triggers. Published Live 0.1.3 is unchanged.
 
 ## Install From PyPI
 

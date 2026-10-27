@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from dataclasses import dataclass, field, replace
 from datetime import UTC, date, datetime
 from typing import Any
@@ -15,19 +16,23 @@ from ml4t.backtest import (
     Strategy,
 )
 from ml4t.backtest import callback_trace as backtest_callback_trace
+from ml4t.backtest.config import DataFrequency
 from ml4t.backtest.execution import RebalanceSchedule
 from ml4t.backtest.strategies import LongShortStrategy
 from ml4t.specs import (
     AssetTarget,
+    BarLabel,
     CanonicalTargetIntent,
     ExecutionBehavior,
     ExecutionPolicy,
+    FeedSpec,
     HistoricalStrategyCompatibilityError,
     IntentReason,
     LifecyclePhase,
     ResidualPolicy,
     RoundingPolicy,
     TargetMeasure,
+    TimestampSemantics,
 )
 
 from ml4t.live import (
@@ -161,7 +166,13 @@ class DeterministicLiveBroker:
 
 
 class DeterministicLiveFeed:
-    def __init__(self, events: list[tuple[datetime, dict[str, dict[str, float]], dict]]) -> None:
+    def __init__(
+        self,
+        events: list[tuple[datetime, dict[str, dict[str, float]], dict]],
+        *,
+        feed_spec: FeedSpec | None = None,
+    ) -> None:
+        self.feed_spec = feed_spec
         self._events = [
             (
                 timestamp,
@@ -262,13 +273,17 @@ def market_events() -> list[tuple[datetime, dict[str, dict[str, float]], dict]]:
     ]
 
 
-def backtest_feed(events: list[tuple[datetime, dict[str, dict[str, float]], dict]]) -> DataFeed:
+def backtest_feed(
+    events: list[tuple[datetime, dict[str, dict[str, float]], dict]],
+    *,
+    feed_spec: FeedSpec | None = None,
+) -> DataFeed:
     records = [
         {"timestamp": timestamp, "asset": asset, **values}
         for timestamp, data, _ in events
         for asset, values in data.items()
     ]
-    return DataFeed(prices_df=pl.DataFrame(records))
+    return DataFeed(prices_df=pl.DataFrame(records), feed_spec=feed_spec)
 
 
 def policy() -> ExecutionPolicy:
@@ -294,9 +309,11 @@ def run_backtest(
     strategy: Strategy,
     events: list[tuple[datetime, dict[str, dict[str, float]], dict]],
     execution_policy: ExecutionPolicy,
+    *,
+    feed_spec: FeedSpec | None = None,
 ) -> EngineEvidence:
     engine = Engine(
-        backtest_feed(events),
+        backtest_feed(events, feed_spec=feed_spec),
         strategy,
         replace(BacktestConfig(), retain_lifecycle_history=True),
         execution_policy=execution_policy,
@@ -324,6 +341,8 @@ async def run_live(
     events: list[tuple[datetime, dict[str, dict[str, float]], dict]],
     execution_policy: ExecutionPolicy,
     tmp_path,
+    *,
+    feed_spec: FeedSpec | None = None,
 ) -> EngineEvidence:
     raw = DeterministicLiveBroker()
     safe = SafeBroker(
@@ -341,7 +360,7 @@ async def run_live(
     engine = LiveEngine(
         strategy,
         safe,
-        DeterministicLiveFeed(events),
+        DeterministicLiveFeed(events, feed_spec=feed_spec),
         execution_policy=execution_policy,
     )
     await engine.connect()
@@ -387,6 +406,53 @@ async def test_same_strategy_matches_lifecycle_target_rule_and_reconciliation_co
     assert live.children == backtest.children
     assert live.reconciliations == backtest.reconciliations
     assert live.exit_reason == backtest.exit_reason == "stop_loss"
+
+
+@pytest.mark.asyncio
+async def test_overnight_same_session_target_is_rejected_before_persisting_or_submitting(
+    tmp_path,
+) -> None:
+    spec = FeedSpec(
+        time_contract_version=2,
+        calendar="CME_Equity",
+        timezone="UTC",
+        data_frequency=DataFrequency.HOURLY,
+        timestamp_semantics=TimestampSemantics.EVENT_TIME,
+    )
+    timestamp = datetime(2025, 7, 6, 23, 30, tzinfo=UTC)
+    events = [(timestamp, market_events()[0][1], {})]
+    late = target_intent(
+        session=date(2025, 7, 7), decision_time=timestamp, position_rule_policy_id=None
+    )
+
+    class LateOvernightStrategy(Strategy):
+        def on_data(self, timestamp, data, context, broker) -> None:
+            broker.register_target_intent(late)
+
+    backtest = Engine(
+        backtest_feed(events, feed_spec=spec), LateOvernightStrategy(), execution_policy=policy()
+    )
+    with pytest.raises(Exception, match="market_event|future effective session"):
+        backtest.run()
+    assert not backtest.broker.orders
+    assert not backtest.broker.get_target_intents()
+
+    raw = DeterministicLiveBroker()
+    safe = SafeBroker(
+        raw,
+        LiveRiskConfig(shadow_mode=True, state_file=str(tmp_path / "late-overnight-state.json")),
+    )
+    live = LiveEngine(
+        LateOvernightStrategy(),
+        safe,
+        DeterministicLiveFeed(events, feed_spec=spec),
+        execution_policy=policy(),
+    )
+    await live.connect()
+    with pytest.raises(Exception, match="future effective session"):
+        await live.run()
+    assert not live.strategy_runtime.targets
+    assert not safe.positions
 
 
 @pytest.mark.asyncio
@@ -666,3 +732,437 @@ async def test_builtin_schedule_strategy_makes_equal_completed_sequence_decision
         == backtest_strategy.decisions
         == [(schedule_time, ("AAA",), ("BBB",))]
     )
+
+
+@pytest.mark.parametrize(
+    ("calendar", "now", "expected", "boundary"),
+    [
+        (
+            "NYSE",
+            datetime(2025, 7, 4, 15, tzinfo=UTC),
+            "closed",
+            datetime(2025, 7, 7, 13, 30, tzinfo=UTC),
+        ),
+        (
+            "NYSE",
+            datetime(2025, 7, 3, 18, tzinfo=UTC),
+            "closed",
+            datetime(2025, 7, 7, 13, 30, tzinfo=UTC),
+        ),
+        (
+            "HKEX",
+            datetime(2025, 7, 7, 4, 30, tzinfo=UTC),
+            "break",
+            datetime(2025, 7, 7, 5, tzinfo=UTC),
+        ),
+    ],
+)
+def test_declared_calendar_prevents_false_open_on_holidays_early_closes_and_breaks(
+    calendar: str, now: datetime, expected: str, boundary: datetime
+) -> None:
+    spec = FeedSpec(
+        time_contract_version=2,
+        calendar=calendar,
+        timestamp_semantics=TimestampSemantics.EVENT_TIME,
+    )
+    feed = DeterministicLiveFeed([], feed_spec=spec)
+    engine = LiveEngine(
+        ContractStrategy(StrategyTrace(), target_intent()), DeterministicLiveBroker(), feed
+    )
+
+    status = engine.runtime_status(now)
+
+    assert status["session_state"] == expected
+    assert status["next_session_boundary"] == boundary
+
+
+@pytest.mark.parametrize("calendar", [None, "CME_Equity", "NYSE"])
+def test_serialized_feed_calendar_reaches_causal_strategy_configuration(
+    calendar: str | None,
+) -> None:
+    source = FeedSpec(time_contract_version=2, calendar=calendar, timezone="UTC")
+    payload = json.loads(json.dumps(source.to_dict()))
+    projected = FeedSpec.from_mapping(payload)
+    engine = LiveEngine(
+        ContractStrategy(StrategyTrace(), target_intent()),
+        DeterministicLiveBroker(),
+        DeterministicLiveFeed([], feed_spec=projected),
+    )
+
+    assert engine.strategy_config.resolved_calendar == calendar
+    assert engine.strategy_config.resolved_feed_spec.time_contract_version == 2
+    assert projected.to_dict() == payload
+
+
+def test_direct_calendar_none_overrides_declared_feed_calendar_without_mutation() -> None:
+    spec = FeedSpec(time_contract_version=2, calendar="CME_Equity")
+    engine = LiveEngine(
+        ContractStrategy(StrategyTrace(), target_intent()),
+        DeterministicLiveBroker(),
+        DeterministicLiveFeed([], feed_spec=spec),
+        calendar=None,
+    )
+
+    assert engine.strategy_config.resolved_calendar is None
+    assert (
+        engine.runtime_status(datetime(2025, 7, 4, 15, tzinfo=UTC))["session_state"] == "continuous"
+    )
+    assert spec.calendar == "CME_Equity"
+
+
+def test_unknown_calendar_rejects_before_broker_connection_or_feed_start() -> None:
+    raw = DeterministicLiveBroker()
+    feed = DeterministicLiveFeed(
+        [], feed_spec=FeedSpec(time_contract_version=2, calendar="not-a-market-calendar")
+    )
+
+    with pytest.raises(ValueError, match="calendar"):
+        LiveEngine(ContractStrategy(StrategyTrace(), target_intent()), raw, feed)
+
+    assert raw.connect_calls == 0
+    assert not raw.pending_orders
+    assert not feed._running
+
+
+class OvernightCalendarStrategy(Strategy):
+    def __init__(self, trace: StrategyTrace, intent: CanonicalTargetIntent) -> None:
+        self.trace = trace
+        self.intent = intent
+
+    def on_start(self, broker) -> None:
+        self.trace.callbacks.append("on_start")
+
+    def on_prepare(self, broker, config=None) -> None:
+        self.trace.callbacks.append("on_prepare")
+        self.trace.observations.append({"resolved_calendar": config.resolved_calendar})
+        broker.register_target_intent(self.intent)
+
+    def on_data(self, timestamp, data, context, broker) -> None:
+        self.trace.callbacks.append("on_data")
+        position = broker.get_position("ES")
+        self.trace.observations.append(
+            {
+                "timestamp": _utc(timestamp).isoformat(),
+                "quantity": position.quantity if position else 0,
+            }
+        )
+
+    def on_end(self, broker) -> None:
+        self.trace.callbacks.append("on_end")
+
+
+@pytest.mark.asyncio
+async def test_cme_overnight_target_has_the_same_session_and_observable_position(tmp_path) -> None:
+    spec = FeedSpec(
+        time_contract_version=2,
+        calendar="CME_Equity",
+        timezone="UTC",
+        data_frequency=DataFrequency.HOURLY,
+        timestamp_semantics=TimestampSemantics.EVENT_TIME,
+    )
+    declared = FeedSpec.from_mapping(json.loads(json.dumps(spec.to_dict())))
+    prices = {
+        "ES": {"open": 100.0, "high": 100.0, "low": 100.0, "close": 100.0, "volume": 1_000_000.0}
+    }
+    events = [
+        (datetime(2025, 7, 6, 23, 30, tzinfo=UTC), prices, {}),
+        (datetime(2025, 7, 7, 0, 30, tzinfo=UTC), prices, {}),
+    ]
+    initial = replace(
+        target_intent(
+            session=date(2025, 7, 7),
+            decision_time=datetime(2025, 7, 6, 20, tzinfo=UTC),
+            position_rule_policy_id=None,
+        ),
+        targets=(AssetTarget("ES", TargetMeasure.WEIGHT, 0.5),),
+    )
+    backtest = run_backtest(
+        OvernightCalendarStrategy(StrategyTrace(), initial), events, policy(), feed_spec=declared
+    )
+    live = await run_live(
+        OvernightCalendarStrategy(StrategyTrace(), initial),
+        events,
+        policy(),
+        tmp_path,
+        feed_spec=declared,
+    )
+
+    assert backtest.children
+    assert live.children == backtest.children
+    assert live.targets == backtest.targets
+    assert live.callback_trace == backtest.callback_trace
+    assert live.strategy_trace == backtest.strategy_trace
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("calendar", ["HKEX", None, "24/7"])
+async def test_feed_freshness_excludes_only_declared_calendar_closures(
+    monkeypatch, calendar: str | None
+) -> None:
+    import ml4t.live.engine as engine_module
+
+    loop = asyncio.get_running_loop()
+    observed = asyncio.Event()
+    clock = [datetime(2025, 7, 7, 4, tzinfo=UTC)]
+
+    class Clock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return clock[0].astimezone(tz)
+
+    class WaitingFeed:
+        feed_spec = FeedSpec(
+            time_contract_version=2,
+            calendar=calendar,
+            timestamp_semantics=TimestampSemantics.BAR_CLOSE,
+            bar_label=BarLabel.RIGHT,
+        )
+
+        def __init__(self):
+            self.queue = asyncio.Queue()
+
+        async def start(self):
+            self.queue.put_nowait((clock[0], {"0005.HK": {"close": 100.0}}, {}))
+
+        def stop(self):
+            self.queue.put_nowait(None)
+
+        def __aiter__(self):
+            return self
+
+        async def __anext__(self):
+            item = await self.queue.get()
+            if item is None:
+                raise StopAsyncIteration
+            return item
+
+    class Observer(Strategy):
+        def on_data(self, timestamp, data, context, broker):
+            loop.call_soon_threadsafe(observed.set)
+
+    monkeypatch.setattr(engine_module, "datetime", Clock)
+    engine = LiveEngine(
+        Observer(),
+        DeterministicLiveBroker(),
+        WaitingFeed(),
+        feed_silence_seconds=5,
+        watchdog_poll_seconds=60,
+    )
+    await engine.connect()
+    task = asyncio.create_task(engine.run())
+    try:
+        await asyncio.wait_for(observed.wait(), timeout=5)
+        clock[0] = datetime(2025, 7, 7, 5, 0, 2, tzinfo=UTC)
+        status = engine.runtime_status()
+        assert status["health"] == ("ok" if calendar == "HKEX" else "feed_silent")
+        assert status["last_bar_age_seconds"] == 3602
+        assert status["last_bar_trading_age_seconds"] == (2 if calendar == "HKEX" else 3602)
+        clock[0] = datetime(2025, 7, 7, 5, 0, 6, tzinfo=UTC)
+        assert engine.runtime_status()["health"] == "feed_silent"
+    finally:
+        await engine.stop()
+        await task
+
+
+@pytest.mark.parametrize("provider", ["okx", "alpaca"])
+def test_actual_crypto_feed_declares_weekend_calendar_to_engine(provider: str) -> None:
+    from ml4t.live.feeds import OKXFundingFeed
+
+    feed = OKXFundingFeed(["BTC-USDT-SWAP"]) if provider == "okx" else _offline_alpaca_crypto_feed()
+    engine = LiveEngine(
+        ContractStrategy(StrategyTrace(), target_intent()), DeterministicLiveBroker(), feed
+    )
+    status = engine.runtime_status(datetime(2025, 7, 6, 15, tzinfo=UTC))
+    assert status["session_state"] == "continuous"
+    assert status["calendar"] == "24/7"
+
+
+def _offline_alpaca_crypto_feed():
+    from ml4t.live.feeds import AlpacaDataFeed
+    from ml4t.live.feeds.experimental import ExperimentalFeedWarning
+
+    with pytest.warns(ExperimentalFeedWarning):
+        return AlpacaDataFeed("offline", "offline", ["BTC/USD"], experimental=True)
+
+
+@pytest.mark.parametrize("calendar", [None, "CME_Equity"])
+def test_aggregated_feed_preserves_the_source_calendar_in_engine_health(calendar):
+    from ml4t.live.feeds import BarAggregator
+
+    source = DeterministicLiveFeed(
+        [], feed_spec=FeedSpec(time_contract_version=2, calendar=calendar)
+    )
+    feed = BarAggregator(source)
+    engine = LiveEngine(
+        ContractStrategy(StrategyTrace(), target_intent()), DeterministicLiveBroker(), feed
+    )
+    status = engine.runtime_status(datetime(2025, 7, 6, 23, 30, tzinfo=UTC))
+    assert status["session_state"] == ("continuous" if calendar is None else "open")
+    assert status["calendar"] == calendar
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("calendar", "semantics", "expected_indices"),
+    [
+        ("NYSE", TimestampSemantics.EVENT_TIME, [1]),
+        ("NYSE", TimestampSemantics.BAR_CLOSE, [2]),
+        (None, TimestampSemantics.EVENT_TIME, [0, 1, 2, 3]),
+    ],
+)
+async def test_session_enforcement_matches_actual_backtest_at_early_close(
+    calendar, semantics, expected_indices
+):
+    class Observer(Strategy):
+        def __init__(self):
+            self.timestamps = []
+
+        def on_data(self, timestamp, data, context, broker):
+            self.timestamps.append(_utc(timestamp))
+
+    timestamps = [
+        datetime(2025, 7, 3, hour, minute, tzinfo=UTC)
+        for hour, minute in [(13, 0), (13, 30), (17, 0), (17, 1)]
+    ]
+    data = {"SPY": {"open": 100.0, "high": 100.0, "low": 100.0, "close": 100.0, "volume": 1000.0}}
+    events = [(timestamp, data, {}) for timestamp in timestamps]
+    spec = FeedSpec(
+        time_contract_version=2,
+        calendar=calendar,
+        data_frequency=DataFrequency.MINUTE_1,
+        timestamp_semantics=semantics,
+    )
+    backtest = Observer()
+    Engine(
+        backtest_feed(events, feed_spec=spec), backtest, BacktestConfig(enforce_sessions=True)
+    ).run()
+    expected = [timestamps[index] for index in expected_indices]
+    assert backtest.timestamps == expected
+    live = Observer()
+    engine = LiveEngine(
+        live,
+        DeterministicLiveBroker(),
+        DeterministicLiveFeed(events, feed_spec=spec),
+        strategy_config=BacktestConfig(enforce_sessions=True),
+    )
+    await engine.connect()
+    await engine.run()
+    assert live.timestamps == backtest.timestamps
+
+
+@pytest.mark.parametrize(
+    ("clock", "expected"),
+    [(datetime(2025, 7, 3, 12), "open"), (datetime(2025, 7, 3, 14), "closed")],
+)
+def test_status_naive_clock_uses_declared_timezone_across_early_close(clock, expected):
+    spec = FeedSpec(time_contract_version=2, calendar="NYSE", timezone="America/New_York")
+    engine = LiveEngine(
+        ContractStrategy(StrategyTrace(), target_intent()),
+        DeterministicLiveBroker(),
+        DeterministicLiveFeed([], feed_spec=spec),
+    )
+    assert engine.runtime_status(clock)["session_state"] == expected
+
+
+@pytest.mark.parametrize("clock", [datetime(2025, 3, 9, 2, 30), datetime(2025, 11, 2, 1, 30)])
+def test_status_rejects_nonexistent_or_ambiguous_local_clock_before_connection(clock):
+    raw = DeterministicLiveBroker()
+    spec = FeedSpec(time_contract_version=2, calendar="NYSE", timezone="America/New_York")
+    engine = LiveEngine(
+        ContractStrategy(StrategyTrace(), target_intent()),
+        raw,
+        DeterministicLiveFeed([], feed_spec=spec),
+    )
+    with pytest.raises(ValueError, match="ambiguous or nonexistent"):
+        engine.runtime_status(clock)
+    assert raw.connect_calls == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "semantics", [TimestampSemantics.SESSION_LABEL, TimestampSemantics.EVENT_TIME]
+)
+async def test_explicit_daily_semantics_match_backtest_across_holiday(semantics):
+    class Observer(Strategy):
+        def __init__(self):
+            self.timestamps = []
+
+        def on_data(self, timestamp, data, context, broker):
+            self.timestamps.append(_utc(timestamp))
+
+    timestamps = [datetime(2025, 7, day, tzinfo=UTC) for day in (3, 4, 7)]
+    data = {"SPY": {"open": 100.0, "high": 100.0, "low": 100.0, "close": 100.0, "volume": 1000.0}}
+    events = [(timestamp, data, {}) for timestamp in timestamps]
+    spec = FeedSpec(
+        time_contract_version=2,
+        calendar="NYSE",
+        data_frequency=DataFrequency.DAILY,
+        timestamp_semantics=semantics,
+    )
+    historical = Observer()
+    historical_engine = Engine(
+        backtest_feed(events, feed_spec=spec), historical, BacktestConfig(enforce_sessions=True)
+    )
+    if semantics is TimestampSemantics.EVENT_TIME:
+        with pytest.warns(UserWarning, match="retained 0 of 3 intraday bars"):
+            historical_engine.run()
+    else:
+        historical_engine.run()
+    expected = (
+        [timestamps[0], timestamps[2]] if semantics is TimestampSemantics.SESSION_LABEL else []
+    )
+    assert historical.timestamps == expected
+    live = Observer()
+    engine = LiveEngine(
+        live,
+        DeterministicLiveBroker(),
+        DeterministicLiveFeed(events, feed_spec=spec),
+        strategy_config=BacktestConfig(enforce_sessions=True),
+    )
+    await engine.connect()
+    await engine.run()
+    assert live.timestamps == historical.timestamps
+
+
+@pytest.mark.asyncio
+async def test_aggregation_preserves_declared_timezone_for_calendar_free_session_targets(tmp_path):
+    from ml4t.live.feeds import BarAggregator
+
+    timestamp = datetime(2025, 7, 6, 19, 30, tzinfo=UTC)
+    spec = FeedSpec(
+        time_contract_version=2,
+        calendar=None,
+        timezone="America/New_York",
+        session_start_time="17:00",
+        data_frequency=DataFrequency.MINUTE_1,
+        timestamp_semantics=TimestampSemantics.EVENT_TIME,
+    )
+    data = {"SPY": {"open": 100.0, "high": 100.0, "low": 100.0, "close": 100.0, "volume": 1000.0}}
+    events = [(timestamp, data, {})]
+    intent = target_intent(
+        session=date(2025, 7, 7), decision_time=timestamp, position_rule_policy_id=None
+    )
+
+    class ScheduleNextSession(Strategy):
+        def __init__(self):
+            self.accepted = []
+
+        def on_data(self, timestamp, data, context, broker):
+            self.accepted.append(broker.register_target_intent(intent).intent_id)
+
+    historical = ScheduleNextSession()
+    Engine(backtest_feed(events, feed_spec=spec), historical, execution_policy=policy()).run()
+    assert historical.accepted == [intent.intent_id]
+    for name in ("direct", "aggregated"):
+        feed = DeterministicLiveFeed(list(events), feed_spec=spec)
+        if name == "aggregated":
+            feed = BarAggregator(feed)
+        safe = SafeBroker(
+            DeterministicLiveBroker(),
+            LiveRiskConfig(execution_mode="shadow", state_file=str(tmp_path / f"{name}.json")),
+        )
+        strategy = ScheduleNextSession()
+        engine = LiveEngine(strategy, safe, feed, execution_policy=policy())
+        await engine.connect()
+        await engine.run()
+        assert strategy.accepted == historical.accepted

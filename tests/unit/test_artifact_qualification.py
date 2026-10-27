@@ -105,7 +105,7 @@ def test_metadata_contract_accepts_declared_stable_candidate() -> None:
     message = email.message.Message()
     message["Name"] = "ml4t-live"
     message["Version"] = qualify_artifacts.CANDIDATE_VERSION
-    message["Requires-Python"] = ">=3.12"
+    message["Requires-Python"] = ">=3.12,<3.15"
     message["License-Expression"] = "MIT"
     message["Summary"] = EXPECTED_DESCRIPTION
     message["Author-email"] = EXPECTED_AUTHOR
@@ -127,7 +127,7 @@ def test_metadata_contract_rejects_noncanonical_identity() -> None:
     message = email.message.Message()
     message["Name"] = "ml4t-live"
     message["Version"] = qualify_artifacts.CANDIDATE_VERSION
-    message["Requires-Python"] = ">=3.12"
+    message["Requires-Python"] = ">=3.12,<3.15"
     message["License-Expression"] = "MIT"
     message["Summary"] = "Generic live trading package"
     message["Author-email"] = EXPECTED_AUTHOR
@@ -150,7 +150,7 @@ def test_metadata_contract_rejects_development_build_of_stable_candidate() -> No
     message = email.message.Message()
     message["Name"] = "ml4t-live"
     message["Version"] = f"{qualify_artifacts.CANDIDATE_VERSION}.dev1"
-    message["Requires-Python"] = ">=3.12"
+    message["Requires-Python"] = ">=3.12,<3.15"
     message["License-Expression"] = "MIT"
     message["Summary"] = EXPECTED_DESCRIPTION
     message["Author-email"] = EXPECTED_AUTHOR
@@ -167,11 +167,11 @@ def test_metadata_contract_rejects_development_build_of_stable_candidate() -> No
         validate_metadata(message, project)
 
 
-def test_metadata_contract_rejects_python_315_upper_bound() -> None:
+def test_metadata_contract_rejects_unqualified_python_315_advertisement() -> None:
     message = email.message.Message()
     message["Name"] = "ml4t-live"
     message["Version"] = qualify_artifacts.CANDIDATE_VERSION
-    message["Requires-Python"] = ">=3.12,<3.15"
+    message["Requires-Python"] = ">=3.12"
     message["License-Expression"] = "MIT"
 
     with pytest.raises(QualificationError, match="Requires-Python"):
