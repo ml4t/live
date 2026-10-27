@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import hashlib
 import importlib.metadata
 import json
@@ -324,3 +325,104 @@ def provider_contract_matches(
         checkout_root=checkout_root,
         reported_contract=reported_contract,
     ).reusable
+
+
+_BROKER_SNAPSHOT_FUNCTIONS = (
+    "_build_broker",
+    "_number",
+    "_pending_ib_statuses",
+    "_order_type",
+    "_adapter_snapshot",
+    "_vendor_snapshot",
+    "_snapshot",
+)
+_BROKER_DURATION_FUNCTIONS = (
+    *_BROKER_SNAPSHOT_FUNCTIONS,
+    "_provider_state_checksum",
+    "_rss_bytes",
+    "_soak_snapshot",
+    "_sleep_until",
+    "_connect_for_controlled_reconnect",
+    "run_provider_soak",
+)
+_BROKER_COMPATIBILITY_FUNCTIONS = (
+    *_BROKER_SNAPSHOT_FUNCTIONS,
+    "_raw_tagged_orders",
+    "_adapter_id_for_tag",
+    "_wait_for_tag_count",
+    "_tag_keyword",
+    "_assert_atomic_rejections",
+    "_cleanup_tags",
+    "_exercise_provider",
+    "_restart_provider",
+    "run_provider_phase",
+)
+
+
+def provider_stage_inputs(
+    provider: str, stage: str, *, checkout_root: Path, ref: str
+) -> dict[str, Any]:
+    """Identify operations exercised by compatibility or connection-duration evidence."""
+    if provider not in PROVIDERS or stage not in {"compatibility", "connection-duration"}:
+        raise ProviderContractError("unsupported provider evidence stage")
+    if provider == "okx":
+        paths = tuple(path for path in _V3_PATHS[provider] if not path.startswith("scripts/"))
+        script = "scripts/qualification/qualify_feeds.py"
+        names = (
+            (
+                "_rss_bytes",
+                "_soak_snapshot",
+                "qualify_okx_soak",
+                "_native_snapshot",
+                "_native_matches",
+                "_event_sequence",
+                "_validate_okx_event",
+                "_close_within_limit",
+            )
+            if stage == "connection-duration"
+            else (
+                "qualify_okx",
+                "_native_snapshot",
+                "_native_matches",
+                "_event_sequence",
+                "_validate_okx_event",
+                "_collect_initial",
+                "_collect_next_complete",
+                "_close_within_limit",
+                "_qualify_overload",
+            )
+        )
+    else:
+        paths = (
+            (*_V1_PATHS[provider], "src/ml4t/live/orders.py", "src/ml4t/live/protocols.py")
+            if stage == "connection-duration"
+            else (*_V1_PATHS[provider], *_PAPER_SHARED_PATHS)
+        )
+        script = "scripts/qualification/qualify_paper.py"
+        names = (
+            _BROKER_DURATION_FUNCTIONS
+            if stage == "connection-duration"
+            else _BROKER_COMPATIBILITY_FUNCTIONS
+        )
+    tree = ast.parse(_git_text(checkout_root, ref, script))
+    functions = {
+        node.name: hashlib.sha256(ast.dump(node, include_attributes=False).encode()).hexdigest()
+        for node in tree.body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name in names
+    }
+    if set(functions) != set(names):
+        raise ProviderContractError("provider stage has missing qualification operations")
+    constants = {
+        node.targets[0].id: ast.dump(node.value, include_attributes=False)
+        for node in tree.body
+        if isinstance(node, ast.Assign)
+        and len(node.targets) == 1
+        and isinstance(node.targets[0], ast.Name)
+        and (node.targets[0].id.startswith("SOAK_") or node.targets[0].id in {"ASSET", "QUANTITY"})
+    }
+    return {
+        "files": {path: _input_digest(checkout_root, ref, path) for path in paths},
+        "qualification_script": script,
+        "functions": functions,
+        "constants": constants,
+    }

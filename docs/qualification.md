@@ -22,8 +22,8 @@ The gate must leave the worktree unchanged. It checks source quality, Python 3.1
 dependency policy, deterministic integration, bounded stress and controlled faults, sustained
 performance, public claims, strict documentation, reproducible artifacts, installed wheel and
 source-distribution profiles, external typing, secret scanning, and metadata. The ecosystem
-qualification workflow separately requires Python 3.15 prerelease installation and the
-non-hardware-dependent suite on Linux, macOS, and Windows.
+qualification workflow separately checks the supported operating systems. The scoped Live 0.2
+Python 3.15 wait and diagnostic obligations are described below.
 
 The performance stage runs three 360,000-event dispatcher repetitions representing one hour at 100
 events per second across 32 symbols. Each run must preserve event and canonical-intent checksums,
@@ -80,9 +80,11 @@ the SDK's locally created `PendingSubmit` trade alone does not qualify. IB accep
 paper ports and an account identified by IB as a paper account. Alpaca accepts only the SDK's
 official paper endpoint in sandbox mode.
 
-The selected provider runs its short lifecycle or external-feed check and its six-hour soak. Other
-providers do not need to be online. A release with unchanged provider contracts does not dispatch
-this workflow; its release gate selects retained matching provider evidence automatically.
+The workflow defaults to short compatibility checks. Its `run-soak` input defaults to `false`;
+starting the six-hour connection-duration stage requires a separate explicit request and
+maintainer authorization. A changed broad provider fingerprint never dispatches a long test
+by itself. Other providers do not need to be online. A compatibility-only success does not
+claim a six-hour measurement or satisfy the duration requirement on its own.
 
 Each selected broker remains connected to its paper account for at least six continuous hours.
 Five-minute snapshots must preserve exact adapter-to-provider positions and pending orders, valid
@@ -91,16 +93,31 @@ one controlled reconnect, retain snapshot continuity, keep process RSS growth be
 disconnect within five seconds. Any unexpected disconnect, reconciliation change, invalid paper
 identity, or retained error fails the run.
 
-Every extended report records a provider-contract identity. The identity hashes the provider
-adapter, the qualification logic reached by the check, the resolved provider dependency, the
-supported Python runtime, and the shared behavior that the provider reaches. IB and Alpaca include
-canonical orders, safety policy, reconciliation, persistence, protocols, and state migration. OKX
-includes event, queue, persistence, and protocol behavior. Schema 4 also covers the shared engine,
-strategy runtime, calendar adapter, shared-contract/numerical/calendar dependency versions, and
-provider installer/verifier inputs. A changed identity invalidates only that provider's result.
-Documentation, metadata, unrelated workflows, generic build tools, and source code outside
-the provider's reachable contract do not invalidate it. Missing inputs or an unsupported identity
-schema fail closed.
+Compatibility and connection duration are selected separately. A retained duration report keeps
+its original source, candidate version, artifact hashes, runtime observations, timestamps,
+snapshots and measured duration. Its original native validator and embedded historical contract
+must still validate. A new candidate never inherits the old report's identity.
+
+`provider-evidence-reviews.json` binds a reviewed duration baseline to its original archive/report
+and native installer-log digests, actual old and compatible runtime observations, explicit
+reached-operation identities, and reasons for dependency/source differences. Source lock versions
+are not a substitute for the packages actually installed by the original job. Unrelated engine
+calendar changes do not invalidate a broker connection-duration stage. Unreviewed changes to
+reached broker, transport, snapshot, reconnect or shutdown behavior fail reuse closed.
+
+The selector independently requires valid short lifecycle/restart or public-feed compatibility
+for the reviewed current operations and runtime. It can retain a valid provider-specific short
+result from an explicitly reviewed partial run without accepting another provider's failure.
+A missing short check or unavailable paper endpoint leaves that provider unqualified.
+The release gate also installs the exact candidate wheel with its locked constraints, compares
+its installed payload against the wheel and Git source, and checks its actual runtime before
+selecting any retained stages. Missing or altered reports, mismatched sources, incomplete runtime
+proof, unreviewed transport changes or absent current compatibility block release outputs.
+
+The fixed stage inputs are defined in `scripts/qualification/provider_contract.py`; selection and
+review validation live in `check_paper_evidence.py` and `provider_stage_evidence.py`. Existing
+historical contract schemas remain reconstructible. An uncovered duration-sensitive risk needs
+an explicit impact decision; it does not automatically authorize another six-hour run.
 
 The workflow stores redacted evidence as a 90-day Actions artifact. Leave `publish-evidence` at
 its default `false` to qualify without creating a GitHub release. Publishing a durable prerelease
@@ -118,8 +135,8 @@ both revisions.
 
 When the OKX contract changes, the same workflow compares `OKXFundingFeed` events with
 provider-native observations, observes consecutive complete candles across restart, rejects stale
-input, forces fail-closed overload, and requires shutdown within five seconds. The selected OKX run
-then continues for at least six hours with five-minute event, queue, and RSS snapshots and one
+input, forces fail-closed overload, and requires shutdown within five seconds. An explicitly requested OKX duration stage
+continues for at least six hours with five-minute event, queue, and RSS snapshots and one
 retained-state restart. Every complete minute must remain contiguous, final state must match a
 native OKX observation, RSS growth must remain below 25 MiB, and errors, rejections, or overflows
 fail the run. A completed session rejected by the final checks retains its metrics with

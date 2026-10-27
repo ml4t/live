@@ -22,6 +22,11 @@ on:
         required: false
         default: false
         type: boolean
+      run-soak:
+        description: Six-hour duration stage; requires separate explicit authorization
+        required: false
+        default: false
+        type: boolean
 
 permissions: {}
 
@@ -184,7 +189,7 @@ jobs:
         id: provider-soaks
         if: >-
           ${{
-            always() &&
+            always() && inputs.run-soak &&
             (
               (
                 inputs.extended-provider == 'alpaca' &&
@@ -230,7 +235,7 @@ jobs:
           --okx-output "${{ github.workspace }}/feed-evidence/okx-soak.json"
       - name: Require complete redacted evidence for both paper providers
         id: evidence
-        if: ${{ always() && inputs.extended-provider == 'all' }}
+        if: ${{ always() && inputs.run-soak && inputs.extended-provider == 'all' }}
         continue-on-error: true
         run: >-
           "${{ runner.temp }}/paper-venv/bin/python"
@@ -246,7 +251,7 @@ jobs:
       - name: Require the installed feed support contract and external evidence
         id: feed-evidence
         if: >-
-          ${{ always() && (inputs.extended-provider == 'okx' || inputs.extended-provider == 'all') }}
+          ${{ always() && inputs.run-soak && (inputs.extended-provider == 'okx' || inputs.extended-provider == 'all') }}
         continue-on-error: true
         run: >-
           cd "${{ runner.temp }}/paper-run" &&
@@ -298,6 +303,7 @@ jobs:
         run: >-
           "${{ runner.temp }}/paper-venv/bin/python"
           scripts/qualification/check_paper_outcomes.py
+          --stage "${{ inputs.run-soak && 'complete' || 'compatibility' }}"
           --extended-provider "$EXTENDED_PROVIDER"
           --alpaca-exercise "$ALPACA_EXERCISE"
           --alpaca-restart "$ALPACA_RESTART"
@@ -313,7 +319,7 @@ jobs:
   archive:
     name: Retain provider evidence
     needs: paper
-    if: ${{ inputs.publish-evidence }}
+    if: ${{ inputs.publish-evidence && inputs.run-soak }}
     runs-on: ubuntu-latest
     permissions:
       actions: read

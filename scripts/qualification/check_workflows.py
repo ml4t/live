@@ -293,6 +293,8 @@ def paper_soak_failures(paper_job: dict[str, Any]) -> list[str]:
         return ["paper qualification must define one provider-soaks step"]
     condition = str(soak_steps[0].get("if", ""))
     failures = []
+    if "inputs.run-soak" not in condition:
+        failures.append("paper soak lacks separate explicit duration-stage selection")
     for provider, step_ids in PAPER_PROVIDER_STEPS.items():
         if f"inputs.extended-provider == '{provider}'" not in condition:
             failures.append(f"paper soak has no {provider} selection branch")
@@ -667,7 +669,12 @@ def validate_workflows(root: Path = WORKFLOW_ROOT) -> list[str]:
     )
     if publication_input.get("type") != "boolean" or publication_input.get("default") != "false":
         failures.append("provider evidence publication is not an explicit opt-in")
-    if archive_job.get("if") != "${{ inputs.publish-evidence }}":
+    soak_input = (
+        paper.get("on", {}).get("workflow_dispatch", {}).get("inputs", {}).get("run-soak", {})
+    )
+    if soak_input.get("type") != "boolean" or soak_input.get("default") != "false":
+        failures.append("six-hour duration qualification is not a separate explicit opt-in")
+    if archive_job.get("if") != "${{ inputs.publish-evidence && inputs.run-soak }}":
         failures.append("provider evidence can publish without an explicit request")
     if _needs(archive_job) != {"paper"} or archive_job.get("runs-on") != "ubuntu-latest":
         failures.append("provider evidence is not archived by a hosted job after qualification")

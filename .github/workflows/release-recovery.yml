@@ -48,6 +48,12 @@ jobs:
         run: |
           uv venv --clear --python 3.12 "${RUNNER_TEMP}/paper-evidence-venv"
           uv pip install             --python "${RUNNER_TEMP}/paper-evidence-venv/bin/python"             "psutil==7.2.2"
+      - name: Install the exact candidate for current-runtime evidence preflight
+        run: |
+          uv export --locked --no-default-groups --no-emit-project --no-hashes \
+            --output-file "${RUNNER_TEMP}/paper-evidence-constraints.txt"
+          uv pip install --python "${RUNNER_TEMP}/paper-evidence-venv/bin/python" \
+            --constraints "${RUNNER_TEMP}/paper-evidence-constraints.txt" dist/*.whl
       - name: Match provider evidence to the recovery candidate
         id: paper
         env:
