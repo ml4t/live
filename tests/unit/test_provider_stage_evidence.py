@@ -7,7 +7,8 @@ from pathlib import Path
 import pytest
 
 from scripts.qualification.check_paper_evidence import find_reviewed_stage_evidence
-from scripts.qualification.provider_stage_evidence import digest, installer_runtime
+from scripts.qualification.provider_contract import provider_stage_inputs
+from scripts.qualification.provider_stage_evidence import digest, input_digest, installer_runtime
 
 ROOT = Path(__file__).resolve().parents[2]
 FIXTURES = ROOT / "tests/fixtures/provider-evidence"
@@ -147,6 +148,30 @@ def test_unrelated_calendar_behavior_preserves_native_broker_duration_and_compat
     assert set(result["failures"]) == {"ib"}
 
 
+def test_qualification_formatting_does_not_invalidate_native_duration(repository):
+    commit(
+        repository,
+        "scripts/qualification/qualify_paper.py",
+        "await asyncio.sleep(remaining)",
+        "await asyncio.sleep(\n            remaining,\n        )",
+    )
+    result = select(repository, current_review())
+    assert set(result["providers"]) == {"alpaca", "okx"}
+    assert set(result["failures"]) == {"ib"}
+
+
+def test_changed_qualification_sleep_behavior_rejects_native_broker_duration(repository):
+    commit(
+        repository,
+        "scripts/qualification/qualify_paper.py",
+        "await asyncio.sleep(remaining)",
+        "await asyncio.sleep(0)",
+    )
+    result = select(repository, current_review())
+    assert set(result["providers"]) == {"okx"}
+    assert "operations changed" in result["failures"]["alpaca"]
+
+
 def test_original_native_stages_are_selected_after_only_calendar_clock_changes(repository):
     subprocess.run(["git", "checkout", "--quiet", ORIGINAL["source"]], cwd=repository, check=True)
     commit(
@@ -175,6 +200,31 @@ def test_changed_broker_connection_behavior_rejects_only_reached_provider_stages
     result = select(repository, current_review())
     assert set(result["providers"]) == {"okx"}
     assert "operations changed" in result["failures"]["alpaca"]
+
+
+def test_refreshed_current_hash_cannot_reuse_stale_short_after_cash_producer_breaks(repository):
+    revision = commit(
+        repository,
+        "src/ml4t/live/brokers/alpaca.py",
+        'return self._validate_account_metric(account, "cash", allow_negative=True)',
+        'return float("nan")',
+    )
+    review = current_review()
+    alpaca = review["providers"]["alpaca"]
+    alpaca["candidate_duration_inputs_sha256"] = input_digest(
+        provider_stage_inputs(
+            "alpaca", "connection-duration", checkout_root=repository, ref=revision
+        )
+    )
+    alpaca["compatibility_inputs_sha256"] = input_digest(
+        provider_stage_inputs("alpaca", "compatibility", checkout_root=repository, ref=revision)
+    )
+    alpaca["source_impact_rationale"] = (
+        "Attempted duration review cannot waive current compatibility"
+    )
+    result = select(repository, review)
+    assert set(result["providers"]) == {"okx"}
+    assert "compatibility operations changed" in result["failures"]["alpaca"]
 
 
 @pytest.mark.parametrize(

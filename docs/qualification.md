@@ -104,10 +104,14 @@ reached-operation identities, and reasons for dependency/source differences. Sou
 are not a substitute for the packages actually installed by the original job. Unrelated engine
 calendar changes do not invalidate a broker connection-duration stage. Unreviewed changes to
 reached broker, transport, snapshot, reconnect or shutdown behavior fail reuse closed.
+Qualification operations use a canonical AST representation that excludes source positions and
+empty optional fields, so interpreter-specific display formatting cannot change their identities.
 
 The selector independently requires valid short lifecycle/restart or public-feed compatibility
 for the reviewed current operations and runtime. It can retain a valid provider-specific short
 result from an explicitly reviewed partial run without accepting another provider's failure.
+The operations at the actual short report's source must equal those at the candidate source and
+the reviewed binding. A duration-impact rationale cannot waive changed compatibility operations.
 A missing short check or unavailable paper endpoint leaves that provider unqualified.
 The release gate also installs the exact candidate wheel with its locked constraints, compares
 its installed payload against the wheel and Git source, and checks its actual runtime before

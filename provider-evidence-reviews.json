@@ -338,9 +338,9 @@
       "baseline": {
         "report_sha256": "4f97014e192c7d3893a6a47fefcdd550f4d8f4cb7f9c463cf90439fdacce707f"
       },
-      "baseline_duration_inputs_sha256": "c0cef985a495137cfaa448316d30613a06e078bffdba6eecc10f37abf79fcfce",
-      "candidate_duration_inputs_sha256": "c0cef985a495137cfaa448316d30613a06e078bffdba6eecc10f37abf79fcfce",
-      "compatibility_inputs_sha256": "65fa28295ab4b9745e91774b20893b0f7d90f82b96c858c9aba70464e2e019c3",
+      "baseline_duration_inputs_sha256": "3266df6631bc0b47ff35fdf15534091e74718b8534cd63fec7effb315fde73ec",
+      "candidate_duration_inputs_sha256": "3266df6631bc0b47ff35fdf15534091e74718b8534cd63fec7effb315fde73ec",
+      "compatibility_inputs_sha256": "e559e80a017edb933370c665ee59edd94b8b49f0981d3610575c9c5f728a5fe8",
       "rationale": "Retain the original validated six-hour connection-duration baseline only with matching reviewed reached operations, actual runtime impact review and valid current compatibility. No original measurement is rewritten as current.",
       "review_evidence": [
         "tests/unit/test_provider_transport_compatibility.py",
@@ -354,9 +354,9 @@
       "baseline": {
         "report_sha256": "e3fda5353a7fd1dc7ef35f3fa9ab52c662fde8779c86951f84066fa1f17c5dcf"
       },
-      "baseline_duration_inputs_sha256": "7354692385fc07cba2658f58693e539990d4548d10fd5c5f9b88b4c9c1f795bb",
-      "candidate_duration_inputs_sha256": "7354692385fc07cba2658f58693e539990d4548d10fd5c5f9b88b4c9c1f795bb",
-      "compatibility_inputs_sha256": "53a152291e9a0f5bc44e2cb3b7b85311ebb9f83cc05c3a843ef9cccfc5012a4a",
+      "baseline_duration_inputs_sha256": "be2190f5039e4c5d0fd18165e9f13a0368b5d716e174005cab5aa42bed8956ac",
+      "candidate_duration_inputs_sha256": "be2190f5039e4c5d0fd18165e9f13a0368b5d716e174005cab5aa42bed8956ac",
+      "compatibility_inputs_sha256": "f24a4b793408c82e33195227868c4af9bd407ed4e32ce299d711be0e20c22566",
       "rationale": "Retain the original validated six-hour connection-duration baseline only with matching reviewed reached operations, actual runtime impact review and valid current compatibility. No original measurement is rewritten as current.",
       "review_evidence": [
         "tests/unit/test_provider_transport_compatibility.py",
@@ -369,9 +369,9 @@
       "baseline": {
         "report_sha256": "ad9c5621c1669b84a4c6f512bf904c142c0bdf2926d8670291feab6dae5b137a"
       },
-      "baseline_duration_inputs_sha256": "8194deb5c8f7c2bfa350aef8d4711055f58e2f88acbbf09cd993f83546174b5d",
-      "candidate_duration_inputs_sha256": "d17fbd22c4e13d2a8089e7cd2be86e6b428b5ff9298d298fb71d23349e0a575d",
-      "compatibility_inputs_sha256": "e01332f37f729538a7469eaba6037a320c242f4777e8e27c32dc99283e2ba589",
+      "baseline_duration_inputs_sha256": "5018fd6e41e661f34a1dc6fbcdad620e40b902d38018e778c2af81924dec230a",
+      "candidate_duration_inputs_sha256": "6334d58ef7d39d1efa6a0bc150fa8059c15133c752f15424e6cfad31688473e8",
+      "compatibility_inputs_sha256": "1611e4a2922e7f44bc2618607f591ecec6d389fe3aa77f67f0317dbe899b2f63",
       "rationale": "Retain the original validated six-hour connection-duration baseline only with matching reviewed reached operations, actual runtime impact review and valid current compatibility. No original measurement is rewritten as current.",
       "review_evidence": [
         "tests/unit/test_provider_transport_compatibility.py",

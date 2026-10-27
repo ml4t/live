@@ -359,6 +359,27 @@ _BROKER_COMPATIBILITY_FUNCTIONS = (
 )
 
 
+def _semantic_ast(value: Any) -> Any:
+    if isinstance(value, ast.AST):
+        return {
+            "node": type(value).__name__,
+            "fields": {
+                name: _semantic_ast(field)
+                for name, field in ast.iter_fields(value)
+                if field is not None and field != []
+            },
+        }
+    if isinstance(value, list):
+        return [_semantic_ast(item) for item in value]
+    if value is Ellipsis:
+        return {"literal": "ellipsis"}
+    return value
+
+
+def _operation_identity(node: ast.AST) -> str:
+    return json.dumps(_semantic_ast(node), sort_keys=True, separators=(",", ":"))
+
+
 def provider_stage_inputs(
     provider: str, stage: str, *, checkout_root: Path, ref: str
 ) -> dict[str, Any]:
@@ -406,14 +427,14 @@ def provider_stage_inputs(
         )
     tree = ast.parse(_git_text(checkout_root, ref, script))
     functions = {
-        node.name: hashlib.sha256(ast.dump(node, include_attributes=False).encode()).hexdigest()
+        node.name: hashlib.sha256(_operation_identity(node).encode()).hexdigest()
         for node in tree.body
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name in names
     }
     if set(functions) != set(names):
         raise ProviderContractError("provider stage has missing qualification operations")
     constants = {
-        node.targets[0].id: ast.dump(node.value, include_attributes=False)
+        node.targets[0].id: _operation_identity(node.value)
         for node in tree.body
         if isinstance(node, ast.Assign)
         and len(node.targets) == 1

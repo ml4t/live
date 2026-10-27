@@ -238,11 +238,15 @@ def validate_stage_review(
             raise PaperQualificationError("changed duration inputs lack an explicit impact review")
         if compatibility_commit != review["compatibility"]["commit"]:
             raise PaperQualificationError("compatibility source differs from its review binding")
-        if input_digest(
-            provider_stage_inputs(
-                provider, "compatibility", checkout_root=checkout_root, ref=candidate_commit
-            )
-        ) != review.get("compatibility_inputs_sha256"):
+        compatible_inputs = provider_stage_inputs(
+            provider, "compatibility", checkout_root=checkout_root, ref=compatibility_commit
+        )
+        current_inputs = provider_stage_inputs(
+            provider, "compatibility", checkout_root=checkout_root, ref=candidate_commit
+        )
+        if compatible_inputs != current_inputs or input_digest(compatible_inputs) != review.get(
+            "compatibility_inputs_sha256"
+        ):
             raise PaperQualificationError("reached compatibility operations changed")
     except ProviderContractError as error:
         raise PaperQualificationError(str(error)) from error
