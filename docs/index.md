@@ -48,8 +48,8 @@ shadow mode first, then paper trading, then small live size under explicit limit
 The [Quickstart](getting-started/quickstart.md) runs `LiveEngine` against synthetic bars with
 `SafeBroker(execution_mode="shadow")`. It prints strategy prices, virtual positions, and a final
 completion line without credentials or venue orders. Then use the
-[task guides](user-guide/examples.md), [exact API reference](api/index.md), and
-[checked book examples](book-guide/index.md) for your next task.
+[task guides](user-guide/examples.md), [API reference](api/index.md), and
+[book examples](book-guide/index.md) for your next task.
 
 ## What You Can Do With It Right Now
 
