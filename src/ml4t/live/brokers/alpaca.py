@@ -11,9 +11,11 @@ Design (matching IBBroker patterns):
 """
 
 import asyncio
+import inspect
 import logging
 import math
 import time
+from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
 
@@ -30,7 +32,7 @@ from alpaca.trading.requests import (
     StopLimitOrderRequest,
     StopOrderRequest,
 )
-from alpaca.trading.stream import TradingStream
+from alpaca.trading.stream import TradingStream as _AlpacaTradingStream
 from ml4t.backtest.types import Order, OrderSide, OrderStatus, OrderType, Position
 from ml4t.specs import ExecutionCapability
 
@@ -38,6 +40,14 @@ from ml4t.live.orders import CanonicalOrderRequest
 from ml4t.live.persistence import redact_sensitive
 
 logger = logging.getLogger(__name__)
+
+
+class TradingStream(_AlpacaTradingStream):
+    """Keep the pinned SDK's callback validation compatible with Python 3.14."""
+
+    def _ensure_coroutine(self, handler: Callable[..., Any]) -> None:
+        if not inspect.iscoroutinefunction(handler):
+            raise ValueError("handler must be a coroutine function")
 
 
 class AlpacaBroker:

@@ -76,7 +76,7 @@ def repository(tmp_path):
     subprocess.run(
         ["git", "clone", "--quiet", "--shared", "--no-checkout", str(ROOT), str(root)], check=True
     )
-    subprocess.run(["git", "checkout", "--quiet", "HEAD"], cwd=root, check=True)
+    subprocess.run(["git", "checkout", "--quiet", CURRENT["source"]], cwd=root, check=True)
     subprocess.run(["git", "config", "user.name", "Evidence regression"], cwd=root, check=True)
     subprocess.run(["git", "config", "user.email", "evidence@example.test"], cwd=root, check=True)
     return root
@@ -221,6 +221,24 @@ def test_refreshed_current_hash_cannot_reuse_stale_short_after_cash_producer_bre
     )
     alpaca["source_impact_rationale"] = (
         "Attempted duration review cannot waive current compatibility"
+    )
+    result = select(repository, review)
+    assert set(result["providers"]) == {"okx"}
+    assert "compatibility operations changed" in result["failures"]["alpaca"]
+
+
+def test_callback_validator_repair_cannot_reuse_native115_short_compatibility(repository):
+    path = "src/ml4t/live/brokers/alpaca.py"
+    revision = commit(repository, path, (repository / path).read_text(), (ROOT / path).read_text())
+    review = current_review()
+    alpaca = review["providers"]["alpaca"]
+    alpaca["candidate_duration_inputs_sha256"] = input_digest(
+        provider_stage_inputs(
+            "alpaca", "connection-duration", checkout_root=repository, ref=revision
+        )
+    )
+    alpaca["source_impact_rationale"] = (
+        "Only callback validation changes; fresh short remains required"
     )
     result = select(repository, review)
     assert set(result["providers"]) == {"okx"}

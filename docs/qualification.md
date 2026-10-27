@@ -113,6 +113,11 @@ result from an explicitly reviewed partial run without accepting another provide
 The operations at the actual short report's source must equal those at the candidate source and
 the reviewed binding. A duration-impact rationale cannot waive changed compatibility operations.
 A missing short check or unavailable paper endpoint leaves that provider unqualified.
+
+The pinned Alpaca SDK's callback validator uses an asyncio function deprecated in Python 3.14.
+The broker overrides only that validator with `inspect.iscoroutinefunction`; synchronous handlers
+remain rejected. Authentication, parsing, reconnect and cleanup use the SDK implementation and
+are exercised by the bounded loopback controls under the same strict warning policy.
 The release gate also installs the exact candidate wheel with its locked constraints, compares
 its installed payload against the wheel and Git source, and checks its actual runtime before
 selecting any retained stages. Missing or altered reports, mismatched sources, incomplete runtime

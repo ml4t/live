@@ -9,12 +9,26 @@ from ipaddress import ip_address
 
 import httpx
 import pytest
-from alpaca.trading.stream import TradingStream
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID
 from websockets.asyncio.server import serve
+
+from ml4t.live.brokers.alpaca import TradingStream
+
+
+@pytest.mark.parametrize("returns_coroutine", [False, True])
+def test_trading_subscription_rejects_synchronous_handlers_before_transport(returns_coroutine):
+    async def receive(update):
+        return update
+
+    def synchronous(update):
+        return receive(update) if returns_coroutine else update
+
+    stream = TradingStream("fixture-key", "fixture-secret")
+    with pytest.raises(ValueError, match="handler must be a coroutine function"):
+        stream.subscribe_trade_updates(synchronous)
 
 
 @pytest.fixture
