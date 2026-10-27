@@ -90,6 +90,11 @@ def tls_contexts(tmp_path):
         )
     )
     server = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    # pip-system-certs injects a client verifier that expects peer certificates on Windows.
+    # Only the loopback server needs the underlying native class; clients retain that verifier.
+    wrapped = getattr(server, "_ctx", None)
+    if wrapped is not None:
+        server = type(wrapped)(ssl.PROTOCOL_TLS_SERVER)
     server.load_cert_chain(cert_file, key_file)
     client = ssl.create_default_context(cafile=str(ca_file))
     return server, client

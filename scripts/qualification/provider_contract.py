@@ -100,6 +100,7 @@ def _git_text(checkout_root: Path, ref: str, path: str) -> str:
         check=False,
         capture_output=True,
         text=True,
+        encoding="utf-8",
     )
     if result.returncode != 0:
         raise ProviderContractError(f"provider contract input is unavailable: {path}")

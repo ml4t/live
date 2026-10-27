@@ -106,6 +106,7 @@ calendar changes do not invalidate a broker connection-duration stage. Unreviewe
 reached broker, transport, snapshot, reconnect or shutdown behavior fail reuse closed.
 Qualification operations use a canonical AST representation that excludes source positions and
 empty optional fields, so interpreter-specific display formatting cannot change their identities.
+Git source is decoded as UTF-8 independently of the runner's locale, including historical inputs.
 
 The selector independently requires valid short lifecycle/restart or public-feed compatibility
 for the reviewed current operations and runtime. It can retain a valid provider-specific short

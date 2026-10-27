@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
+import sys
+import zipfile
 from pathlib import Path
 
 import pytest
@@ -182,12 +185,34 @@ def test_original_native_stages_are_selected_after_only_calendar_clock_changes(r
     )
     review = json.loads((FIXTURES / "original-operations-review.json").read_text())
     result = select(repository, review)
-    assert result["passed"]
+    assert result["passed"], result["failures"]
     assert set(result["providers"]) == {"alpaca", "ib", "okx"}
     assert result["wheel_sha256"] == "d" * 64
     for item in result["providers"].values():
         assert item["connection_duration"]["original_candidate"]["commit"] == ORIGINAL["source"]
         assert item["connection_duration"]["original_runtime"]["packages"]["numpy"] == "2.5.4"
+
+
+def test_original_utf8_git_contract_matches_native_report_under_non_utf8_locale():
+    code = (
+        "import json; from pathlib import Path; "
+        "from scripts.qualification.provider_contract import provider_contract; "
+        f"print(json.dumps(provider_contract('ib', checkout_root=Path.cwd(), "
+        f"ref={ORIGINAL['source']!r}, schema_version=3), sort_keys=True))"
+    )
+    result = subprocess.run(
+        [sys.executable, "-X", "utf8=0", "-c", code],
+        cwd=ROOT,
+        env={**os.environ, "LC_ALL": "C", "PYTHONCOERCECLOCALE": "0", "PYTHONUTF8": "0"},
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    with zipfile.ZipFile(FIXTURES / "original-duration.zip") as archive:
+        original_report = json.loads(archive.read("paper-evidence/ib-soak.json"))
+    assert json.loads(result.stdout) == original_report["provider_contract"]
 
 
 def test_changed_broker_connection_behavior_rejects_only_reached_provider_stages(repository):
