@@ -1,17 +1,21 @@
 from __future__ import annotations
 
 import asyncio
+import gc
 import json
 import socket
 import ssl
 import struct
 import sys
+import tracemalloc
 from contextlib import suppress
 from datetime import UTC, datetime, timedelta
 from ipaddress import ip_address
 
 import httpx
+import msgpack
 import pytest
+from alpaca.data.live import StockDataStream
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -128,6 +132,67 @@ def trade_update() -> dict:
             },
         },
     }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("secure", [False, True])
+async def test_alpaca_msgpack_rejects_invalid_map_keys_without_retaining_decoded_values(
+    secure, tls_contexts
+):
+    malformed = msgpack.packb([{42: b"A" * (512 * 1024)}], use_bin_type=True)
+    healthy = False
+    authentications = []
+
+    async def peer(socket):
+        if not healthy:
+            await socket.send(malformed)
+        else:
+            await socket.send(msgpack.packb([{"T": "success", "msg": "connected"}]))
+            authentications.append(msgpack.unpackb(await socket.recv())["action"])
+            await socket.send(msgpack.packb([{"T": "success", "msg": "authenticated"}]))
+        await socket.wait_closed()
+
+    async with serve(peer, "127.0.0.1", 0, ssl=tls_contexts[0] if secure else None) as server:
+        port = server.sockets[0].getsockname()[1]
+        stream = StockDataStream(
+            "fixture-key",
+            "fixture-secret",
+            url_override=f"{'wss' if secure else 'ws'}://127.0.0.1:{port}",
+            websocket_params={"ssl": tls_contexts[1]} if secure else None,
+        )
+
+        async def reject_frame():
+            try:
+                with pytest.raises(ValueError, match="map key.*strict_map_key"):
+                    await asyncio.wait_for(stream._connect(), 2)
+            finally:
+                await asyncio.wait_for(stream.close(), 2)
+
+        await reject_frame()
+        already_tracing = tracemalloc.is_tracing()
+        if not already_tracing:
+            tracemalloc.start()
+        try:
+            gc.collect()
+            before = tracemalloc.get_traced_memory()[0]
+            for _ in range(16):
+                await reject_frame()
+            await asyncio.sleep(0)
+            gc.collect()
+            retained = tracemalloc.get_traced_memory()[0] - before
+            assert retained < 4 * 1024 * 1024, f"malformed frames retained {retained} bytes"
+        finally:
+            if not already_tracing:
+                tracemalloc.stop()
+
+        healthy = True
+        try:
+            await asyncio.wait_for(stream._connect(), 2)
+            await asyncio.wait_for(stream._auth(), 2)
+            assert authentications == ["auth"]
+        finally:
+            await asyncio.wait_for(stream.close(), 2)
+        assert stream._ws is None
 
 
 @pytest.mark.asyncio

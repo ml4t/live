@@ -66,6 +66,14 @@ maximum = "alpaca-py==0.44.0"
 license = "Apache-2.0"
 support = "active upstream; exact version because 0.43.2 omits a required runtime dependency"
 
+[dependencies.msgpack]
+requirement = "msgpack>=1.2.3,<2"
+minimum = "msgpack==1.2.3"
+locked = "msgpack==1.2.3"
+maximum = "msgpack>=1.2.3,<2"
+license = "Apache-2.0"
+support = "patched Alpaca data decoder; reject versions affected by GHSA-j586-36cw-2gc2"
+
 [dependencies.httpx]
 requirement = "httpx==0.28.1"
 minimum = "httpx==0.28.1"
