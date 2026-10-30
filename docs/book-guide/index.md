@@ -1,11 +1,8 @@
 # Book Guide
 
-The public companion files for *Machine Learning for Trading, Third Edition* show the methods and
-operating decisions behind Live workflows. These links point to commit
-[`d2edec54b1c7a6a9d7a97d8129eb05db4491e1eb`](https://github.com/stefan-jansen/machine-learning-for-trading/tree/d2edec54b1c7a6a9d7a97d8129eb05db4491e1eb).
-Each file below was checked in that Git tree. "Calls Live" means its code imports `ml4t.live`;
-"manual" means it teaches a method without that import; "related" means another workflow informs
-Live decisions. A matching topic alone does not mean a notebook runs this library.
+Explore strategy deployment, broker integration, and risk controls in the companion notebooks
+for *Machine Learning for Trading, Third Edition*. The examples below either use Live directly
+or explain related methods, with links to the corresponding library guides.
 
 The Alpaca and IB notebooks use experimental feeds. Their broker adapters have a separate stable
 paper contract.
@@ -67,7 +64,7 @@ Do not treat a research result as a qualified paper or live run.
 - Inspect or restart with `LiveEngine.runtime_status` and `SafeBroker.reconciliation_report`:
   [Operator Guide](../user-guide/operator-guide.md).
 
-See the [API Reference](../api/index.md) for exact signatures and options.
+See the [API Reference](../api/index.md) for functions, classes, and options.
 
 [unified]: https://github.com/stefan-jansen/machine-learning-for-trading/blob/d2edec54b1c7a6a9d7a97d8129eb05db4491e1eb/25_live_trading/01_unified_framework_demo.ipynb
 [ib-paper]: https://github.com/stefan-jansen/machine-learning-for-trading/blob/d2edec54b1c7a6a9d7a97d8129eb05db4491e1eb/25_live_trading/03_ib_paper_trading_demo.ipynb
