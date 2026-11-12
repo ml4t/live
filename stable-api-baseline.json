@@ -133,7 +133,7 @@
   },
   "distribution": {
     "name": "ml4t-live",
-    "version": "0.1.4.dev5+g95c7b2e.d20261112"
+    "version": "0.2.0"
   },
   "entry_points": {
     "ml4t-live": "ml4t.live.cli.main:app"
@@ -2890,7 +2890,7 @@
       "methods": [],
       "module": "ml4t.live.brokers.alpaca",
       "name": "TradingStream",
-      "signature": "(api_key: str, secret_key: str, paper: bool = True, raw_data: bool = False, url_override: str = None, websocket_params: Dict | None = None)"
+      "signature": "(api_key: str, secret_key: str, paper: bool = True, raw_data: bool = False, url_override: str = None, websocket_params: Optional[Dict] = None)"
     },
     {
       "bases": [
