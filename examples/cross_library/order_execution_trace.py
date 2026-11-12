@@ -5,6 +5,7 @@ import json
 from dataclasses import replace
 from datetime import UTC, date, datetime
 from decimal import Decimal
+from hashlib import sha256
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -93,13 +94,19 @@ EVENTS = [
 ]
 
 
+def market_data_digest(events):
+    records = [(timestamp.isoformat(), bars, context) for timestamp, bars, context in events]
+    return sha256(json.dumps(records, sort_keys=True).encode()).hexdigest()
+
+
 class ReplayBroker:
-    def __init__(self, executions):
+    def __init__(self, executions, execution_prices=None):
         self._connected = False
         self._pending_orders = []
         self._positions = {}
         self.submit_calls = 0
         self.executions = executions
+        self.execution_prices = execution_prices or {}
         self.fills = []
         self.cash = INITIAL_CASH
         self.notional = Decimal(0)
@@ -202,13 +209,15 @@ class ReplayBroker:
             self._pending_orders.remove(order)
             return
         quantity = execution
-        price = Decimal("100.01")
+        price = Decimal(self.execution_prices.get(timestamp.minute, "100.01"))
         fee = quantity * FEE_PER_SHARE
         self.notional += quantity * price
         self.cash -= quantity * price + fee
         order.filled_quantity = (order.filled_quantity or 0) + quantity
         order.filled_price = float(price)
-        execution_time = AUCTION_TIME if order.order_id == "paper-1" else timestamp
+        execution_time = (
+            AUCTION_TIME if order.order_id == "paper-1" and timestamp.minute == 31 else timestamp
+        )
         order.filled_at = execution_time
         if order.filled_quantity == order.quantity and order in self._pending_orders:
             order.status = OrderStatus.FILLED
@@ -279,17 +288,17 @@ def policy():
     return default_live_execution_policy(opening_auction=ExecutionBehavior.CLIENT)
 
 
-def backtest():
+def backtest(events=EVENTS):
     feed = DataFeed(
         prices_df=pl.DataFrame(
             [
                 {"timestamp": timestamp, "asset": asset, **bar}
-                for timestamp, data, _ in EVENTS
+                for timestamp, data, _ in events
                 for asset, bar in data.items()
             ]
         )
     )
-    return (
+    trace = (
         Engine(
             feed,
             OpeningRangeBreakout(),
@@ -306,12 +315,19 @@ def backtest():
         .run()
         .to_order_trace(currency="USD")
     )
+    return {**trace, "market_data_sha256": market_data_digest(events)}
 
 
 async def paper_replay(
-    state_dir, executions, *, max_order_shares=10_000, replace_original=False, restart=False
+    state_dir,
+    executions,
+    *,
+    max_order_shares=10_000,
+    replace_original=False,
+    restart=False,
+    execution_prices=None,
 ):
-    broker = ReplayBroker(executions)
+    broker = ReplayBroker(executions, execution_prices)
     config = LiveRiskConfig(
         execution_mode="paper",
         max_position_value=200_000,
@@ -345,7 +361,7 @@ async def paper_replay(
             execution_policy=policy(),
         )
         reports = [*reports, replace(reports[0], received_at=broker.now)]
-    return engine.to_order_trace(
+    trace = engine.to_order_trace(
         fills=reports,
         replacements=broker.replacements,
         account={
@@ -356,10 +372,11 @@ async def paper_replay(
             "positions": {asset: position.quantity for asset, position in broker.positions.items()},
         },
     )
+    return {**trace, "market_data_sha256": market_data_digest(EVENTS)}
 
 
 async def main():
-    from ml4t.diagnostic.integration import compare_order_traces
+    from ml4t.diagnostic.integration import ArrivalQuote, compare_order_traces
 
     historical = backtest()
     with TemporaryDirectory() as directory:
@@ -375,6 +392,11 @@ async def main():
         )
         rejected = await paper_replay(Path(directory) / "rejected", {}, max_order_shares=50)
         pending = await paper_replay(Path(directory) / "pending", {31: 60, 32: 20})
+        adverse_price = await paper_replay(
+            Path(directory) / "adverse-price",
+            {31: 60, 32: 20, 33: None},
+            execution_prices={32: "100.05"},
+        )
     reports = {
         name: compare_order_traces(
             historical,
@@ -432,6 +454,54 @@ async def main():
     assert status_only["first_differing_stage_compared"] == "order_status"
     assert Decimal(status_only["live_minus_backtest_shortfall"]) == Decimal(0)
     reports["status_only"] = status_only
+
+    quote = ArrivalQuote(
+        asset="SPY", currency="USD", observed_at=AUCTION_TIME, bid="100.00", ask="100.01"
+    )
+    quoted = compare_order_traces(
+        historical,
+        adverse_price,
+        child_intent_id="opening-range-spy:SPY",
+        currency="USD",
+        decision_price="100.00",
+        terminal_price="100.10",
+        backtest_arrival_quote=quote,
+        live_arrival_quote=quote,
+    )
+    assert Decimal(quoted["live"]["delay_cost"]) == Decimal("0.40")
+    assert Decimal(quoted["live"]["spread_cost"]) == Decimal("0.40")
+    assert Decimal(quoted["live"]["price_vs_touch_cost"]) == Decimal("0.80")
+    assert Decimal(quoted["live"]["execution_cost"]) == Decimal("2.40")
+    assert Decimal(quoted["live_minus_backtest_shortfall"]) == Decimal("2.40")
+    assert Decimal(str(historical["account"]["equity"])) - Decimal(
+        str(adverse_price["account"]["equity"])
+    ) == Decimal("2.40")
+    assert reports["partial"]["live"]["price_vs_touch_cost"] is None
+    late_quote = compare_order_traces(
+        historical,
+        adverse_price,
+        child_intent_id="opening-range-spy:SPY",
+        currency="USD",
+        decision_price="100.00",
+        terminal_price="100.10",
+        live_arrival_quote=replace(quote, observed_at=EVENTS[-1][0]),
+    )
+    assert late_quote["live"]["delay_cost"] is None
+    assert late_quote["live"]["execution_cost"] == quoted["live"]["execution_cost"]
+    reports["quoted_adverse_price"] = quoted
+
+    different_market = backtest([*EVENTS[:-1], bar(11, 34, 100.11, 100.11)])
+    data_difference = compare_order_traces(
+        different_market,
+        control,
+        child_intent_id="opening-range-spy:SPY",
+        currency="USD",
+        decision_price="100.00",
+        terminal_price="100.10",
+    )
+    assert data_difference["first_differing_stage_compared"] == "market_data"
+    assert data_difference["live_minus_backtest_shortfall"] is None
+    reports["different_market_data"] = data_difference
     print(json.dumps(reports, indent=2))
 
 
