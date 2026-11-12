@@ -745,6 +745,9 @@ class AlpacaBroker:
             from ml4t.specs import ExecutionFill
             from ml4t.specs import OrderSide as SpecOrderSide
 
+            executed_at = data.timestamp
+            if executed_at is not None and executed_at.utcoffset() is not None:
+                executed_at = executed_at.astimezone(UTC)
             execution = ExecutionFill(
                 order_id=runtime_id or native_id,
                 venue_order_id=native_id,
@@ -753,7 +756,7 @@ class AlpacaBroker:
                 side=SpecOrderSide(data.order.side.value),
                 quantity=float(data.qty),
                 price=float(data.price),
-                executed_at=data.timestamp,
+                executed_at=executed_at,
                 received_at=datetime.now(UTC),
                 venue="alpaca",
             )
