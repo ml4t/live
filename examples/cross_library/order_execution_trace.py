@@ -374,6 +374,7 @@ async def main():
             replace_original=True,
         )
         rejected = await paper_replay(Path(directory) / "rejected", {}, max_order_shares=50)
+        pending = await paper_replay(Path(directory) / "pending", {31: 60, 32: 20})
     reports = {
         name: compare_order_traces(
             historical,
@@ -420,6 +421,17 @@ async def main():
     )
     assert no_quote["live"]["fees"] == "0.8"
     assert no_quote["live"]["execution_cost"] is None
+    status_only = compare_order_traces(
+        pending,
+        partial,
+        child_intent_id="opening-range-spy:SPY",
+        currency="USD",
+        decision_price="100.00",
+        terminal_price="100.10",
+    )
+    assert status_only["first_differing_stage_compared"] == "order_status"
+    assert Decimal(status_only["live_minus_backtest_shortfall"]) == Decimal(0)
+    reports["status_only"] = status_only
     print(json.dumps(reports, indent=2))
 
 
