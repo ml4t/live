@@ -29,12 +29,12 @@ import logging
 import math
 import signal
 from collections import deque
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Callable, Iterable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
 from time import monotonic
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from ml4t.backtest import BacktestConfig, Strategy
 from ml4t.specs import (
@@ -68,6 +68,9 @@ from .protocols import AsyncBrokerProtocol, DataFeedProtocol
 from .runtime import LiveStrategyRuntime, default_live_execution_policy
 from .temporal import resolve_live_config
 from .wrappers import ThreadSafeBrokerWrapper
+
+if TYPE_CHECKING:
+    from ml4t.specs import ExecutionFill
 
 logger = logging.getLogger(__name__)
 
@@ -998,6 +1001,24 @@ class LiveEngine:
         self._watchdog_task.cancel()
         await asyncio.gather(self._watchdog_task, return_exceptions=True)
         self._watchdog_task = None
+
+    def to_order_trace(
+        self,
+        *,
+        fills: Iterable["ExecutionFill"] = (),
+        replacements: Mapping[str, str] | None = None,
+        account: Mapping[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Export retained intent history alongside observed provider evidence.
+
+        Supply incremental fills, a replacement-to-original order mapping, and
+        an account checkpoint if the adapter recorded them. Order IDs refer to
+        the runtime broker IDs. Unlinked fills remain in the trace for analysis.
+        Call at a quiescent checkpoint to capture a consistent runtime view.
+        """
+        return self.strategy_runtime.to_order_trace(
+            fills=fills, replacements=replacements, account=account
+        )
 
     async def stop(self) -> None:
         """Request shutdown and release resources exactly once."""

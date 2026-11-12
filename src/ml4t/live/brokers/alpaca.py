@@ -17,7 +17,7 @@ import math
 import time
 from collections.abc import Callable
 from datetime import UTC, datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from alpaca.common.enums import BaseURL
 from alpaca.trading.client import TradingClient
@@ -38,6 +38,9 @@ from ml4t.specs import ExecutionCapability
 
 from ml4t.live.orders import CanonicalOrderRequest
 from ml4t.live.persistence import redact_sensitive
+
+if TYPE_CHECKING:
+    from ml4t.specs import ExecutionFill
 
 logger = logging.getLogger(__name__)
 
@@ -90,6 +93,8 @@ class AlpacaBroker:
         self._api_key = api_key
         self._secret_key = secret_key
         self._paper = paper
+        self._execution_sink: Callable[[ExecutionFill], None] | None = None
+        self.execution_capture_errors = 0
 
         # Clients (created in connect())
         self._trading_client: TradingClient | None = None
@@ -729,6 +734,34 @@ class AlpacaBroker:
         except KeyError as error:
             raise RuntimeError(f"Unsupported Alpaca order status {alpaca_status!r}") from error
 
+    def set_execution_sink(self, callback: Callable[["ExecutionFill"], None] | None) -> None:
+        """Set a non-blocking incremental fill callback, or pass None to disable it."""
+        self._execution_sink = callback
+
+    def _capture_execution(self, data: Any, native_id: str, runtime_id: str | None) -> None:
+        if self._execution_sink is None or data.event not in ("fill", "partial_fill"):
+            return
+        try:
+            from ml4t.specs import ExecutionFill
+            from ml4t.specs import OrderSide as SpecOrderSide
+
+            execution = ExecutionFill(
+                order_id=runtime_id or native_id,
+                venue_order_id=native_id,
+                execution_id=str(data.execution_id) if data.execution_id else None,
+                asset=data.order.symbol,
+                side=SpecOrderSide(data.order.side.value),
+                quantity=float(data.qty),
+                price=float(data.price),
+                executed_at=data.timestamp,
+                received_at=datetime.now(UTC),
+                venue="alpaca",
+            )
+            self._execution_sink(execution)
+        except Exception:
+            self.execution_capture_errors += 1
+            logger.warning("AlpacaBroker: Could not capture incremental execution evidence")
+
     async def _on_trade_update(self, data: Any) -> None:
         """Handle WebSocket trade update.
 
@@ -744,6 +777,7 @@ class AlpacaBroker:
             alpaca_order_id = str(order_data.id)
 
             entry = self._alpaca_order_map.get(alpaca_order_id)
+            self._capture_execution(data, alpaca_order_id, entry[0] if entry else None)
             if not entry:
                 # Order not tracked by us
                 return

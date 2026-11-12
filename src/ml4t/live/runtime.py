@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Iterable, Mapping
+from copy import deepcopy
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
@@ -39,6 +41,7 @@ from ml4t.specs import OrderSide as SpecOrderSide
 from ml4t.specs import OrderType as SpecOrderType
 
 from .persistence import redact_sensitive
+from .safety import RiskLimitError
 from .state_migration import (
     PORTABLE_STRATEGY_STATE_SCHEMA_VERSION,
     migrate_portable_strategy_state,
@@ -47,6 +50,7 @@ from .temporal import LiveCalendar
 
 if TYPE_CHECKING:
     from ml4t.backtest.risk.position import PositionRule
+    from ml4t.specs import ExecutionFill
 
     from .protocols import AsyncBrokerProtocol
 
@@ -128,6 +132,7 @@ class LiveStrategyRuntime:
         self._processed_targets: set[str] = set()
         self._reconciliations: list[IntentReconciliation] = []
         self._latest_reconciliation: dict[str, IntentReconciliation] = {}
+        self._risk_rejections: dict[str, dict[str, str]] = {}
         self._rules_by_policy: dict[str, PositionRule] = {}
         self._global_rules: PositionRule | None = None
         self._rules_by_asset: dict[str, PositionRule | None] = {}
@@ -360,7 +365,16 @@ class LiveStrategyRuntime:
                 )
             children = await self._lower(intent, data)
             for child in children:
-                order = await self._submit_child(child, data[child.asset])
+                try:
+                    order = await self._submit_child(child, data[child.asset])
+                except RiskLimitError as error:
+                    self._risk_rejections[child.child_intent_id] = {
+                        "child_intent_id": child.child_intent_id,
+                        "event_time": timestamp.isoformat(),
+                        "reason": redact_sensitive(str(error)),
+                    }
+                    raise
+                self._risk_rejections.pop(child.child_intent_id, None)
                 self._orders[order.order_id] = order
                 self._order_by_child[child.child_intent_id] = order.order_id
             self._processed_targets.add(intent.intent_id)
@@ -888,6 +902,70 @@ class LiveStrategyRuntime:
         save = getattr(self.broker, "save_portable_strategy_state", None)
         if callable(save):
             save(self.to_state())
+
+    def to_order_trace(
+        self,
+        *,
+        fills: Iterable[ExecutionFill],
+        replacements: Mapping[str, str] | None,
+        account: Mapping[str, Any] | None,
+    ) -> dict[str, Any]:
+        """Export portable evidence without reading or modifying broker state."""
+        children_by_order = {
+            order_id: child_id for child_id, order_id in self._order_by_child.items()
+        }
+        children_by_order.update(
+            (record.order_id, record.child_intent_id)
+            for record in self.reconciliations
+            if record.order_id is not None
+        )
+        orders = []
+        replacements = replacements or {}
+        for order_id in dict.fromkeys((*children_by_order, *replacements)):
+            order = self._orders.get(order_id)
+            orders.append(
+                {
+                    "order_id": order_id,
+                    "child_intent_id": children_by_order.get(order_id),
+                    "asset": order.asset if order else None,
+                    "side": order.side.value if order else None,
+                    "quantity": order.quantity if order else None,
+                    "status": order.status.value if order else None,
+                    "created_at": (
+                        order.created_at.isoformat() if order and order.created_at else None
+                    ),
+                    "cancelled_at": (
+                        order.cancelled_at.isoformat() if order and order.cancelled_at else None
+                    ),
+                    "rejection_reason": (
+                        redact_sensitive(order.rejection_reason)
+                        if order and order.rejection_reason
+                        else None
+                    ),
+                    "replaces_order_id": replacements.get(order_id),
+                }
+            )
+        return {
+            "schema_version": 1,
+            "source": "live",
+            "targets": [target.to_dict() for target in self.targets],
+            "children": [child.to_dict() for child in self.children],
+            "orders": orders,
+            "reconciliations": [
+                {
+                    **record.to_dict(),
+                    "rejection_reason": (
+                        redact_sensitive(record.rejection_reason)
+                        if record.rejection_reason
+                        else None
+                    ),
+                }
+                for record in self.reconciliations
+            ],
+            "fills": [fill.to_dict() for fill in fills],
+            "risk_rejections": [dict(rejection) for rejection in self._risk_rejections.values()],
+            "account": deepcopy(dict(account)) if account is not None else None,
+        }
 
     def to_state(self) -> dict[str, Any]:
         return {
