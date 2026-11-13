@@ -27,10 +27,10 @@ license = "MIT"
 support = "shared lifecycle version 1 and temporal version 2 contracts"
 
 [dependencies.ml4t-specs]
-requirement = "ml4t-specs>=0.2.0,<0.3"
-minimum = "ml4t-specs==0.2.0"
-locked = "ml4t-specs==0.2.0"
-maximum = "ml4t-specs>=0.2.0,<0.3"
+requirement = "ml4t-specs>=0.2.1,<0.3"
+minimum = "ml4t-specs==0.2.1"
+locked = "ml4t-specs==0.2.1"
+maximum = "ml4t-specs>=0.2.1,<0.3"
 license = "MIT"
 support = "versioned calendar declarations and shared lifecycle contracts"
 

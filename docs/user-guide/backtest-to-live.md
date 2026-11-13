@@ -47,8 +47,8 @@ construct different orders, or apply different position rules after producing th
 
 ## Shared calendar declarations
 
-The current source targets Backtest `0.2.0` and Specs `0.2.0`; lifecycle version remains `1`.
-Published Live `0.1.3` requires the older `0.1.x` cohort and cannot be installed with these `0.2.0`
+The current source targets Backtest `0.2.0` and Specs `0.2.1`; lifecycle version remains `1`.
+Published Live `0.1.3` requires the older `0.1.x` cohort and cannot be installed with these `0.2.x`
 packages. Do not override its dependency resolver to combine them. The runtime integration in this
 source requires its own qualified release.
 
