@@ -501,6 +501,11 @@
         },
         {
           "kind": "method",
+          "name": "set_execution_sink",
+          "signature": "(self, callback: collections.abc.Callable[['ExecutionFill'], None] | None) -> None"
+        },
+        {
+          "kind": "method",
           "name": "submit_order_async",
           "signature": "(self, asset: str, quantity: float, side: ml4t.backtest.types.OrderSide | None = None, order_type: ml4t.backtest.types.OrderType = <OrderType.MARKET: 'market'>, limit_price: float | None = None, stop_price: float | None = None, **kwargs: Any) -> ml4t.backtest.types.Order"
         }
@@ -1432,6 +1437,11 @@
           "kind": "method",
           "name": "stop",
           "signature": "(self) -> None"
+        },
+        {
+          "kind": "method",
+          "name": "to_order_trace",
+          "signature": "(self, *, fills: collections.abc.Iterable['ExecutionFill'] = (), replacements: collections.abc.Mapping[str, str] | None = None, account: collections.abc.Mapping[str, Any] | None = None) -> dict[str, Any]"
         }
       ],
       "module": "ml4t.live",
@@ -1685,6 +1695,11 @@
           "kind": "property",
           "name": "targets",
           "signature": "(self) -> 'tuple[CanonicalTargetIntent, ...]'"
+        },
+        {
+          "kind": "method",
+          "name": "to_order_trace",
+          "signature": "(self, *, fills: 'Iterable[ExecutionFill]', replacements: 'Mapping[str, str] | None', account: 'Mapping[str, Any] | None') -> 'dict[str, Any]'"
         },
         {
           "kind": "method",
@@ -2631,6 +2646,11 @@
         },
         {
           "kind": "method",
+          "name": "set_execution_sink",
+          "signature": "(self, callback: collections.abc.Callable[['ExecutionFill'], None] | None) -> None"
+        },
+        {
+          "kind": "method",
           "name": "submit_order_async",
           "signature": "(self, asset: str, quantity: float, side: ml4t.backtest.types.OrderSide | None = None, order_type: ml4t.backtest.types.OrderType = <OrderType.MARKET: 'market'>, limit_price: float | None = None, stop_price: float | None = None, **kwargs: Any) -> ml4t.backtest.types.Order"
         }
@@ -2847,6 +2867,11 @@
         },
         {
           "kind": "method",
+          "name": "set_execution_sink",
+          "signature": "(self, callback: collections.abc.Callable[['ExecutionFill'], None] | None) -> None"
+        },
+        {
+          "kind": "method",
           "name": "submit_order_async",
           "signature": "(self, asset: str, quantity: float, side: ml4t.backtest.types.OrderSide | None = None, order_type: ml4t.backtest.types.OrderType = <OrderType.MARKET: 'market'>, limit_price: float | None = None, stop_price: float | None = None, **kwargs: Any) -> ml4t.backtest.types.Order"
         }
@@ -2854,6 +2879,18 @@
       "module": "ml4t.live.brokers.alpaca",
       "name": "AlpacaBroker",
       "signature": "(api_key: str, secret_key: str, paper: bool = True) -> None"
+    },
+    {
+      "bases": [
+        "alpaca.trading.stream.TradingStream"
+      ],
+      "classification": "internal",
+      "defined_in": "ml4t.live.brokers.alpaca",
+      "kind": "class",
+      "methods": [],
+      "module": "ml4t.live.brokers.alpaca",
+      "name": "TradingStream",
+      "signature": "(api_key: str, secret_key: str, paper: bool = True, raw_data: bool = False, url_override: str = None, websocket_params: Optional[Dict] = None)"
     },
     {
       "bases": [
@@ -3337,6 +3374,11 @@
           "kind": "method",
           "name": "stop",
           "signature": "(self) -> None"
+        },
+        {
+          "kind": "method",
+          "name": "to_order_trace",
+          "signature": "(self, *, fills: collections.abc.Iterable['ExecutionFill'] = (), replacements: collections.abc.Mapping[str, str] | None = None, account: collections.abc.Mapping[str, Any] | None = None) -> dict[str, Any]"
         }
       ],
       "module": "ml4t.live.engine",
@@ -5170,6 +5212,11 @@
           "kind": "property",
           "name": "targets",
           "signature": "(self) -> 'tuple[CanonicalTargetIntent, ...]'"
+        },
+        {
+          "kind": "method",
+          "name": "to_order_trace",
+          "signature": "(self, *, fills: 'Iterable[ExecutionFill]', replacements: 'Mapping[str, str] | None', account: 'Mapping[str, Any] | None') -> 'dict[str, Any]'"
         },
         {
           "kind": "method",

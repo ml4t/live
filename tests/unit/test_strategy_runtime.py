@@ -13,6 +13,7 @@ from ml4t.specs import (
     AssetTarget,
     CanonicalTargetIntent,
     ExecutionBehavior,
+    ExecutionFill,
     FeedSpec,
     IntentReason,
     LifecyclePhase,
@@ -21,6 +22,7 @@ from ml4t.specs import (
     RoundingPolicy,
     TargetMeasure,
 )
+from ml4t.specs import OrderSide as SpecOrderSide
 
 from ml4t.live import (
     CanonicalOrderRequest,
@@ -33,6 +35,7 @@ from ml4t.live import (
     UnsupportedLiveCapabilityError,
     default_live_execution_policy,
 )
+from ml4t.live.safety import RiskLimitError
 
 
 class RuntimeBroker:
@@ -392,6 +395,67 @@ async def test_initial_target_matches_backtest_child_and_persists_lineage(tmp_pa
     persisted = safe.load_portable_strategy_state()
     assert persisted["targets"][0] == target_intent().to_dict()
     assert persisted["children"][0] == child.to_dict()
+
+
+@pytest.mark.asyncio
+async def test_order_trace_keeps_native_fill_identity_and_unknown_replacement(tmp_path) -> None:
+    broker = FillBroker(partial_quantity=100)
+    engine = LiveEngine(
+        InitialTargetStrategy(target_intent()),
+        SafeBroker(broker, risk_config(tmp_path, shadow_mode=False)),
+        RuntimeFeed([bar(10)]),
+        execution_policy=default_live_execution_policy(opening_auction=ExecutionBehavior.CLIENT),
+    )
+    await engine.connect()
+    await engine.run()
+
+    order = broker.pending_orders[0]
+    fill = ExecutionFill(
+        order_id=order.order_id,
+        asset="SPY",
+        side=SpecOrderSide.BUY,
+        quantity=100.0,
+        price=100.0,
+        execution_id="venue-fill-1",
+        executed_at=order.filled_at,
+    )
+    account = {"positions": {"SPY": 100}}
+    trace = engine.to_order_trace(
+        fills=(fill,), replacements={"unobserved-replacement": order.order_id}, account=account
+    )
+    original, replacement = trace["orders"]
+    assert original["order_id"] == order.order_id
+    assert original["child_intent_id"] == trace["children"][0]["child_intent_id"]
+    assert original["created_at"] == order.created_at.isoformat()
+    assert replacement["replaces_order_id"] == order.order_id
+    assert replacement["status"] is None
+    assert trace["fills"] == [fill.to_dict()]
+    assert trace["reconciliations"][-1]["filled_quantity"] == 100
+    account["positions"]["SPY"] = 500
+    assert trace["account"]["positions"] == {"SPY": 100}
+
+
+@pytest.mark.asyncio
+async def test_order_trace_keeps_risk_rejection_without_a_native_order(tmp_path) -> None:
+    broker = RuntimeBroker()
+    engine = LiveEngine(
+        InitialTargetStrategy(target_intent()),
+        SafeBroker(broker, risk_config(tmp_path, max_order_shares=10)),
+        RuntimeFeed([bar(10)]),
+        execution_policy=default_live_execution_policy(opening_auction=ExecutionBehavior.CLIENT),
+    )
+    await engine.connect()
+    with pytest.raises(RiskLimitError, match="exceeds max 10"):
+        await engine.run()
+
+    trace = engine.to_order_trace()
+    assert broker.submit_calls == 0
+    assert trace["orders"] == []
+    assert trace["fills"] == []
+    assert trace["account"] is None
+    rejection = trace["risk_rejections"][0]
+    assert rejection["child_intent_id"] == trace["children"][0]["child_intent_id"]
+    assert "exceeds max 10" in rejection["reason"]
 
 
 @pytest.mark.asyncio

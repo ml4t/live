@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta, timezone
 from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -487,3 +487,39 @@ async def test_account_metrics_never_substitute_zero_for_unavailable_state() -> 
     alpaca = AlpacaBroker(api_key="PKTEST", secret_key="SECRET")
     with pytest.raises(RuntimeError, match="unavailable"):
         await alpaca.get_cash_async()
+
+
+@pytest.mark.asyncio
+async def test_alpaca_execution_sink_keeps_incremental_size_and_vendor_identity():
+    broker, order = seed_alpaca_order()
+    reports = []
+    broker.set_execution_sink(reports.append)
+    broker._trading_client = MagicMock()
+    broker._trading_client.get_all_positions.return_value = []
+
+    update = alpaca_update("partial_fill", 4, 499)
+    update.qty = 4
+    update.price = 499
+    update.execution_id = "execution-1"
+    update.timestamp = datetime(2026, 8, 10, 15, tzinfo=UTC)
+    update.order.symbol = order.asset
+    update.order.side = order.side
+    await broker._on_trade_update(update)
+
+    update = alpaca_update("fill", 10, 500)
+    update.qty = 6
+    update.price = 500.67
+    update.execution_id = "execution-2"
+    update.timestamp = datetime(2026, 8, 10, 11, 1, tzinfo=timezone(-timedelta(hours=4)))
+    update.order.symbol = order.asset
+    update.order.side = order.side
+    await broker._on_trade_update(update)
+
+    assert [report.quantity for report in reports] == [4, 6]
+    assert reports[-1].executed_at == datetime(2026, 8, 10, 15, 1, tzinfo=UTC)
+    assert reports[-1].executed_at.tzinfo is UTC
+    assert [report.execution_id for report in reports] == ["execution-1", "execution-2"]
+    assert [report.venue_order_id for report in reports] == ["venue-1", "venue-1"]
+    assert all(report.order_id == order.order_id and report.fee is None for report in reports)
+    assert order.filled_quantity == 10
+    assert broker.execution_capture_errors == 0

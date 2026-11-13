@@ -654,7 +654,8 @@ async def test_alpaca_snapshot_accepts_negative_margin_cash() -> None:
     broker._sync_orders.assert_awaited_once()
 
 
-def test_provider_preflight_rejects_real_unlocked_calendar_runtime(tmp_path, monkeypatch):
+@pytest.mark.parametrize("mismatch", ["pandas", "ml4t-specs"])
+def test_provider_preflight_rejects_real_unlocked_calendar_runtime(tmp_path, monkeypatch, mismatch):
     import importlib.metadata
     import subprocess
 
@@ -672,12 +673,14 @@ def test_provider_preflight_rejects_real_unlocked_calendar_runtime(tmp_path, mon
         subprocess.run(["git", *args], cwd=tmp_path, check=True, capture_output=True)
     commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=tmp_path, text=True).strip()
     original = importlib.metadata.version
+    if mismatch == "pandas":
+        emitted["ml4t-specs"] = original("ml4t-specs")
     monkeypatch.setattr(
         importlib.metadata,
         "version",
         lambda name: emitted[name] if name in emitted else original(name),
     )
-    with pytest.raises(PaperQualificationError, match="pandas"):
+    with pytest.raises(PaperQualificationError, match=rf"lock: {mismatch} expected"):
         paper_qualification._verify_installed_candidate(
             {"commit": commit, "version": emitted["ml4t-live"]}, tmp_path
         )

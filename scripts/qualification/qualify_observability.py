@@ -36,7 +36,7 @@ STRESS_TEST = Path("tests/stress/test_engine_sustained.py")
 EXPECTED_DISTRIBUTIONS = {
     "ml4t-backtest": "0.2.0",
     "ml4t-live": os.environ.get("SETUPTOOLS_SCM_PRETEND_VERSION", "0.2.0"),
-    "ml4t-specs": "0.2.0",
+    "ml4t-specs": "0.2.1",
 }
 PYTEST_INI = """\
 [pytest]

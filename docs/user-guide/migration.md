@@ -6,8 +6,8 @@ live broker.
 
 ## Adopt the current calendar cohort
 
-The current source requires Backtest and Specs `>=0.2.0,<0.3`; published Live `0.1.3` remains
-restricted to their `0.1.x` versions. Lifecycle version stays `1`. The candidate runtime adds
+The current source requires Backtest `>=0.2.0,<0.3` and Specs `>=0.2.1,<0.3`.
+Published Live `0.1.3` remains restricted to their `0.1.x` versions. Lifecycle version stays `1`. The candidate runtime adds
 keyword-only `feed_spec` and `calendar` inputs to `LiveEngine` and `LiveStrategyRuntime`; existing
 positional arguments remain valid. The installed API inventory records these additive signatures.
 

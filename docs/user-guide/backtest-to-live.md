@@ -47,8 +47,8 @@ construct different orders, or apply different position rules after producing th
 
 ## Shared calendar declarations
 
-The current source targets Backtest `0.2.0` and Specs `0.2.0`; lifecycle version remains `1`.
-Published Live `0.1.3` requires the older `0.1.x` cohort and cannot be installed with these `0.2.0`
+The current source targets Backtest `0.2.0` and Specs `0.2.1`; lifecycle version remains `1`.
+Published Live `0.1.3` requires the older `0.1.x` cohort and cannot be installed with these `0.2.x`
 packages. Do not override its dependency resolver to combine them. The runtime integration in this
 source requires its own qualified release.
 
@@ -180,3 +180,18 @@ The published shadow quickstart stack checked on 2026-10-17 was:
 The complete shadow quickstart passed on that stack. The command above builds the current
 checkout instead; use its reported versions when recording a new parity or migration result.
 Neither result establishes equal venue execution or qualifies a later dependency release.
+
+## Export execution evidence
+
+Call `engine.to_order_trace(fills=reports)` at a quiescent checkpoint to
+combine the canonical target and child records with incremental execution
+reports. A caller can also supply a replacement-to-original ID mapping and a
+JSON-compatible account checkpoint. The trace retains unlinked fills and
+missing fields for later reconciliation. Save the provider's execution IDs
+across restarts if you want to reconcile an interrupted run.
+
+`AlpacaBroker.set_execution_sink(...)` can send each streamed incremental fill to
+a non-blocking callback. Check `execution_capture_errors` for dropped reports.
+The stream does not provide commissions. Record fees separately if available.
+See the credential-free `examples/cross_library/order_execution_trace.py` for the full
+workflow with one price-only strategy.
