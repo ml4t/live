@@ -7,6 +7,7 @@
     "raw_log_sha256": "c33596019fdc278bfe5373cdb5b98fb63d6c3bd366657cd9c8d58fdf5f11c788"
   },
   "current": {
+    "review_fixture_source": "fd0d448e74c4c35fd61ef838e9832f427e35f036:provider-evidence-reviews.json (installer log hashes bind the redacted fixtures)",
     "run_id": 40427024014,
     "job_id": 121935236841,
     "source": "115df1faea23c734ccd00730a1aba7eba143b78d",
