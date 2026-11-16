@@ -20,6 +20,7 @@ try:
         EXPECTED_DESCRIPTION,
         EXPECTED_KEYWORDS,
         EXPECTED_MAINTAINER,
+        EXPECTED_REQUIRES_PYTHON,
         EXPECTED_URLS,
     )
     from scripts.qualification.verify_release_identity import HASH_PATTERN, load_json
@@ -30,6 +31,7 @@ except ModuleNotFoundError:
         EXPECTED_DESCRIPTION,
         EXPECTED_KEYWORDS,
         EXPECTED_MAINTAINER,
+        EXPECTED_REQUIRES_PYTHON,
         EXPECTED_URLS,
     )
     from verify_release_identity import HASH_PATTERN, load_json
@@ -82,7 +84,7 @@ def published_release_failures(
         or info.get("author_email") != EXPECTED_AUTHOR
         or info.get("maintainer_email") != EXPECTED_MAINTAINER
         or info.get("license_expression") != "MIT"
-        or SpecifierSet(str(info.get("requires_python", ""))) != SpecifierSet(">=3.12")
+        or SpecifierSet(str(info.get("requires_python", ""))) != EXPECTED_REQUIRES_PYTHON
         or info.get("project_urls") != EXPECTED_URLS
         or keywords != EXPECTED_KEYWORDS
         or not EXPECTED_CLASSIFIERS <= set(info.get("classifiers", []))

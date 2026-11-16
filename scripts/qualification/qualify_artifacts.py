@@ -36,6 +36,7 @@ BUILD_CONSTRAINTS = REPOSITORY_ROOT / "build-constraints.txt"
 INSTALLED_SMOKE = Path(__file__).with_name("installed_smoke.py")
 SUPPORTED_PYTHONS = ("3.12", "3.13", "3.14")
 CANDIDATE_VERSION = os.environ.get("SETUPTOOLS_SCM_PRETEND_VERSION", "0.2.0")
+EXPECTED_REQUIRES_PYTHON = SpecifierSet(">=3.12,<3.15")
 EXPECTED_DESCRIPTION = "Live trading runtime for ML4T strategies with broker integrations, risk checks, and shadow mode."
 EXPECTED_AUTHOR = "Stefan Jansen <stefan@applied-ai.com>"
 EXPECTED_MAINTAINER = "Stefan Jansen <pm@ml4trading.io>"
@@ -230,7 +231,7 @@ def validate_metadata(message: Message, project: dict[str, object]) -> str:
     failures: list[str] = []
     if message["Name"] != "ml4t-live":
         failures.append("Name")
-    if SpecifierSet(message["Requires-Python"] or "") != SpecifierSet(">=3.12,<3.15"):
+    if SpecifierSet(message["Requires-Python"] or "") != EXPECTED_REQUIRES_PYTHON:
         failures.append("Requires-Python")
     if message["License-Expression"] != "MIT":
         failures.append("License-Expression")

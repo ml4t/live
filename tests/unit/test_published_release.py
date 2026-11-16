@@ -40,7 +40,7 @@ def published_fixture() -> tuple[dict, dict, dict]:
             "author_email": EXPECTED_AUTHOR,
             "maintainer_email": EXPECTED_MAINTAINER,
             "license_expression": "MIT",
-            "requires_python": ">=3.12",
+            "requires_python": "<3.15,>=3.12",
             "project_urls": EXPECTED_URLS,
             "keywords": ", ".join(sorted(EXPECTED_KEYWORDS)),
             "classifiers": sorted(EXPECTED_CLASSIFIERS),
@@ -70,6 +70,7 @@ def test_matching_pypi_and_github_release_pass() -> None:
     [
         ("manifest", "manifest"),
         ("metadata", "PyPI metadata"),
+        ("python-support", "PyPI metadata"),
         ("pypi-file", "PyPI artifact"),
         ("tag", "GitHub release tag"),
         ("release-file", "GitHub release artifact"),
@@ -81,6 +82,8 @@ def test_published_identity_drift_is_rejected(target: str, expected: str) -> Non
         manifest["commit"] = "short"
     elif target == "metadata":
         pypi["info"]["summary"] = "different"
+    elif target == "python-support":
+        pypi["info"]["requires_python"] = ">=3.12"
     elif target == "pypi-file":
         pypi["urls"][0]["digests"]["sha256"] = "d" * 64
     elif target == "tag":
