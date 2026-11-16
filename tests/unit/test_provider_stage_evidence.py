@@ -102,14 +102,7 @@ def commit(root, path, before, after):
 
 
 def current_review():
-    review = json.loads((ROOT / "provider-evidence-reviews.json").read_text())
-    review["common"]["baseline"]["runtime_log_sha256"] = digest(
-        (FIXTURES / "original-installer.txt").read_text().encode()
-    )
-    review["common"]["compatibility"]["runtime_log_sha256"] = digest(
-        (FIXTURES / "current-installer.txt").read_text().encode()
-    )
-    return review
+    return json.loads((FIXTURES / "current-compatibility-review.json").read_text())
 
 
 def select(root, review, *, runtime=None, downloader=None):

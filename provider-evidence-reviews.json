@@ -64,7 +64,7 @@
       }
     },
     "compatible_runtime": {
-      "python": "3.12.11",
+      "python": "3.12.16",
       "packages": {
         "psutil": "7.2.2",
         "aeventkit": "2.1.0",
@@ -92,8 +92,8 @@
         "korean-lunar-calendar": "0.4.0",
         "ml4t-backtest": "0.2.0",
         "ml4t-live": "0.2.0",
-        "ml4t-specs": "0.2.0",
-        "msgpack": "1.2.1",
+        "ml4t-specs": "0.2.1",
+        "msgpack": "1.2.3",
         "multidict": "6.9.1",
         "nest-asyncio": "1.6.0",
         "numpy": "2.4.6",
@@ -131,14 +131,6 @@
       "archive_sha256": "5afe371d5c6feb8eda56a703aa6bf0283476bad0358afac6a90f93319fdf58a2",
       "runtime_log_sha256": "c33596019fdc278bfe5373cdb5b98fb63d6c3bd366657cd9c8d58fdf5f11c788"
     },
-    "compatibility": {
-      "run_id": 40427024014,
-      "job_id": 121935236841,
-      "commit": "115df1faea23c734ccd00730a1aba7eba143b78d",
-      "archive_sha256": "31bfabe6afef6c3fc91e3b3193a55b2284340db12d027b6472269590805fe380",
-      "runtime_log_sha256": "784b9dab4254fa319f0f533929dc9041703003c2d4163112fb9b816c9c474049",
-      "parent_conclusion": "failure"
-    },
     "dependency_changes": {
       "anyio": {
         "original": "4.15.1",
@@ -147,7 +139,8 @@
         "evidence": [
           "tests/unit/test_provider_transport_compatibility.py",
           "tests/contracts/test_causal_strategy_parity.py",
-          "native compatibility run40427024014 (IB connection failed; no IB compatibility pass)"
+          "https://github.com/ml4t/live/actions/runs/43465430743 (IB exercise/restart and OKX feed)",
+          "https://github.com/ml4t/live/actions/runs/43897529319 (Alpaca exercise/restart)"
         ]
       },
       "cryptography": {
@@ -157,7 +150,8 @@
         "evidence": [
           "tests/unit/test_provider_transport_compatibility.py",
           "tests/contracts/test_causal_strategy_parity.py",
-          "native compatibility run40427024014 (IB connection failed; no IB compatibility pass)"
+          "https://github.com/ml4t/live/actions/runs/43465430743 (IB exercise/restart and OKX feed)",
+          "https://github.com/ml4t/live/actions/runs/43897529319 (Alpaca exercise/restart)"
         ]
       },
       "ml4t-backtest": {
@@ -167,7 +161,8 @@
         "evidence": [
           "tests/unit/test_provider_transport_compatibility.py",
           "tests/contracts/test_causal_strategy_parity.py",
-          "native compatibility run40427024014 (IB connection failed; no IB compatibility pass)"
+          "https://github.com/ml4t/live/actions/runs/43465430743 (IB exercise/restart and OKX feed)",
+          "https://github.com/ml4t/live/actions/runs/43897529319 (Alpaca exercise/restart)"
         ]
       },
       "ml4t-live": {
@@ -177,27 +172,19 @@
         "evidence": [
           "tests/unit/test_provider_transport_compatibility.py",
           "tests/contracts/test_causal_strategy_parity.py",
-          "native compatibility run40427024014 (IB connection failed; no IB compatibility pass)"
+          "https://github.com/ml4t/live/actions/runs/43465430743 (IB exercise/restart and OKX feed)",
+          "https://github.com/ml4t/live/actions/runs/43897529319 (Alpaca exercise/restart)"
         ]
       },
       "ml4t-specs": {
         "original": "0.1.5",
-        "current": "0.2.0",
-        "rationale": "Current shared types are covered by actual current compatibility and installed lifecycle/contracts; duration operations remain bound separately.",
+        "current": "0.2.1",
+        "rationale": "The current cohort is covered by native compatibility and installed order/lifecycle tests. Specs 0.2.1 adds the ExecutionFill type relative to 0.2.0. The duration harness does not register a fill sink, so it does not instantiate that type during broker callbacks.",
         "evidence": [
           "tests/unit/test_provider_transport_compatibility.py",
           "tests/contracts/test_causal_strategy_parity.py",
-          "native compatibility run40427024014 (IB connection failed; no IB compatibility pass)"
-        ]
-      },
-      "msgpack": {
-        "original": "1.2.3",
-        "current": "1.2.1",
-        "rationale": "Alpaca legacy TradingStream uses stdlib JSON rather than the market-data MessagePack path; actual current native lifecycle/restart and typed updates remain required.",
-        "evidence": [
-          "tests/unit/test_provider_transport_compatibility.py",
-          "tests/contracts/test_causal_strategy_parity.py",
-          "native compatibility run40427024014 (IB connection failed; no IB compatibility pass)"
+          "https://github.com/ml4t/live/actions/runs/43465430743 (IB exercise/restart and OKX feed)",
+          "https://github.com/ml4t/live/actions/runs/43897529319 (Alpaca exercise/restart)"
         ]
       },
       "numpy": {
@@ -207,7 +194,8 @@
         "evidence": [
           "tests/unit/test_provider_transport_compatibility.py",
           "tests/contracts/test_causal_strategy_parity.py",
-          "native compatibility run40427024014 (IB connection failed; no IB compatibility pass)"
+          "https://github.com/ml4t/live/actions/runs/43465430743 (IB exercise/restart and OKX feed)",
+          "https://github.com/ml4t/live/actions/runs/43897529319 (Alpaca exercise/restart)"
         ]
       },
       "orjson": {
@@ -217,7 +205,8 @@
         "evidence": [
           "tests/unit/test_provider_transport_compatibility.py",
           "tests/contracts/test_causal_strategy_parity.py",
-          "native compatibility run40427024014 (IB connection failed; no IB compatibility pass)"
+          "https://github.com/ml4t/live/actions/runs/43465430743 (IB exercise/restart and OKX feed)",
+          "https://github.com/ml4t/live/actions/runs/43897529319 (Alpaca exercise/restart)"
         ]
       },
       "pandas": {
@@ -227,7 +216,8 @@
         "evidence": [
           "tests/unit/test_provider_transport_compatibility.py",
           "tests/contracts/test_causal_strategy_parity.py",
-          "native compatibility run40427024014 (IB connection failed; no IB compatibility pass)"
+          "https://github.com/ml4t/live/actions/runs/43465430743 (IB exercise/restart and OKX feed)",
+          "https://github.com/ml4t/live/actions/runs/43897529319 (Alpaca exercise/restart)"
         ]
       },
       "pandas-market-calendars": {
@@ -237,7 +227,8 @@
         "evidence": [
           "tests/unit/test_provider_transport_compatibility.py",
           "tests/contracts/test_causal_strategy_parity.py",
-          "native compatibility run40427024014 (IB connection failed; no IB compatibility pass)"
+          "https://github.com/ml4t/live/actions/runs/43465430743 (IB exercise/restart and OKX feed)",
+          "https://github.com/ml4t/live/actions/runs/43897529319 (Alpaca exercise/restart)"
         ]
       },
       "polars": {
@@ -247,7 +238,8 @@
         "evidence": [
           "tests/unit/test_provider_transport_compatibility.py",
           "tests/contracts/test_causal_strategy_parity.py",
-          "native compatibility run40427024014 (IB connection failed; no IB compatibility pass)"
+          "https://github.com/ml4t/live/actions/runs/43465430743 (IB exercise/restart and OKX feed)",
+          "https://github.com/ml4t/live/actions/runs/43897529319 (Alpaca exercise/restart)"
         ]
       },
       "polars-runtime-32": {
@@ -257,7 +249,8 @@
         "evidence": [
           "tests/unit/test_provider_transport_compatibility.py",
           "tests/contracts/test_causal_strategy_parity.py",
-          "native compatibility run40427024014 (IB connection failed; no IB compatibility pass)"
+          "https://github.com/ml4t/live/actions/runs/43465430743 (IB exercise/restart and OKX feed)",
+          "https://github.com/ml4t/live/actions/runs/43897529319 (Alpaca exercise/restart)"
         ]
       },
       "pydantic": {
@@ -267,7 +260,8 @@
         "evidence": [
           "tests/unit/test_provider_transport_compatibility.py",
           "tests/contracts/test_causal_strategy_parity.py",
-          "native compatibility run40427024014 (IB connection failed; no IB compatibility pass)"
+          "https://github.com/ml4t/live/actions/runs/43465430743 (IB exercise/restart and OKX feed)",
+          "https://github.com/ml4t/live/actions/runs/43897529319 (Alpaca exercise/restart)"
         ]
       },
       "pydantic-core": {
@@ -277,7 +271,8 @@
         "evidence": [
           "tests/unit/test_provider_transport_compatibility.py",
           "tests/contracts/test_causal_strategy_parity.py",
-          "native compatibility run40427024014 (IB connection failed; no IB compatibility pass)"
+          "https://github.com/ml4t/live/actions/runs/43465430743 (IB exercise/restart and OKX feed)",
+          "https://github.com/ml4t/live/actions/runs/43897529319 (Alpaca exercise/restart)"
         ]
       },
       "python-dateutil": {
@@ -287,7 +282,8 @@
         "evidence": [
           "tests/unit/test_provider_transport_compatibility.py",
           "tests/contracts/test_causal_strategy_parity.py",
-          "native compatibility run40427024014 (IB connection failed; no IB compatibility pass)"
+          "https://github.com/ml4t/live/actions/runs/43465430743 (IB exercise/restart and OKX feed)",
+          "https://github.com/ml4t/live/actions/runs/43897529319 (Alpaca exercise/restart)"
         ]
       },
       "pytz": {
@@ -297,7 +293,8 @@
         "evidence": [
           "tests/unit/test_provider_transport_compatibility.py",
           "tests/contracts/test_causal_strategy_parity.py",
-          "native compatibility run40427024014 (IB connection failed; no IB compatibility pass)"
+          "https://github.com/ml4t/live/actions/runs/43465430743 (IB exercise/restart and OKX feed)",
+          "https://github.com/ml4t/live/actions/runs/43897529319 (Alpaca exercise/restart)"
         ]
       },
       "toolz": {
@@ -307,7 +304,8 @@
         "evidence": [
           "tests/unit/test_provider_transport_compatibility.py",
           "tests/contracts/test_causal_strategy_parity.py",
-          "native compatibility run40427024014 (IB connection failed; no IB compatibility pass)"
+          "https://github.com/ml4t/live/actions/runs/43465430743 (IB exercise/restart and OKX feed)",
+          "https://github.com/ml4t/live/actions/runs/43897529319 (Alpaca exercise/restart)"
         ]
       },
       "typing-inspection": {
@@ -317,7 +315,8 @@
         "evidence": [
           "tests/unit/test_provider_transport_compatibility.py",
           "tests/contracts/test_causal_strategy_parity.py",
-          "native compatibility run40427024014 (IB connection failed; no IB compatibility pass)"
+          "https://github.com/ml4t/live/actions/runs/43465430743 (IB exercise/restart and OKX feed)",
+          "https://github.com/ml4t/live/actions/runs/43897529319 (Alpaca exercise/restart)"
         ]
       },
       "websockets": {
@@ -327,7 +326,8 @@
         "evidence": [
           "tests/unit/test_provider_transport_compatibility.py",
           "tests/contracts/test_causal_strategy_parity.py",
-          "native compatibility run40427024014 (IB connection failed; no IB compatibility pass)"
+          "https://github.com/ml4t/live/actions/runs/43465430743 (IB exercise/restart and OKX feed)",
+          "https://github.com/ml4t/live/actions/runs/43897529319 (Alpaca exercise/restart)"
         ]
       }
     }
@@ -347,7 +347,14 @@
         "tests/unit/test_provider_stage_evidence.py",
         "docs/qualification.md"
       ],
-      "compatibility": null
+      "compatibility": {
+        "run_id": 43465430743,
+        "job_id": 132023173385,
+        "commit": "fd0d448e74c4c35fd61ef838e9832f427e35f036",
+        "archive_sha256": "2a36c2069168cf95e3db795f3492e23424443e21c811ac309c746c3aa329a872",
+        "runtime_log_sha256": "0cdfda1d2b29ae57c6614ff2cf45c18f3f048ead8263d64579210d9e4f850b34",
+        "parent_conclusion": "failure"
+      }
     },
     "alpaca": {
       "provider": "alpaca",
@@ -355,14 +362,25 @@
         "report_sha256": "e3fda5353a7fd1dc7ef35f3fa9ab52c662fde8779c86951f84066fa1f17c5dcf"
       },
       "baseline_duration_inputs_sha256": "be2190f5039e4c5d0fd18165e9f13a0368b5d716e174005cab5aa42bed8956ac",
-      "candidate_duration_inputs_sha256": "be2190f5039e4c5d0fd18165e9f13a0368b5d716e174005cab5aa42bed8956ac",
-      "compatibility_inputs_sha256": "f24a4b793408c82e33195227868c4af9bd407ed4e32ce299d711be0e20c22566",
+      "candidate_duration_inputs_sha256": "d6632da90b4a094ef18b32249866611e855b3e1d8c5595fba7df9447662f3879",
+      "compatibility_inputs_sha256": "507a6ef6985b9e2d033db8e32565c2e852d265f9b629469ac50672f2d9857fbd",
       "rationale": "Retain the original validated six-hour connection-duration baseline only with matching reviewed reached operations, actual runtime impact review and valid current compatibility. No original measurement is rewritten as current.",
       "review_evidence": [
         "tests/unit/test_provider_transport_compatibility.py",
         "tests/unit/test_provider_stage_evidence.py",
-        "docs/qualification.md"
-      ]
+        "docs/qualification.md",
+        "tests/unit/test_broker_contract.py::test_alpaca_execution_sink_keeps_incremental_size_and_vendor_identity",
+        "https://github.com/ml4t/live/pull/152"
+      ],
+      "compatibility": {
+        "run_id": 43897529319,
+        "job_id": 133405039679,
+        "commit": "fd0d448e74c4c35fd61ef838e9832f427e35f036",
+        "archive_sha256": "005019bbc089e82e23092467e1f1562aad5b3b711fc854d530cd77d22cf53ae7",
+        "runtime_log_sha256": "bc144b7d6a2d4bcd08f4edcefb1e36ad0ce6d3e69875d884462a7dd150cf5de9",
+        "parent_conclusion": "success"
+      },
+      "source_impact_rationale": "The changed broker file uses inspect.iscoroutinefunction to validate the same asynchronous Alpaca callback and adds an opt-in incremental fill sink. The duration harness initializes no sink, so the new callback path returns before reading execution data; the stream transport, polling snapshots, reconciliation, controlled reconnect, and shutdown operations are unchanged. Current Alpaca paper exercise and restart verify connectivity and the order lifecycle on the pinned SDK; broker contract tests check the incremental callback separately. The six-hour observation still belongs only to its original run."
     },
     "okx": {
       "provider": "okx",
@@ -378,7 +396,15 @@
         "tests/unit/test_provider_stage_evidence.py",
         "docs/qualification.md"
       ],
-      "source_impact_rationale": "The OKX feed constructor only adds shared FeedSpec calendar metadata. Network polling, continuity, queue/recovery and duration helpers remain independently reviewed; fresh current short feed evidence and real HTTPX transport controls are required."
+      "source_impact_rationale": "The OKX feed constructor only adds shared FeedSpec calendar metadata. Network polling, continuity, queue/recovery and duration helpers remain independently reviewed; fresh current short feed evidence and real HTTPX transport controls are required.",
+      "compatibility": {
+        "run_id": 43465430743,
+        "job_id": 132023173385,
+        "commit": "fd0d448e74c4c35fd61ef838e9832f427e35f036",
+        "archive_sha256": "2a36c2069168cf95e3db795f3492e23424443e21c811ac309c746c3aa329a872",
+        "runtime_log_sha256": "0cdfda1d2b29ae57c6614ff2cf45c18f3f048ead8263d64579210d9e4f850b34",
+        "parent_conclusion": "failure"
+      }
     }
   }
 }
